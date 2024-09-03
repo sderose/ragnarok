@@ -1,0 +1,21 @@
+<DOCTYPE foo SYSTEM "foo.txt" [
+
+<!NOTATION png       SYSTEM  "/usr/local/bin/png">
+
+<!ENTITY % soup      "b | i | tt | q | a"  >
+<!ENTITY   chap1     PUBLIC  "-//foo"  "c:\chap1.xml">
+<!ENTITY   fig1      SYSTEM "fig1.jpeg> NDATA png>
+<!ENTITY   NASA      "National Aeronautics and Space Administration">
+
+<!ELEMENT foo   (bar+, p*)>
+<!ELEMENT p     (%soup)>
+<!ATTLIST p     id        ID       #REQUIRED
+                class     NMTOKENS #IMPLIED
+                shape     CDATA    #FIXED "square"
+                n3        ENTITY   "png"
+                >
+<!ELEMENT i     (#PCDATA)>
+<!ELEMENT b     ANY>
+<!ELEMENT a     EMPTY>
+
+]>

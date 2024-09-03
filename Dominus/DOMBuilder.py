@@ -10,7 +10,7 @@ import codecs
 import xml.dom.minidom
 from xml.parsers import expat
 
-import DomExtensions
+from domextensions import DomExtensions
 
 __metadata__ = {
     "title"        : "DOMBuilder",
@@ -105,7 +105,7 @@ class DOMBuilder():
     Can hook to various DOM implementations.
     """
     XMLEntities = {
-        "&quo;"  : '"',
+        "&quot;"  : '"',
         "&apos;" : "'",
         "&lt;"   : "<",
         "&gt;"   : ">",
@@ -134,7 +134,7 @@ class DOMBuilder():
             self.nodeClass = xml.dom.Node
 
         if (useDomExtensions):
-            DomExtensions.DomExtensions.patchDom(self.nodeClass)
+            DomExtensions.patchDom(self.nodeClass)
 
         self.IdIndex = {}               # Keep index of ID attributes
         self.nodeStack = []             # Open Element objects

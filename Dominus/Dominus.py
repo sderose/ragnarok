@@ -11,7 +11,7 @@ from typing import Union, Dict
 
 from EDir import EDir, EDirRec, HeaderInfo
 
-from XMLStrings import XMLStrings as XStr
+from xmlstrings import XMLStrings as XStr
 import BaseDOM
 from BaseDOM import NodeTypes
 import DOMBuilder
@@ -198,12 +198,12 @@ class NodeNames(dict):
         "#UNSPECIFIED_NODE",             # 0     #  #none [free list]
         "#ELEMENT_NODE",                 # 1        ELEMENT TYPE NAME
         "#ATTRIBUTE_NODE",               # 2        ATTRIBUTE NAME
-        "#TEXT_NODE",                    # 3     #  #text
+        "#text_NODE",                    # 3     #  #text
         "#CDATA_SECTION_NODE",           # 4     #  #cdata-section
         "#ENTITY_REFERENCE_NODE",        # 5     &  ENTITY REFERENCE NAME
         "#ENTITY_NODE",                  # 6     +  ENTITY NAME
         "#PROCESSING_INSTRUCTION_NODE",  # 7     ?  TARGET
-        "#COMMENT_NODE",                 # 8     #  #comment
+        "#comment_NODE",                 # 8     #  #comment
         "#DOCUMENT_NODE",                # 9     #  #document
         "#DOCUMENT_TYPE_NODE",           # 10    !  DOCUMENT TYPE NAME
         "#DOCUMENT_FRAGMENT_NODE",       # 11    #  #document-fragment
@@ -408,34 +408,33 @@ class Node(BaseDOM.Node):
         self.ownerDocument   = None
         self.childNodes      = None  # TODO: Lazy evaluation?
 
-    @staticmethod
-    def fromRawNode(pdocument, rawNode:EDirRec):
+    def fromRawNode(self, pdocument, rawNode:EDirRec) -> Node:
         """Construct a Node object from an edir record. The EDirRec already
         has the disk format divided into fields, but indirect items (like
         names) have not yet been retrived and filled in). TODO: Change?
         """
-        n = Node()
-        n.eid             = rawNode.eid
-        n.parentNode      = rawNode.parent
-        n.previousSibling = rawNode.previousSibling
-        n.nextSibling     = rawNode.nextSibling
-        n.fchild          = rawNode.fchild
-        n.tstart          = rawNode.tstart
-        n.nodeType        = rawNode.nodeType
-        n.flags           = rawNode.flags
+        unpackedNode = pdocument.edir.unpackEDR(rawNode)
+        nodeType = unpackedNode.nodeType
+        nodeName = pdocument.fetchText(unpackedNode.nameStart)
+        n = self.makeNodeByType(pdocument, nodeType, nodeName)
+
+        n = Node(nodeType=nodeType)
+        n.nodeName        = nodeName
+        n.eid             = unpackedNode.eid
+        n.parentNode      = unpackedNode.parent
+        n.previousSibling = unpackedNode.previousSibling
+        n.nextSibling     = unpackedNode.nextSibling
+        n.fchild          = unpackedNode.fchild
+        n.tstart          = unpackedNode.tstart
+        n.flags           = unpackedNode.flags
+        n.ownerDocument   = pdocument
 
         if (n.nodeType == Node.ELEMENT_NODE):
             if (n.tstart): n.attributes = pdocument.tPieces.readAttrsAt(n.tstart)
-        elif (n.nodeType == Node.ATTRIBUTE_NODE):
-            assert(False)
         elif (n.nodeType == Node.TEXT_NODE):
             if (n.tstart): n.data = pdocument.tPieces.readStringAt(n.tstart)
         elif (n.nodeType == Node.CDATA_SECTION_NODE):
             if (n.tstart): n.data = pdocument.tPieces.readStringAt(n.tstart)
-        elif (n.nodeType == Node.ENTITY_REFERENCE_NODE):
-            assert(False)
-        elif (n.nodeType == Node.ENTITY_NODE):
-            assert(False)
         elif (n.nodeType == Node.PROCESSING_INSTRUCTION_NODE):
             if (n.tstart):
                 buf = pdocument.tPieces.readStringAt(n.tstart)
@@ -447,17 +446,21 @@ class Node(BaseDOM.Node):
                     n.data = buf
         elif (n.nodeType == Node.COMMENT_NODE):
             if (n.tstart): n.data = pdocument.tPieces.readStringAt(n.tstart)
+        return n
 
-        elif (n.nodeType == Node.DOCUMENT_NODE):
-            assert(False)
-        elif (n.nodeType == Node.DOCUMENT_TYPE_NODE):
-            assert(False)
-        elif (n.nodeType == Node.DOCUMENT_FRAGMENT_NODE):
-            assert(False)
-        elif (n.nodeType == Node.NOTATION_NODE):
-            assert(False)
+    def makeNodeByType(self, pdocument, typ, name:str=""):
+        if (typ == Node.ELEMENT_NODE):
+            return pdocument.Element(name)
+        elif (typ == Node.TEXT_NODE):
+            return pdocument.Text()
+        elif (typ == Node.CDATA_SECTION_NODE):
+            return pdocument.CDATA()
+        elif (typ == Node.PROCESSING_INSTRUCTION_NODE):
+            return pdocument.PI()
+        elif (typ == Node.COMMENT_NODE):
+            return pdocument.Comment()
         else:
-            assert(False)
+            assert False, "Shouldn't be making node type %s." % (typ)
 
 
 ###############################################################################
@@ -647,7 +650,7 @@ class Element(BaseDOM.Element):
     def querySelectorAll(self):
         pass
 
-    def remove(self):
+    def removeChild(self, oldChild:'Node') -> 'Node':
         pass
 
     def setAttributeNode(self, an, av):

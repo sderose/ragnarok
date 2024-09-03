@@ -9,7 +9,7 @@ import struct
 import array
 from typing import IO, Dict
 
-from XMLStrings import XMLStrings as XStr
+from xmlstrings import XMLStrings as XStr
 #import BaseDOM
 from BaseDOM import Node
 import DOMBuilder
