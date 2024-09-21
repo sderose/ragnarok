@@ -14,8 +14,8 @@ from collections import defaultdict
 import xml
 
 import ColorManager
-import BaseDOM
-from BaseDOM import Node, NamedNodeMap
+import basedom
+from basedom import Node, NamedNodeMap
 #DOMImplementation, Document, Element, Leaf, Text, \
 #CDATASection, ProcessingInstruction, Comment, EntityReference, Notation, \
 #DocumentType, Attr, NodeList,
@@ -34,10 +34,10 @@ By default, this:
 
 * only prints fail cases. Use `-v` for the rest.
 
-* uses xml.dom.minidom. To test BaseDOM instead, use `--baseDom`.
+* uses xml.dom.minidom. To test basedom instead, use `--basedom`.
 
 * does only tests only methods that are included in `xml.dom.minidom`.
-To test the BaseDOM additions, use ``.
+To test the basedom additions, use ``.
 
 * does not test any of minidom's extension.
 To test them, use `--testMinidomExtras`.
@@ -65,7 +65,7 @@ anything bad in there.
 
 * Written by Steven J. DeRose, ~Feb 2016.
 * 2018-04-18: lint.
-* 2019-12-30: Split out from BaseDOM.
+* 2019-12-30: Split out from basedom.
 * 2020-01-20: Got to point of no crashing on entire minidom test.
 
 =Known bugs and limitations=
@@ -120,7 +120,7 @@ args = argparse.Namespace(
     verbose = 0,
     useBaseDOM = False,
     testMinidomExtras = False,    # The few additions minidom has
-    testBaseDOMAdditions = False, # To enable BaseDOM but non-minidom tests
+    testBaseDOMAdditions = False, # To enable basedom but non-minidom tests
     testSelectors = False         # JQuery and similar selector support
 )
 
@@ -326,7 +326,7 @@ def findDesc(n, nodeType):
     """Cheesy way to scan for the first node of a given nodeType.
     """
     if (n.nodeType == nodeType): return n
-    if (n.nodeType == BaseDOM.Node.ELEMENT_NODE):
+    if (n.nodeType == basedom.Node.ELEMENT_NODE):
         for ch in n.childNodes:
             cand = findDesc(ch, nodeType)
             if (cand is not None): return cand
@@ -351,7 +351,7 @@ def checkTreeStructure(n):
 def checkOneNode(n):
     nodesSeen[n] += 1
     cur = n
-    if (cur.nodeType==BaseDOM.Node.ELEMENT_NODE):
+    if (cur.nodeType==basedom.Node.ELEMENT_NODE):
         ls = cur.precedingSibling
         if (ls and ls.followingSibling!= cur):
             report("Bad sibling chain left")
@@ -417,7 +417,7 @@ def exerciseNode(n1):
     print("Exercising node, nodeType %d, nodeName %s." %
         (n1.nodeType, n1.nodeName))
     theDoc = n1.ownerDocument
-    # BaseDOM: Node.nameOfNodeType(n.nodeType)
+    # basedom: Node.nameOfNodeType(n.nodeType)
     if (n1.ownerDocument != theDoc):
         report("Mismatched ownerDocument")
 
@@ -897,7 +897,7 @@ nameChar  = re.sub(                                              # 4a
 xname     = "%s%s*" % (nameStartChar, nameChar)
 
 def isXmlName(s):
-    if (re.match(xname, s, re.UNICODE)): return True
+    if (re.match(xname, s, flags=re.UNICODE)): return True
     return False
 
 

@@ -2,7 +2,7 @@
 #
 import unittest
 #from xml.dom.minidom import getDOMImplementation
-from BaseDOM import getDOMImplementation
+from basedom import getDOMImplementation
 
 class TestDOMNode(unittest.TestCase):
     def setUp(self):

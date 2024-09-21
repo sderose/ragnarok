@@ -6,21 +6,23 @@
 import sys
 #import os
 #import codecs
-import math
+#import math
 import time
 import logging
-from random import randrange
-from typing import Dict, List
+#from random import randrange
+from typing import List
 
 from cProfile import Profile
 from pstats import SortKey, Stats
 
-if (0):
-    print("******* Using minidom")
-    from xml.dom.minidom import getDOMImplementation, Node
-else:
-    print("******* Using BaseDOM")
-    from BaseDOM import getDOMImplementation, Node
+from gendoc import TextGen, XmlGen  # XmlGenerator
+
+import basedom as theDOMmodule
+
+impl = theDOMmodule.getDOMImplementation()
+#Document = theDOMmodule.Document
+Node = theDOMmodule.Node
+#Element = theDOMmodule.Element
 
 lg = logging.getLogger("profiling.py")
 
@@ -44,6 +46,8 @@ descr = """
 profiling.py
 
 =Description=
+
+Time a fairly large load and traverse using a DOM implementation.
 
 ==Usage==
 
@@ -96,68 +100,21 @@ or [https://github.com/sderose].
 def warmup():
     buf = ""
     for _i in range(100):
-        x = randomText(100)
+        x = TextGen.randomText(100)
         buf += x
     return buf
 
-theAttrs = {  "id": "A12", "class":"foo", "style":"font:Courier;" }
+#theAttrs = {  "id": "A12", "class":"foo", "style":"font:Courier;" }
 
 def runTests(fanout:int, textLen:int):
     warmup()
     t0 = time.time()
-    doc = buildDoc(fanout, textLen, attrs=theAttrs)
+    xg = XmlGen(fanout=fanout, textLen=textLen)
+    doc = xg.buildDoc()
     #traverseDoc(doc.documentElement)  # BaseDOM ~40% faster
-    t2 = recursive_traverse(doc.documentElement)  # BaseDOM ~43% faster
+    _t2 = recursive_traverse(doc.documentElement)  # BaseDOM ~43% faster
     dt = time.time() - t0
     return doc, dt
-
-def buildDoc(fanout:int, textLen:int, attrs:Dict=None):
-    """On my Mac: fanout 50 should take a few seconds.
-    Total nodes created = 2 * fanout**3 + fanout**2 + fanout
-    """
-    #x = randomText(textLen)
-    x = getSomeText(textLen)
-
-    impl = getDOMImplementation()
-    doc = impl.createDocument(namespaceURI="foo.com", qualifiedName="testDoc",
-        doctype=None)
-    docEl = doc.documentElement
-    addNChildren(docEl, name="div1", n=fanout, attrs=attrs)
-    for i1, ch1 in enumerate(docEl.childNodes):
-        addNChildren(ch1, name="div2", n=fanout, attrs=attrs)
-        for i2, ch2 in enumerate(ch1.childNodes):
-            addNChildren(ch2, name="div3", n=fanout, attrs=attrs)
-            for i3, ch3 in enumerate(ch2.childNodes):
-                tn = doc.createTextNode("%s.%d.%d.%d" % (x, i1, i2, i3))
-                ch3.appendChild(tn)
-    return doc
-
-def addNChildren(node, name:str="div", n:int=100, attrs:Dict=None, rev:bool=False):
-    doc = node.ownerDocument
-    for _i in range(n):
-        ch = doc.createElement(name)
-        if (attrs):
-            for k, v in attrs.items(): ch.setAttribute(k, v)
-        if (not node.childNodes): node.appendChild(ch)
-        elif (rev): node.insertBefore(ch, node.childNodes[0])
-        else: node.appendChild(ch)
-
-def randomText(n:int):
-    buf = ""
-    for _i in range(n):
-        buf += chr(randrange(32, 126))
-    return buf
-
-def getSomeText(n:int):
-    buf = """Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do
-eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
-enim ad minim veniam, quis nostrud exercitation ullamco laboris
-nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in
-reprehenderit in voluptate velit esse cillum dolore eu fugiat
-nulla pariatur. Excepteur sint occaecat cupidatat non proident,
-sunt in culpa qui officia deserunt mollit anim id est laborum. """
-    ncopies = math.ceil(n/len(buf))
-    return (buf * ncopies)[0:n]
 
 def traverseDoc(docEl:Node):
     if ('eachNode' not in dir(docEl)):
@@ -172,8 +129,6 @@ def traverseDoc(docEl:Node):
     return tot
 
 def recursive_traverse(root:Node):
-    """
-    """
     yield root
     tot = 1
     if (not root.childNodes): return
@@ -183,7 +138,7 @@ def recursive_traverse(root:Node):
     return tot
 
 def localEachNode(self:'Node', exclude:List=None, depth:int=1) -> 'Node':
-    """~40% faster with BaseDOM than minidom.
+    """~40% faster with mine. So far.
     """
     if (exclude):
         if (self.nodeName in exclude): return
@@ -260,6 +215,10 @@ if __name__ == "__main__":
         # https://stackoverflow.com/questions/4374455/
         # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
         sys.stdout.reconfigure(encoding="utf-8")
+
+    modPath = sys.modules[Node.__module__].__file__
+    print("******* Using DOM from " + modPath)
+
 
     # Sorting:
     # 'calls'       SortKey.CALLS           call count

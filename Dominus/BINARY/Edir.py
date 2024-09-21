@@ -9,9 +9,9 @@ import struct
 import array
 from typing import IO, Dict
 
-from xmlstrings import XMLStrings as XStr
+from xmlstrings import XmlStrings as XStr
 #import BaseDOM
-from BaseDOM import Node
+from basedom import Node
 import DOMBuilder
 
 __metadata__ = {

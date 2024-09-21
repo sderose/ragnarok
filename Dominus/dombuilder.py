@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
+# dombuilder:
+# 2016-02-06: Written by Steven J. DeRose (based on my stuff back to the 80's).
+#
 #pylint: disable=W0613, W0603, W0212
 #
 import sys
 import os
 import re
 import codecs
-import xml.dom.minidom
+
 from xml.parsers import expat
 
-from domextensions import DomExtensions
-
 __metadata__ = {
-    "title"        : "DOMBuilder",
+    "title"        : "dombuilder",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
@@ -32,15 +33,14 @@ This is a version of the "glue" that connects an HTML, XML, or other parser
 to a DOM implementation. It responds to parser events, and constructs the
 corresponding DOM as it goes.
 
-It can be hooked up to `xml.dom.minidom`, which is great for testing but not
-all that useful in general, because the equivalent is built in. But it can also
-talk to things like `Dominµs.py`, and `BaseDOM.py`, which have quite different
+It can be hooked up to most any DOM implementation,
+such as `Dominµs.py` and `basedom.py`, which have quite different
 features than most other DOM implementations.
 
 
 =Related Commands=
 
-Uses `xml.parsers.expat`. This does not use quite the usual SAX interface.
+Uses `xml.parsers.expat`, but not quite the usual SAX interface.
 '''Note''': See [https://docs.python.org/3/library/pyexpat.html],
 [https://svn.apache.org/repos/asf/apr/apr-util/vendor/expat/1.95.7/doc/reference.html],
 and L<https://libexpat.github.io> for details about this parser.
@@ -58,7 +58,7 @@ differs in being dynamically updatable.
 
 =Known bugs and limitations=
 
-So far, it only talks to `expat` for parsing, and `xml.dom.minidom`. Next addition is to hook it to Dominus.
+So far, it only talks to `expat` for parsing.
 
 
 =History=
@@ -67,16 +67,14 @@ By Steven J. DeRose, ~Feb 2016.
 
 2018-04-18: lint.
 
-2019-12-20: Split out of BaseDOM.py (nee RealDOM.py).
-Hook to expat, minidom, DomExtensions. Add test driver.
+2019-12-20: Split out of basedom.py (nee RealDOM.py).
+Hook to expat. Add test driver.
 
 
 =To do=
 
 * Finish
 * Hook up to other parsers
-* Integrate with Dominµs
-* Add option to utilize DomExtensions where it might save time.
 
 
 =Ownership=
@@ -113,7 +111,7 @@ class DOMBuilder():
     }
 
     def __init__(self, domImpl=None, nodeClass=None, wsn=False,
-        verbose=1, useDomExtensions=False, nsSep=None
+        verbose=1, nsSep=None
         ):
         """Set up to parse an XML file(s) and have the callbacks create a DOM.
 
@@ -121,20 +119,13 @@ class DOMBuilder():
         @param wsn: Discard whitespace-only text nodes.
         @param verbose: Trace some stuff.
         """
-        super(DOMBuilder, self).__init__()
+        #super(DOMBuilder, self).__init__()
         global theDomB
         theDomB = self                  # So callbacks can see us
 
         # The first start tag event will trigger createDocument().
-        if (domImpl):
-            self.domImpl = domImpl
-            self.nodeClass = nodeClass
-        else:
-            self.domImpl = xml.dom.getDOMImplementation()
-            self.nodeClass = xml.dom.Node
-
-        if (useDomExtensions):
-            DomExtensions.patchDom(self.nodeClass)
+        self.domImpl = domImpl
+        self.nodeClass = nodeClass
 
         self.IdIndex = {}               # Keep index of ID attributes
         self.nodeStack = []             # Open Element objects
@@ -176,7 +167,6 @@ class DOMBuilder():
         return self.domDoc
 
     def parser_setup(self):
-
         p = expat.ParserCreate(
             encoding=args.iencoding, namespace_separator=self.nsSep)
 
@@ -301,7 +291,7 @@ def CommentHandler(data):
     theDomB.nodeStack[-1].appendChild(newCom)
     return
 
-def DeclHandler(data):
+def DeclHandler(data):  # TODO Handle Declarations
     theDomB.trace(1, "Decl: ignoring '%s'" % (data))
     #newDcl = theDomB.domDoc.create(data)
     #theDomB.nodeStack[-1].appendChild(newDcl)
@@ -336,7 +326,7 @@ if __name__ == "__main__":
 
         parser.add_argument(
             "--baseDom", action="store_true",
-            help="Try building using BaseDOM instead of xml.dom.minidom.")
+            help="Try building using BaseDOM.")
         parser.add_argument(
             "--echo", action="store_true",
             help="Reconstruct and print the XML.")
@@ -364,7 +354,6 @@ if __name__ == "__main__":
             "files", nargs=argparse.REMAINDER,
             help="Path(s) to input file(s).")
 
-        DomExtensions.addArgsForCollectorOptions(parser)
         args0 = parser.parse_args()
         return args0
 
@@ -372,6 +361,10 @@ if __name__ == "__main__":
         theDomB.trace(0, "Warning: PYTHONIOENCODING is not utf_8.\n")
 
     args = processOptions()
+
+    import basedom
+    from basedom import Node
+    impl = basedom.getDOMImplementation()
 
     if (len(args.files) == 0):
         tfileName = "testDoc.xml"
@@ -384,16 +377,8 @@ if __name__ == "__main__":
             continue
         print("Building the DOM for '%s'." % (thePath))
 
-        if (args.baseDom):
-            import BaseDOM
-            whichDomImpl = BaseDOM.DOMImplementation
-            whichNode = BaseDOM.Node
-        else:
-            whichDomImpl = xml.dom.minidom
-            whichNode = xml.dom.Node
-
-        theDBuilder = DOMBuilder(domImpl=whichDomImpl,
-            nodeClass=whichNode, verbose=args.verbose,
+        theDBuilder = DOMBuilder(domImpl=impl,
+            nodeClass=Node, verbose=args.verbose,
             nsSep = ":" if (args.ns) else None
         )
         theDom = theDBuilder.parse(thePath)

@@ -3,9 +3,6 @@
 import re
 from typing import Any
 
-from xml.dom import minidom
-from xml.dom.minidom import Node
-
 class CSSSelectors:
     """
     name
@@ -53,8 +50,9 @@ class CSSSelectors:
     topExpr = r"(\w+|\*)?(\.\w+)"
 
 
-class CSSSelector(Node):
+class CSSSelector:
     """Drafted by Claude 3.5.
+    These methods can be added to a Node class.
     """
     def __init__(self, selector):
         self.selector = selector
@@ -262,44 +260,3 @@ class CSSSelector(Node):
             return s1.strip().lower() == s2.strip().lower()
         else:
             return s1.strip() == s2.strip()
-
-
-# Example usage
-def create_sample_dom():
-    doc = minidom.parseString("""
-    <html>
-        <body>
-            <div class="container">
-                <p id="first-paragraph">Hello</p>
-                <p class="text">World <span class="highlight">!</span></p>
-                <div class="blue">Blue div</div>
-            </div>
-        </body>
-    </html>
-    """)
-    return doc.documentElement
-
-# Test the implementation
-dom = create_sample_dom()
-selectors = [
-    'div.container p',
-    'p#first-paragraph',
-    'div > p.text',
-    'p + p',
-    'div p:first-child',
-    'p[class]',
-    '*',
-    '*.blue',
-    '.container',
-    '#first-paragraph',
-    'div *'
-]
-
-for s in selectors:
-    sel = CSSSelector(s)
-    results = sel.select(dom)
-    print(f"Selector '{s}' matched {len(results)} elements:")
-    for result in results:
-        print(f"  {result.tagName} (id: {result.getAttribute('id')}, class: " +
-            result.getAttribute('class'))
-    print()

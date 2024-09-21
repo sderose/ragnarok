@@ -1,50 +1,36 @@
 #!/usr/bin/env python3
 #
+# jsondocs: Roundtrippable XML/JSON conversions.
+#
 import sys
 import codecs
-from enum import Enum
+#from enum import Enum
 from typing import Any
 import json
-import xml.dom.minidom
-from xml.dom.minidom import Node
 
-from xmlstrings import XMLStrings as XStr
+from xmlstrings import XmlStrings as XStr
+from saxplayer import SaxEvents
+
+#from xml.dom import minidom as theDOMmodule
+import basedom as theDOMmodule
+
+impl = theDOMmodule.getDOMImplementation()
+Document = theDOMmodule.Document
+Node = theDOMmodule.Node
+Element = theDOMmodule.Element
 
 
 ###############################################################################
 #
-class ReservedNodeNames(Enum):
-    PI       = "#pi"
-    COMMENT  = "#comment"
-    CDATA    = "#cdata"
-    TEXT     = "#text"
-
-    @staticmethod
-    def domnt(name:'ReservedNodeNames') -> int:
-        if (name == "#name"): return Node.ELEMENT_NODE
-        elif (name == "#pi"): return Node.PROCESSING_INSTRUCTION_NODE
-        elif (name == "#comment"): return Node.COMMENT_NODE
-        elif (name == "#cdata"): return Node.CDATA_SECTION_NODE
-        elif (name == "#text"): return Node.TEXT_NODE
-        return None
-
-class SaxEvents(Enum):
-    START        =  1
-    END          =  2
-    CHAR         =  3
-    PROC         =  4
-    COMMENT      =  5
-    CDATASTART   =  6
-    CDATAEND     =  7
-    DEFAULT      =  8
-    INIT         =  9
-    FINAL        = 10
-    DOCTYPE      = 11
-    DOCTYPEFIN   = 12
-    ENTITYDCL    = 13
-    ELEMENTDCL   = 14
-    ATTLISTDCL   = 15
-    NOTATIONDCL  = 16
+# See domgetitem.NodeSelKind, which covers these as well as special
+# names for things like @attr, @, #wsn,...
+#
+reservedWords = {
+    "#text":    Node.TEXT_NODE,
+    "#cdata":   Node.CDATA_SECTION_NODE,
+    "#pi":      Node.PROCESSING_INSTRUCTION_NODE,
+    "#comment": Node.COMMENT_NODE,
+}
 
 
 ###############################################################################
@@ -87,7 +73,7 @@ class JsonX(list):
     @property
     def nodeType(self):
         if (self.nodeName.startswith("#")):
-            return ReservedNodeNames.domnt(self.nodeName)
+            return reservedWords[self.nodeName]
         return Node.ELEMENT_NODE
 
     @property
@@ -105,7 +91,7 @@ class JsonX(list):
         assert isinstance(jroot, list)
         assert isinstance(jroot[0], dict)
         nam = jroot.nodeName
-        assert XStr.isXmlName(nam) or ReservedNodeNames(nam)
+        assert XStr.isXmlName(nam) or reservedWords[nam]
         if (len(jroot) > 1):
             for ch in jroot[1:]: self.check_jsonx(ch)
 
@@ -170,8 +156,8 @@ class JsonX(list):
 class DomBuilder:
     """A set of SAX callbacks to create the corresponding DOM.
     """
-    def __init__(self, domImplementation=None):
-        self.domImplementation = domImplementation or xml.dom.minidom
+    def __init__(self, domImplementation):
+        self.domImplementation = domImplementation or impl
         self.domDoc = None
         self.tagStack = []
 

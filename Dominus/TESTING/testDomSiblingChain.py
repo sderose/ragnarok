@@ -4,7 +4,7 @@
 #
 import unittest
 
-from BaseDOM import getDOMImplementation
+from basedom import getDOMImplementation
 
 NCH = 10
 

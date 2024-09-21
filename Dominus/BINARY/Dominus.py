@@ -11,9 +11,9 @@ from typing import Union, Dict
 
 from EDir import EDir, EDirRec, HeaderInfo
 
-from xmlstrings import XMLStrings as XStr
-import BaseDOM
-from BaseDOM import NodeTypes
+from xmlstrings import XmlStrings as XStr
+import basedom
+from basedom import NodeTypes
 import DOMBuilder
 
 NmToken = str
@@ -363,12 +363,12 @@ class TextishPieces(TextPieces):
 # Node, Document, Element, Text, CDATASection,
 # ProcessingInstruction, Comment, EntityReference, Notation
 
-class Node(BaseDOM.Node):
+class Node(basedom.Node):
     """This maps 1:1 to nodes as represented on disk, though the size of ints
     stored can be changed. The disk records are fixed-size so they can be
     addressed rapidly by serial number (= element id = eid).
 
-    TODO: Integrate code from Node.py from BaseDOM.py (nee RealDOM.py).
+    TODO: Integrate code from Node.py from basedom.py (nee RealDOM.py).
 
     So, how do we dereference a node, when all we have is the number?
     Presumably, xxx.__getitem__ just gets called to get us the real node,
@@ -465,7 +465,7 @@ class Node(BaseDOM.Node):
 
 ###############################################################################
 #
-class Document(BaseDOM.Document):
+class Document(basedom.Document):
     def __init__(self,
         namespaceUri:str="http://example.com",
         qualifiedName:str="root",
@@ -493,7 +493,7 @@ class Document(BaseDOM.Document):
         self.uri           = None
         self.iString       = "    "    # For indenting with tostring()
 
-        self.doctypeNode   = None  #BaseDOM.Doctype(self, doctype)
+        self.doctypeNode   = None  #basedom.Doctype(self, doctype)
 
     @property
     def all(self):  # Obsolete, but trivial to support
@@ -583,7 +583,7 @@ class Document(BaseDOM.Document):
     # Document store a pointer back, as "ownerDocument".
     #
     def createElement(self, tagName:NmToken, attributes:Dict=None,
-        parent:Node=None, text:str=None) -> 'BaseDOM:Element':
+        parent:Node=None, text:str=None) -> 'basedom.Element':
         newNode = Element(self, nodeName=tagName)
         if attributes:
             for a, v in attributes.items():
@@ -626,7 +626,7 @@ class Document(BaseDOM.Document):
 
 ###############################################################################
 #
-class Element(BaseDOM.Element):
+class Element(basedom.Element):
     _Dominus = True
 
     def find(self):
@@ -659,22 +659,22 @@ class Element(BaseDOM.Element):
     def setAttributeNodeNS(self, ns, an, av):
         pass
 
-class Text(BaseDOM.Text):
+class Text(basedom.Text):
     _Dominus = True
 
-class CDATASection(BaseDOM.CDATASection):  # data
+class CDATASection(basedom.CDATASection):  # data
     _Dominus = True
 
-class ProcessingInstruction(BaseDOM.ProcessingInstruction):
+class ProcessingInstruction(basedom.ProcessingInstruction):
     _Dominus = True
 
-class Comment(BaseDOM.Comment):
+class Comment(basedom.Comment):
     _Dominus = True
 
-class EntityReference(BaseDOM.EntityReference):
+class EntityReference(basedom.EntityReference):
     _Dominus = True
 
-class Notation(BaseDOM.Notation):
+class Notation(basedom.Notation):
     _Dominus = True
 
 
@@ -714,7 +714,7 @@ class Dominus():
 
     def parse_file(self, path):
         pass
-        # Pull code in from BaseDOM.py (nee RealDOM.py).
+        # Pull code in from basedom.py (nee RealDOM.py).
 
     def close(self):
         self.edir.close()

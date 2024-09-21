@@ -4,11 +4,12 @@
 # What of stuff inherited from list/dict?
 #
 import xml.dom.minidom
-import BaseDOM
+import basedom
 
 descr = """
-Compare the dir() items in minidom vs. BaseDOM.
+Compare the dir() items in minidom vs. basedom.
 
+[unfinished; rewrite?]
 """
 
 fmt = "  %-24s %26s %26s"
@@ -20,7 +21,7 @@ def compareDir(cl1, cl2):
 
     dirUnion = set(dir1).union(set(dir2))
 
-    print("\n" + fmt % ("="*24, "minidom "+cl1.__name__, "BaseDOM "+cl2.__name__))
+    print("\n" + fmt % ("="*24, "minidom "+cl1.__name__, "basedom "+cl2.__name__))
     for x in sorted(list(dirUnion)):
         if (x.startswith("_")): continue
         msg1 = type(getattr(cl1, x)).__name__ if x in dir1 else nope
@@ -57,7 +58,7 @@ if __name__ == "__main__":
             help="Don't display items both versions have.")
         parser.add_argument(
             "--omitExtensions", action="store_true",
-            help="Don't display BaseDOM extensions.")
+            help="Don't display basedom extensions.")
         parser.add_argument(
             "--omitInherited", action="store_true",
             help="Don't display items in both superclasses.")
@@ -82,16 +83,16 @@ if __name__ == "__main__":
     #
     args = processOptions()
 
-    compareDir(xml.dom.minidom.Node,             BaseDOM.Node)
-    compareDir(xml.dom.minidom.Element,          BaseDOM.Element)
-    compareDir(xml.dom.minidom.Text,             BaseDOM.Text)
-    compareDir(xml.dom.minidom.Document,         BaseDOM.Document)
-    compareDir(xml.dom.minidom.CDATASection,     BaseDOM.CDATASection)
-    compareDir(xml.dom.minidom.ProcessingInstruction, BaseDOM.ProcessingInstruction)
-    compareDir(xml.dom.minidom.Comment,          BaseDOM.Comment)
-    compareDir(xml.dom.minidom.Notation,         BaseDOM.Notation)
-    compareDir(xml.dom.minidom.Attr,             BaseDOM.Attr)
-    compareDir(xml.dom.minidom.NodeList,         BaseDOM.NodeList)
-    compareDir(xml.dom.minidom.NamedNodeMap,     BaseDOM.NamedNodeMap)
-    #compareDir(xml.dom.minidom.EntityReference,  BaseDOM.EntityReference)
+    compareDir(impl.Node,             basedom.Node)
+    compareDir(impl.Element,          basedom.Element)
+    compareDir(impl.Text,             basedom.Text)
+    compareDir(impl.Document,         basedom.Document)
+    compareDir(impl.CDATASection,     basedom.CDATASection)
+    compareDir(impl.ProcessingInstruction, basedom.ProcessingInstruction)
+    compareDir(impl.Comment,          basedom.Comment)
+    compareDir(impl.Notation,         basedom.Notation)
+    compareDir(impl.Attr,             basedom.Attr)
+    compareDir(impl.NodeList,         basedom.NodeList)
+    compareDir(impl.NamedNodeMap,     basedom.NamedNodeMap)
+    #compareDir(impl.EntityReference,  basedom.EntityReference)
 

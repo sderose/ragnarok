@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOM API Comparison</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 4px;
+            text-align: left;
+        }
+        thead td {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        th:before {
+            content: "✓";
+        }
+        .colHeader {
+            font-weight: bold;
+        }
+        .red {
+            color:red;
+        }
+        .category {
+            font-weight: bold;
+            background-color: #e6e6e6;
+        }
+    </style>
+</head>
+<body>
+    <table>
+        <thead>
+            <tr>
+                <td>Feature/Method</td>
+                <td>Browsers</td>
+                <td>Xerces</td>
+                <td>minidom</td>
+                <td>Java</td>
+                <td>C++ Xerces</td>
+                <td>BS</td>
+                <td>ET</td>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="category"><td colspan="8">Node</td></tr>
+            <tr>
+                <td class="colHeader">appendChild()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">append()</td>
+                <td class="alt">append()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">cloneNode()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">copy()</td>
+                <td class="alt">copy()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">hasAttributes()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">attrs != {}</td>
+                <td class="alt">attrib != {}</td>
+            </tr>
+            <tr>
+                <td class="colHeader">hasChildNodes()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">contents != []</td>
+                <td class="alt">len(list(elem)) > 0</td>
+            </tr>
+            <tr>
+                <td class="colHeader">insertBefore()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">insert_before()</td>
+                <td class="alt">insert()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">isSupported()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt red">N/A</td>
+            </tr>
+            <tr>
+                <td class="colHeader">normalize()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt red">N/A</td>
+            </tr>
+            <tr>
+                <td class="colHeader">removeChild()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">extract()</td>
+                <td class="alt">remove()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">replaceChild()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">replace_with()</td>
+                <td class="alt">Manual remove + insert</td>
+            </tr>
+            <tr>
+                <td class="colHeader">attributes property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">attrs</td>
+                <td class="alt">attrib</td>
+            </tr>
+            <tr>
+                <td class="colHeader">childNodes property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">contents</td>
+                <td class="alt">list(element)</td>
+            </tr>
+            <tr>
+                <td class="colHeader">firstChild property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">contents[0]</td>
+                <td class="alt">[0] indexing</td>
+            </tr>
+            <tr>
+                <td class="colHeader">lastChild property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">contents[-1]</td>
+                <td class="alt">[-1] indexing</td>
+            </tr>
+            <tr>
+                <td class="colHeader">localName property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">tag</td>
+            </tr>
+            <tr>
+                <td class="colHeader">namespaceURI property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">Manual parsing of tag</td>
+            </tr>
+            <tr>
+                <td class="colHeader">nextSibling property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">next_sibling</td>
+                <td class="alt">Manual traversal</td>
+            </tr>
+            <tr>
+                <td class="colHeader">nodeName property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">name</td>
+                <td class="alt">tag</td>
+            </tr>
+            <tr>
+                <td class="colHeader">nodeType property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt red">N/A</td>
+            </tr>
+            <tr>
+                <td class="colHeader">nodeValue property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">string</td>
+                <td class="alt">text</td>
+            </tr>
+            <tr>
+                <td class="colHeader">ownerDocument property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">getroot()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">parentNode property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">parent</td>
+                <td class="alt">parent</td>
+            </tr>
+            <tr>
+                <td class="colHeader">prefix property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">Manual parsing of tag</td>
+            </tr>
+            <tr>
+                <td class="colHeader">previousSibling property</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">previous_sibling</td>
+                <td class="alt">Manual traversal</td>
+            </tr>
+            <tr class="category"><td colspan="8">Document Methods</td></tr>
+            <tr>
+                <td class="colHeader">createAttribute()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt red">N/A</td>
+            </tr>
+            <tr>
+                <td class="colHeader">createCDATASection()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">new_string(is_cdata=True)</td>
+                <td class="alt">Manual XML creation</td>
+            </tr>
+            <tr>
+                <td class="colHeader">createComment()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">new_comment()</td>
+                <td class="alt">Comment()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">createDocumentFragment()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">Element('fragment')</td>
+            </tr>
+            <tr>
+                <td class="colHeader">createElement()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">new_tag()</td>
+                <td class="alt">Element()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">createElementNS()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">Element() with namespace</td>
+            </tr>
+            <tr>
+                <td class="colHeader">createProcessingInstruction()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">ProcessingInstruction()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">createTextNode()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">NavigableString()</td>
+                <td class="alt">SubElement() with text</td>
+            </tr>
+            <tr>
+                <td class="colHeader">getElementById()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">find(id=...)</td>
+                <td class="alt">find(".//[@id='...']")</td>
+            </tr>
+            <tr>
+                <td class="colHeader">getElementsByTagName()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">find_all()</td>
+                <td class="alt">findall()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">getElementsByTagNameNS()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">findall() with namespace</td>
+            </tr>
+            <tr>
+                <td class="colHeader">importNode()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">copy.deepcopy()</td>
+            </tr>
+            <tr class="category"><td colspan="8">Element Methods</td></tr>
+            <tr>
+                <td class="colHeader">getAttribute()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">['attr']</td>
+                <td class="alt">get()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">getAttributeNS()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">Manual namespace handling</td>
+            </tr>
+            <tr>
+                <td class="colHeader">getAttributeNode()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt red">N/A</td>
+            </tr>
+            <tr>
+                <td class="colHeader">getAttributeNodeNS()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt red">N/A</td>
+            </tr>
+            <tr>
+                <td class="colHeader">getElementsByTagName()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">find_all()</td>
+                <td class="alt">findall()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">getElementsByTagNameNS()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">findall() with namespace</td>
+            </tr>
+            <tr>
+                <td class="colHeader">hasAttribute()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">has_attr()</td>
+                <td class="alt">get() != None</td>
+            </tr>
+            <tr>
+                <td class="colHeader">hasAttributeNS()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt red">N/A</td>
+                <td class="alt">Manual namespace handling</td>
+            </tr>
+            <tr>
+                <td class="colHeader">removeAttribute()</td>
+                <th />
+                <th />
+                <th />
+                <th />
+                <th />
+                <td class="alt">del tag['attr']</td>
+                <td class="alt">attrib.pop()</td>
+            </tr>
+            <tr>
+                <td class="colHeader">removeAttributeNS()

@@ -1,0 +1,229 @@
+Track which we've covered in testing.
+
+Still to define:
+    XPath axis equivs
+    Syntax for __getitem__ / []
+        elname | @attrname | * | n | n:m | n:m:d | #wsn | #nwsn | #[type]
+            for type in text comment pi entref fragment doc doctype notation attr
+
+    xpdom?
+        cast as
+        castable as
+        list comparisons
+        set ops
+        the XSD types (plus untypedAtomic)
+            QName, string, anyURI,
+            base64Binary, hexBinary,
+            date, dateTime, duration, gDay, gMonth, gMonthDay, gYear, gYearMonth, time
+            boolean, decimal, double, float,
+            NOTATION,
+        all the function lib
+
+Systematic changes?
+    * Nuke ...NS calls in favor of optional param (default *)
+    * Attr token ops
+    * Typing per XPath
+    *** What DOM ops aren't already covered by XPath?
+        Mainly changes... What if you had move/copy/add ops attached to XPaths?
+        Or a regex-like capture this thing, then an RHS to operate on them?
+-------------------------
+
+Regular DOM ops
+x    def appendChild(self, newChild:Node)
+
+    def baseURI(self)
+    def charset(self)
+x    def childNodes(self)
+x    def cloneNode(self, deep:bool=False)
+    def compareDocumentPosition(self, n2:'Node')
+x    def contains(self, other:'Node')
+    def contentType(self)
+
+x    def createAttribute(self, name:NmToken, value=None, parentNode=None)
+x    def createCDATASection(self, data:str)
+x    def createComment(self, data:str)
+x    def createDocument(self, namespaceURI:str, qualifiedName:NmToken,
+x    def createDocumentFragment(
+x    def createDocumentType(self, qualifiedName:NmToken,
+x    def createElement(self, tagName:NmToken, attributes:Dict=None,
+x    def createEntityReference(self, name:NmToken)
+x    def createProcessingInstruction(self, target:NmToken, data:str
+x    def createTextNode(self, data:str)
+
+    def documentURI(self)
+    def domConfig(self)
+    def find(self)
+    def findAll(self)
+x    def firstChild(self)
+    def firstElementChild(self)
+
+    def getAttribute(self, an:NmToken)
+    def getAttributeNS(self, ns, an:NmToken)
+    def getAttributeNode(self, an:NmToken)
+    def getAttributeNodeNS(self, ns, an:NmToken)
+    ***** token methods: setToken, unsetToken
+
+x    def getChildIndex(self, onlyElements:bool=False, noWSN:bool=False)
+x    def getDOMImplementation
+    def getElementById(self, IDValue:str)
+    def getElementsByClassName(self, className:str, nodeList=None)
+    def getElementsByTagName(self, tagName:NmToken, nodeList=None)
+    def getElementsByTagNameNS(self, tagName:NmToken, namespaceURI:str, nodeList=None)
+
+    def getFeature(self, feature, version)
+    def getImplementation()
+    def getInterface(self, feature)
+
+    def getNamedItem(self, name:NmToken)
+    def getNamedItemNS(self, name:NmToken)
+    def getNamedValue(self, name:NmToken)
+
+    def getUserData(self, key:str)
+
+x    def hasAttribute(self, an:NmToken)
+    def hasAttributeNS(self, an:NmToken, ns)
+x    def hasAttributes(self)
+x    def hasChildNodes(self)
+    def hasFeature(self, feature, version)
+
+    def inputEncoding(self)
+
+    def insert(self, i:int, x:'Node')
+    def insertAdjacentHTML(self, html:str)
+    def insertBefore(self, newNode:'Node', ch:'Node')
+
+    def item(self, i:int)
+    def item(self, index:int)
+x    def lastChild(self)
+x    def length(self) ???
+    def lookupNamespaceURI(self, uri)
+    def lookupPrefix(self, prefix:NmToken)
+    def matches(self)
+
+x    def nextSibling
+x    def nodeName(self)
+x    def nodeName(self, name:NmToken)
+x    def nodeType
+x    def nodeValue(self)
+x    def nodeValue(self, newData:str="")
+
+x    def normalize(self)
+x    def ownerDocument
+x    def parentNode
+    def parse(self, filename_or_file:str, parser=None, bufsize:int=None
+    def parse_string(self, s:str, parser=None)
+x    def previousSibling
+    def querySelector(self)
+    def querySelectorAll(self)
+    def registerDOMImplementation(self, name:str, factory)
+
+x    def removeAttribute(self, an:NmToken)
+    def removeAttributeNS(self, ns, an:NmToken)
+    def removeAttributeNode(self, an:NmToken)
+x    def removeChild(self, oldChild:Node)
+    def removeNamedItem(self, name:NmToken)
+    def removeNamedItemNS(self, attrNode:Node)
+
+    def replaceChild(self, newChild:'Node', oldChild:'Node')
+
+x    def setAttribute(self, an:NmToken, av:Any)
+    def setAttributeNS(self, ns, an:NmToken, av)
+    def setAttributeNode(self, an:NmToken, av)
+    def setAttributeNodeNS(self, ns, an:NmToken, av)
+    def setNamedItem(self, attrNodeOrName:Union[str, Attr], attrValue:Any=None)
+    def setNamedItemNS(self, attrNode:Node)
+
+    def setUserData(self, key:NmToken, data:Any, handler:Callable=None)
+
+    def textContent(self, delim:str=" ")
+    def textContent(self, newData:str)
+
+    def toprettyxml(self, indent="\t", newl="\n", encoding=None)
+    def tostring(self)
+    def tostring(value:Union[int, 'NodeTypes'])
+
+   def getDOMImplementation(name:str=None, features=None)
+
+
+Regular list ops:
+    def append(self, other:'Node')
+    def clear(self)
+    def clone(self)
+    def copy(self)
+    def count(self, x)
+    def extend(self, others:List)
+    def getIndexOf(self, name:NmToken)
+    def __getitem__(x, y, z)
+    def index(self, x, start:int=None, end:int=None)
+    def pop(self, i:int=-1)
+    def remove(self, x:Any=None)
+    def reverse(self)
+    def sort(self, key:Callable=None, reverse:bool=False)
+
+Minidom-specific:
+    def unlink(self)
+
+Attr token ops
+    addToken, removeToken, hasToken
+
+XPath ops
+    nodeMatches(typ:str) -- "*", name, "@"name, "#"type, "#wsn", #nwsn"
+    descendants, ancestors, lsibs, rsibs
+    setType, cast as, castable as
+
+XPointer ops
+    def getPath(self)
+    resolvePath
+
+I/O mapping
+    escapers
+    def attrValueToJson(self, aname:str, avalue:Any)
+    def collectAllXml(self)
+x   def escapeJsonStr(s:str)
+    def innerXML(self)
+    def outerXML(self)
+    def startTag(self)
+    def tagName(self) ???
+x    def toJsonX(self, indent:str="  ", depth:int=0)
+    def toxml(self, encoding=None)
+x    def writexml(self, writer, indent:str="", addindent:str="", newl:str="",
+
+Extensions:
+    def changeOwnerDocument(self, node:'Node', otherDocument:'Document')
+    def classList(self) ???
+    def className(self) ???
+
+    def elementChildN(self, n:int)
+    def elementChildNodes(self)
+    def endTag(self)
+    def getRootNode(self)
+    def getXmlDcl(self, encoding:str="utf-8", standalone:bool=None)
+x    def hasIdAttribute(self)
+    def Id(self)
+
+    def isAttribute(self)
+x    def isCdata(self)
+x    def isComment(self)
+    def isConnected(self)
+    def isDefaultNamespace(self, uri:str)
+x    def isDoctype(self)
+x    def isDocument(self)
+x    def isElement(self)
+x    def isEntRef(self)
+    def isEntity(self)
+    def isEqualAttr(self, other:'Attr')
+    def isEqualNode(self, n2)
+x    def isFragment(self)
+x    def isNotation(self)
+    def isOfValue(self, value:Any)
+x    def isPI(self)
+x    def isSameNode(self, n2)
+    def isSupported(self, feature, version)
+x    def isText(self)
+    def isWSN(self)
+
+    def lastElementChild(self) ???
+    def okNodeType(thing:Union[int, 'NodeTypes', 'Node'], die:bool=True)
+    def parentElement(self) ???
+    def removeNode(self)
+

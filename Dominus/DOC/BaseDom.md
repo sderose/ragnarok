@@ -24,6 +24,21 @@ you haven't got a Node, use "if myNode is None", not just "if myNode".
 * Node types are a Python Enum named NodeTypes (with the same names and values
 as in DOM Node). Methods accept either NodeTypes instances or ints.
 
+* Python "contains" and "in" work for testing whether one node is a
+child of another. This means they are UNLIKE how they work for regular lists.
+If you check whether list L2 is inside list L1 in Python, L2 is cast to a
+boolean value (True if not empty, False if empty) -- by that rule a Node that
+contained one empty node and one non-empty one, would seem to contain any other
+node you checked (even nodes from other documents). That's pretty useless in
+this context, so "contains" and "in" are overridden for Node and its
+subclasses, to check whether the actual node is an actual child.
+
+* On the other hand, DOM has a "contains" method (not an infix operator),
+and "node1.contains(node2)" checks whether node2 is a *descendant*, not
+just a child. That method is also available, and does what DOM days. However,
+to avoid confusion the author recommends you use the synonymous
+"node1.hasDescendant(node2)" instead.
+
 * [] is supported so you can just walk down through trees in Python style:
     myDoc[0][27][4]
 
@@ -159,6 +174,37 @@ support, Trojan milestone support, and so on, see my other utilities.
 
 =To do=
 
+Rename? Maybe SpamNX?
+(like spam, spam, baked beans, 'n spam, it ain't got much spam in it)
+
+
+==Big issues==
+
+* Naming issues for remove...
+** DOM removeChild(self, oldChild:'Node') -> 'Node'
+** removeNode(self) -> 'Node':  ### rrename to emoveSelf?
+** remove(self, x:Any=None) -> 'Node'
+** removeAttribute(self, aname:NmToken) -> None
+** removeAttributeNS(self, ns, aname:NmToken) -> None
+** removeAttributeNode(self, aname:NmToken) -> 'Attr'
+** remove(self) -> None
+** removeChild(self, oldChild:Node)
+** remove(self, token:str)
+** removeNamedItem(self, name:NmToken) -> Attr
+** removeNamedItemNS(self, attrNode:Node) -> None
+
+* Clean way to make [] extensible -- pass it a callable?
+
+* How to organize CSS, XPath, et, etc. into separate add-on-ish classes.
+Protocols?
+
+* Best way to incorporate case-ignorance.
+
+* Segregate namespace into subclass?
+
+* Add moveNode(s) operation? Meh
+
+
 ==Testing to beef up==
 
 * Ramp up coverage
@@ -169,36 +215,30 @@ support, Trojan milestone support, and so on, see my other utilities.
 ==DOM compatibility==
 
 * Node: Add getInterface
-* importNode
+
 * Element: Add attributes (move from Node) removeAttributeNodeNS,
   schemaType, setIdAttribute, setIdAttributeNS, setIdAttributeNode
-* Text: appendData, data, deleteData, insertData, isWhitespaceInElementContent,
-  length, replaceData, replaceWholeText, splitText, substringData, wholeText
-* Document: abort actualEncoding async_ CreateElementNS doctype, documentELement?,
+
+* Document: abort actualEncoding async_ CreateElementNS,
   encoding, errorHandler, getELementBy(Id/TagName/TagNameNS), implementation
   importNode, load, loadXML, renameNode, saveXML, standalone, strictErrorChecking,
   version
-* CDATASection: (like Text)
-* PI:
-* Comment: (like Text, but no splitData, isWIEC, replaceWholeText, splitText, sub, wh)
-* Notation:
+* Keep anything for Ent, EntRef, Notation?
 * Attr: isId, name, ownerElement, schemaType, specified, value?
 * NodeList: length
-* NamedNodeMap: itemNS, keysNS, length,
+* NamedNodeMap: itemNS, keysNS, length
 
 ==Node selection==
 
 * More comparison ops for Nodes?
 * Finish generalizing node-selection
-* Perhaps #main for Document, Element, and NWS Text nodes?
-* Possibly support Callables as arg to getitem?
-* Pull in from:
-** CSSSelectors (see CSSSelectors.py)
-** JQuery selectors
-** BSfind_matcher (see DOMExtensions.py)
+* Possibly support Callables as arg to getitem? Or namespaced selectors?
+** CSS: Selectors (see CSSSelectors.py)
+** JQuery: selectors
+** BS: find_matcher (see DOMExtensions.py)
 ** XPath
-** ET.SubElement(parent, tag, attrs)
-** whatwg NodeIterator and TreeWalker [https://dom.spec.whatwg.org/#nodeiterator]
+** ET: SubElement(parent, tag, attrs)
+** whatwg: NodeIterator and TreeWalker [https://dom.spec.whatwg.org/#nodeiterator]
 
 ==Other==
 
@@ -206,18 +246,21 @@ support, Trojan milestone support, and so on, see my other utilities.
 
 * Segregate NS stuff?
 
+* Segregate extensions (maybe do a core impl, then subclass to extend.
+Except that that poses the naming problem -- "will the real Node please stand up?"
+
 * Add xmlns:#ANY/* like Norm's Balisage '24 paper
 
 * absolutize xpointer (lose id) and v/v
 
-* Add from DOMExtensions
+* Add from domextensions
     ** innerText
     ** getLeastCommonAncestor
     ** Comparison operators for DOCUMENT ORDER
     ** get fqgi
     ** compound attributes?
     ** generateSaxEvents
-    ** shortcuts to create and append:
+    ** shortcuts to create and append
         addEl(name, attrs:Dict, children:List[Union[str,Node]])
         addText(txt)
 
@@ -226,7 +269,16 @@ support, Trojan milestone support, and so on, see my other utilities.
 
 =Known bugs and limitations=
 
-Namespace support is incomplete.
+* Since Node is a subclass of List, a node with no childNodes is an empty
+list, which is Falsish. So code has to specifically check for "is None",
+not just t/f, to see if a Node doesn't exist. That why it overrides
+__bool__ to return True. Maybe that should be optional, or just not there?
+
+
+Namespace support is incomplete
+* Implement the ...NS() methods (at present they just call the non-NS versions).
+* Support a #all/#any/* argument.
+* Just make NS an optional arg to the non-NS versions (if no problem)
 
 `cloneNode()` copies any `userData` merely via assignment, not a deep copy,
 even when `deep=True` is set. You can of course copy and reset

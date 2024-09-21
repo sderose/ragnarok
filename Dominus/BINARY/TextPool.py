@@ -9,7 +9,7 @@ import codecs
 #import array
 from typing import Dict, Any
 
-from xmlstrings import XMLStrings as XStr
+from xmlstrings import XmlStrings as XStr
 #import BaseDOM
 #import DOMBuilder
 
