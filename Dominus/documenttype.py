@@ -8,43 +8,57 @@ from datetime import datetime  #, date, time
 from typing import List, Set, Iterable
 
 from xmlstrings import XmlStrings as XStr
-from basedom import Node, NodeTypes, CaseTx
+from domenums import NodeType, UNormTx, CaseTx
+from basedom import Node
 
 NmToken = str
-DOCUMENT_TYPE_NODE = 10
 
 descr = """
-This library provides a basic interface to XML schema information.
+This library provides a basic interface to XML schema information, plus extensions.
 An instance should be loadable from XSD, RelaxNG, or DTD, and provide a
 common API for any of them. That's a tall order, so I'm just starting
-with DTDs as the simplest place to start. That should at least help with
+with DTD++. That should at least help with
 converting DTDs to the others, which is commonly desired.
 
 The hardest bits will likely be (a) preserving DTD classes implemented via
 parameter entities, and (b) making that compatible with XSD complex types.
 
 I may also integrate the shorthand declarations I rough out in XSD_compact
-and elsewhere. ?
+and elsewhere.
 
 
 ==Extensions==
 
 DTDs are extended in these ways:
 
-* New declaration types
+* New declaration types, essentially subtypes of ENTITY.
+These apply the notion of descriptive markup more consistently to DTDs.
+DTDs organize entities mainly by their source (literal vs. system locations),
+and where they can be referenced (parameter vs. general). DTDs do usefully provide
+a way to declarat the notation (data format) of system entities like images.
+SGML has a few other special cases, like starttag entities, that I don't see
+as very important.
 
-** Add PATH, which takes a bunch of system ids as places to look to
-find other system id that don't start with "/" or "file:///".
-    <!PATH "c:\\stuff" "/Users/jsmith/XML/entities"...>
+I think a more useful organization for schema designers distinguishes more
+concepts such as sets of element or attribute names (closely related to XSD
+complex types) vs. special-character entities (which should be easy to extend)
+vs. XInclude objects (as distinct from others).
+
+** Extend ENTITY to allow multiple SYSTEM identifier literals, to be
+tried from left to right.
+    <!ENTITY chap2 SYSTEM "/home/ents/chap2.xml" "/xml/common/ents/chap2.xml">
 
 ** Add distinct CHAR declarations for special-character entities.
-They are just like ENTITY declarations, but can only have a qlit value,
-which must resolve to a single Unicode character.
+They are like ENTITY declarations, but can define multiple characters,
+each to have a single Unicode codepoint value:
     <!CHAR bull 0x2022>
-    <!CHAR nbsp 160>
+    <!CHAR nbsp 160, msp 0x2003>
+
+** Add LITERAL declaration, just like ENTITY except only qlit value.
+     <!LITERAL foo "hello">
 
 ** Add CTYPE declarations to correspond to XSD complex types. They
-can be referenced within content models via #xxx (think of them as
+can be referenced within content models via %xxx;. Think of them as
 custom reserved words; they cannot be named "PCDATA" etc). They are retained
 when the model is parsed.
     <!CTYPE fontish "i b u tt">
@@ -52,16 +66,29 @@ when the model is parsed.
 *** Possibly add set operations on them?
     <!CTYPE inlines (#fontish) - (tt) + (em string sup sub)>
 
-** Add LITERAL declaration, just like ENTITY except only qlit value.
-     <!LITERAL foo "hello">
 
-** Extend ENTITY to allow multiple SYSTEM identifier literals, to be
-tried from left to right.
-    <!ENTITY chap2 SYSTEM "/home/ents/chap2.xml" "/xml/common/ents/chap2.xml">
+* SYSTEM identifier enhancemnts. There has always been a difficulty with
+resolving PUBLIC and SYSTEM identifiers. Neither PUBLIC ids nor URNs were
+well understood or accepted. Most SGML and XML software added variations
+of "catalogs", which could map identifiers to real filesystem paths.
+Passing documents back and forth is often a pain because you have to replace
+those path mappings for your local filesystem.
 
-** Add MIXIN declarations to allow things like footnote anywhere in certain elements.
-    <!MIXIN footnote (div ul ol)>
-    <!MIXON del      *>
+There seem to be some obvious, more familiar solutions:
+** The time-honored *nix PATH mechanism (and its many kin like
+CDPATH, PYTHONPATH, CLASSPATH, etc.). Reserve an environment variable
+such as XMLPATH, in which XML parsers should look to resolve system IDs.
+
+** Let SYSTEM identifiers take any number of quoted literals, not just one,
+and try them in order.
+
+** Let system identifiers interpolate environment variables.
+
+**Add a BASE declaration(s), which let you factor out commonalities.
+I've always found it odd the HTML only gives one BASE, rather than supporting
+multiple named ones; but either way is better than none:
+
+    <!BASE "c:\\stuff" "/Users/jsmith/XML/entities"...>
 
 
 * Elements
@@ -113,6 +140,7 @@ IBM’s Websphere Development Studio Client (WDSC) has a utility that converts D
 
 
 ==To do==
+    * Finish
     * Figure out catalog/path interface
     * How to store state of in-progress element validation? API?
     * XSD facets
@@ -129,10 +157,10 @@ IBM’s Websphere Development Studio Client (WDSC) has a utility that converts D
 
 ###############################################################################
 #
-class BaseTypes(Enum):
-    """Map each XSD type to an underlying Python/generic types.
+class BaseType(Enum):
+    """Map each XSD type to an underlying Python/generic type.
     How best to treat *semantic* attr types like IDs, ENTITIES, etc?
-        (not to mention conref, current, etc.
+        (not to mention conref, current, etc.)
     """
     BIT = bool
     NUM = float
@@ -149,19 +177,19 @@ uintExpr = r"\d+"
 intExpr = r"[-+]?d+"
 negintExpr = r"(-\d+)"
 posintExpr = r"\+?\d+"
-XMLNAMEExpr = r"[.\w][-.\w]*"
-URIExpr = r"(([a-zA-Z0-9-$_.+!*,();/?:@=&])|(%\x\x))+"
+XmlNameExpr = r"[.\w][-.\w]*"
+UriExpr = r"(([a-zA-Z0-9-$_.+!*,();/?:@=&])|(%\x\x))+"
 
-XMLNAMEExprS = r"%s(\s+%s)*" % (XMLNAMEExpr, XMLNAMEExpr)
+XmlNameExprS = r"%s(\s+%s)*" % (XmlNameExpr, XmlNameExpr)
 
 isX = XStr.isXmlName
 
-B = BaseTypes
+B = BaseType
 
-class AttrTypes(Enum):
+class AttrType(Enum):
     """See [https://www.w3.org/TR/xml/]
     """
-    # XSD NAME          sup    regex
+    # XSD NAME          base   regex
     boolean =          (B.BIT, r"true|1|false|0" )
 
     # Floats
@@ -200,32 +228,32 @@ class AttrTypes(Enum):
     normalizedString = (B.STR, r"[^\r\n\t]*" )
     string =           (B.STR, r".*" )
     token =            (B.STR, r"[^\s]( ?[^\s]+)*" )
-    anyURI =           (B.STR, URIExpr )
-    ID =               (B.STR, XMLNAMEExpr )
-    IDREF =            (B.STR, XMLNAMEExpr )
-    XMLNAME =          (B.STR, XMLNAMEExpr )
-    NMTOKEN =          (B.STR, XMLNAMEExpr )  # TODO Loosen
+    anyURI =           (B.STR, UriExpr )
+    ID =               (B.STR, XmlNameExpr )
+    IDREF =            (B.STR, XmlNameExpr )
+    XMLNAME =          (B.STR, XmlNameExpr )
+    NMTOKEN =          (B.STR, XmlNameExpr )  # TODO Loosen
 
     # Plurals
-    IDREFS =           (B.STR, XMLNAMEExprS )
-    NMTOKENS =         (B.STR, XMLNAMEExprS )
+    IDREFS =           (B.STR, XmlNameExprS )
+    NMTOKENS =         (B.STR, XmlNameExprS )
 
     # Binaries
     base64Binary =     (B.BIN, r"[+/=a-zA-Z0-9]+" )
     hexBinary =        (B.BIN, r"([\da-fA-F][\da-fA-F])+" )
 
-    # Additions beyond XSD built-ins
+    ### Additions beyond XSD built-ins
     CDATA =             (B.STR, r".*" )
-    ENTITY =            (B.STR, XMLNAMEExpr)
-    NOTATION =          (B.STR, XMLNAMEExpr)
-    ENUM =              (B.STR, XMLNAMEExpr)  # How to set up?
-    ENTITIES =          (B.STR, XMLNAMEExprS)
+    ENTITY =            (B.STR, XmlNameExpr)
+    NOTATION =          (B.STR, XmlNameExpr)
+    ENUM =              (B.STR, XmlNameExpr)  # How to set up?
+    ENTITIES =          (B.STR, XmlNameExprS)
 
-    QXMLNAME =         (B.STR, r"%s:%s" % (XMLNAMEExpr, XMLNAMEExpr) )
-    NCXMLNAME =        (B.STR, XMLNAMEExpr )
+    QXMLNAME =         (B.STR, r"%s:%s" % (XmlNameExpr, XmlNameExpr) )
+    NCXMLNAME =        (B.STR, XmlNameExpr )
 
 
-class AttrDefaults(Enum):
+class AttrDefault(Enum):
     REQUIRED = "#REQUIRED"
     IMPLIED = "#IMPLIED"
     FIXED = "#FIXED"
@@ -249,8 +277,7 @@ class EntityParseType(Enum):  # Includes extras...
     CDATA   = 1
     RCDATA  = 2
     NDATA   = 4
-    # SGML also has STARTTAG ENDTAG
-    # Maybe special for CHAR EntityType?
+    # SGML also has STARTTAG ENDTAG...
 
 
 ###############################################################################
@@ -278,7 +305,7 @@ class ElementDef(Def):
         self.allowNowhere:Set = None
 
 
-class ModelTypes(Enum):
+class ModelType(Enum):
     EMPTY = 0
     ANY = 1
     TEXTONLY = 2
@@ -292,18 +319,17 @@ class ModelTypes(Enum):
 class ComplexType:
     def __init__(self, typename:str, model:str):
         self.typename = typename
-        self.modelType = ModelTypes.SEQUENCE
+        self.modelType = ModelType.SEQUENCE
         self.model = model
         self.minOccurs = 1
         self.maxOccurs = 1
-        self.mixins = None
 
 
 class AttributeDef(Def):
-    def __init__(self, name:str, attrType:AttrTypes, default:str):
+    def __init__(self, name:str, attrType:AttrType, default:str):
         super(AttributeDef, self).__init__(name)
         self.attrType = attrType
-        self.caseTx = CaseTx.NONE
+        self.caseTx = None
         self.wsNorm = None
         self.multi = False
         self.enumList = None
@@ -336,19 +362,17 @@ class DocumentType(Node):
     """Just a stub for the moment.
     See also my Schemas.py, and https://docs.python.org/3.8/library/xml.dom.html
     """
-    def __init__(self, qualifiedName:str, ownerDocument=None, doctypeString:str='',
+    def __init__(self, ownerDocument:str, qualifiedName:str, doctypeString:str='',
         publicId:str='', systemId:str=''):
-        super(DocumentType, self).__init__(
-            ownerDocument=ownerDocument,
-            nodeName="#doctype", nodeType=NodeTypes.DOCUMENT_TYPE_NODE)
+        super().__init__(ownerDocument=ownerDocument, nodeName="#doctype")
+        self.nodeType = NodeType.DOCUMENT_TYPE_NODE
 
-        self.name = self._nodeName = qualifiedName  # Should come from the DOCTYPE
+        self.name = self.nodeName = qualifiedName  # Should come from the DOCTYPE
         self.publicId = publicId
         self.systemId = systemId
-        self.userData = None
+        #self.userData = None
 
         self.doctypeString = doctypeString
-        # self.internalSubset = None  # As a string
         if (qualifiedName and doctypeString and
             not doctypeString.strip().startswith(qualifiedName)):
             raise ValueError("doctype mismatch, '%s' vs. '%s'." %
@@ -357,7 +381,7 @@ class DocumentType(Node):
         self.elementDefs = None
         self.attributeDefs = None  # NamedNodeMap() later if needed
 
-        # These are all considere types of entities:
+        # These are all considered types of entities here:
         self.entityDefs = None
         self.pentityDefs = None
         self.notationDefs = None
@@ -488,10 +512,9 @@ class DocumentType(Node):
     def isEqualNode(self, n2) -> bool:  # Doctype
         if (self.nodeType != n2.nodeType): return False
         if (self.doctypeString != n2.doctypeString): return False
-        #if (self._nodeName!=n2._nodeName or  # TODO: Check
-        #    self.publicId!=n2.publicId or
-        #    self.systemId!=n2.systemId): return False
-        # TODO Check: do we compare the document, too?
+        #if (self.nodeName != n2.nodeName or
+        #    self.publicId != n2.publicId or
+        #    self.systemId != n2.systemId): return False
         docel1 = self.ownerDocument.documentElement
         docel2 = n2.ownerDocument.documentElement
         if (not docel1.isEqualNode(docel2)): return False
@@ -504,7 +527,7 @@ class DocumentType(Node):
         """TODO: Generate entity and notation dcls?
         """
         buf = ('<!DOCTYPE %s  PUBLIC "%s" "%s" [ %s ]>' + "\n") % (
-            self._nodeName, self.publicId, self.systemId, "[]")
+            self.nodeName, self.publicId, self.systemId, "[]")
         return buf
 
     @property
@@ -516,58 +539,108 @@ class DocumentType(Node):
 
 
 
-    ###########################################################################
-    # Parsing and grammar
-    #
-    # TODO: Change all the spaces to \s*, doubles to \s+
-    #
+###########################################################################
+# Parsing and grammar
+#
+# Change all the spaces to \s*, doubles to \s+
+#
+class DTDParse:
     name = r"[\w][-.\w]*"
     names = r"{name}(  {name})*"
     qlit = r"\"[^\"]*\"|\'[^\']*\'"
     rep = r"""([*+?]|\{\d*,\d*\})"""
     ctref = r"""%\w+;"""
-    modelToken = r"""(#PCDATA)?|{name}{rep}?|{ctref}{rep}?"""
+    baseInt   = r"""(0x[\da-f]+|\d+)"""
+
     plist = r"""  {modelToken}(  [|,  {modelToken}  """  # Only works if next thing is different
     source = f"""PUBLIC  (?P<pub>{qlit})  (?P<sys>{qlit})|SYSTEM  (?P<sys>{qlit})|(?P<lit>{qlit})"""
     subset = r"""\[ [^]* ]"""
-    docTypeExpr = f"""<!DOCTYPE  ({name})  ({source})  ({subset})  >"""
-    model = f"""{plist}|EMPTY|ANY|#PCDATA"""
-    incl = r" \+\({names}\)"
-    excl = r" -\({names}\)"
-    elemExpr = f"""<!ELEMENT  ({name})  ({model})  {incl}?  {excl}  >"""
-    atyp = "|".join(list(AttrTypes.__members__.keys()))
-    adft = "|".join(list(AttrDefaults.__members__.keys())) + f"({qlit})?"
-    attrExpr = f"""<!ATTLIST  ({name})  (  ({name})  ({atyp})  ({adft})  )+  >"""
+    atyp = "|".join(list(AttrType.__members__.keys()))
+    adft = "|".join(list(AttrDefault.__members__.keys())) + f"({qlit})?"
     ndata = f"""NDATA  ({name})"""
-    entExpr = f"""<!ENTITY  (%)?  ({name})  ({source})  ({ndata}))?  >"""
-    notExpr = f"""<!NOTATION  ({name})  ({source})  >"""
+    modelToken = r"""(#PCDATA)?|{name}{rep}?|{ctref}{rep}?"""
+    model = f"""{plist}|EMPTY|ANY|#PCDATA"""
 
-    def parseDoctypeString(self, s:str):
+    docTypeExpr = f"""<!DOCTYPE  ({name})  ({source})  """
+    elemExpr  = f"""<!ELEMENT  ({name})  ({model})  (\\+\\({names}\\)?  (-\\({names}\\)?  >"""
+    attrExpr  = f"""<!ATTLIST  ({name})  (  ({name})  ({atyp})  ({adft})  )+  >"""
+    entExpr   = f"""<!ENTITY  (%)?  ({name})  ({source})  ({ndata}))?  >"""
+    notExpr   = f"""<!NOTATION  ({name})  ({source})  >"""
+    #
+    charExpr  = r"""<!CHAR  ({name})  ({baseInt})(  ,  ({name})  ({baseInt}))*  >"""
+    litExpr   = r"""<!LITERAL  ({name})  ({qLit})  >"""
+    ctypeExpr = r"""<!CTYPE  ({name})  ({names})  >"""  # seqtype?
+    baseExpr  = r"""<!BASE(  {qLit})*  >"""
+
+    def __init__(self):
+        self.nodeName = ""
+        self.publicId = ""
+        self.systemId = ""
+
+    def parseDOCTYPE(self, s:str):
         """Parse the DOCTYPE declaration:
             <!DOCTYPE rootName PUBLIC "" "" [...]>
         """
-        mat = re.match(DocumentType.docTypeExpr, s)
-        self._nodeName = mat.group(1)
-        self.publicId = mat.group("pub")
-        self.systemId = mat.group("sys")
-        self.publicId = mat.group("lit")[1:-1]
-        self.parseInternalSubset()
+        mat = re.match(DTDParse.docTypeExpr, s)
+        if not mat: raise SyntaxError
 
-    def parseInternalSubset(self):  # TODO subset
+        self.nodeName = mat.group(1)
+        self.publicId = mat.group("lit")[1:-1]
+        self.systemId = mat.group("sys")[1:-1]
+        # if [
+        #     self.parseInternalSubset()
+        #     "]"
+        # ">"
+
+    def parseInternalSubset(self, s:str):
+        for mat in re.finditer(r"<!(\W+)\s+(.*?)\s*>|<!--([^-]|-[^-])*-->", s):
+            which = mat.group(1)
+            if which not in DTDParse.dclNames:
+                raise SyntaxError(f"Unrecognized declaration '{which}'.")
+            mat = re.match(DTDParse.dclNames[which][1], s)
+            if (not mat):
+                raise SyntaxError(f"Cannot parse {which} dcl: {s}")
+            DTDParse.dclNames[which](s, mat)
+
+    def parseELEMENT(self, s:str, mat):
         pass
+
+    def parseATTLIST(self, s:str, mat):
+        pass
+
+    def parseENTITY(self, s:str, mat):
+        pass
+
+    def parseNOTATION(self, s:str, mat):
+        pass
+
+    #
+
+    def parseCHAR(self, s:str, mat):
+        pass
+
+    def parseLITERAL(self, s:str, mat):
+        pass
+
+    def parseCTYPE(self, s:str, mat):
+        pass
+
+    def parseBASE(self, s:str, mat):
+        pass
+
+    dclNames = {
+        "DOCTYPE":      ( parseDOCTYPE,  None ),
+        "ELEMENT":      ( parseELEMENT,  elemExpr ),
+        "ATTLIST":      ( parseATTLIST,  attrExpr ),
+        "ENTITY":       ( parseENTITY,   entExpr ),
+        "NOTATION":     ( parseNOTATION, notExpr ),
+        #
+        "CHAR":         ( parseCHAR,     charExpr ),
+        "LITERAL":      ( parseLITERAL,  litExpr ),
+        "CTYPE":        ( parseCTYPE,    ctypeExpr ),
+        "BASE":         ( parseBASE,     baseExpr ),
+    }
 
     # end class DocumentType
 
 DocType = DocumentType
-
-
-###############################################################################
-#
-class ExtraDcls:
-    names     = r"""({name})(\s+{name})*"""
-    baseInt   = r"""(0x[\da-f]+|\d+)"""
-    charExpr  = r"""<!CHAR  ({name})  ({baseInt})(  ,  ({name})  ({baseInt}))*  >"""
-    litExpr   = r"""<!LITERAL  ({name})  ({qLit})  >"""
-    ctypeExpr = r"""<!CTYPE  ({name})  ({names})  >"""
-    mixinExpr = r"""<!MIXIN  ({name})  ({names})  >"""
-    pathExpr  = r"""<!PATH(  {qLit})*  >"""

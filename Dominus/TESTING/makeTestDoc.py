@@ -6,12 +6,15 @@ import sys
 import random
 import math
 from types import SimpleNamespace
+import logging
 
 from xmlstrings import XmlStrings as XStr
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation, Document, Node, Element
 from basedom import getDOMImplementation, DOMImplementation, Document, Node, Element
 
 #from gendoc import genDoc
+
+lg = logging.getLogger("makeTestDoc")
 
 nameStartChars = XStr.allNameStartChars()
 nameChars = nameStartChars + XStr.allNameChars()
@@ -23,29 +26,31 @@ class DBG:
     """Debug printing stuff.
     """
     @staticmethod
+    def msg(msg:str=""):
+        lg.warning("\n####### %s\n", msg)
+
+    @staticmethod
     def dumpNode(node:Node, msg:str=""):
-        sys.stderr.write("%s (%s)\n" % (msg, node.nodeName))
+        lg.warning("\n####### %s (nodeName %s)",msg, node.nodeName)
         node.writexml(sys.stderr, indent='    ', addindent='  ', newl='\n')
-        sys.stderr.write("\n")
 
     @staticmethod
     def dumpChildNodes(node:Node, msg:str="", addrs:bool=False):
         if (addrs):
-            sys.stderr.write("%s [ %s ]\n" % (msg, ", ".join(
-                [ "%s[%x]" % (x.nodeName, id(x)) for x in node.childNodes ])))
+            lg.warning("\n####### %s [ %s ]\n", msg, ", ".join(
+                [ "%s[%x]" % (x.nodeName, id(x)) for x in node.childNodes ]))
         else:
-            sys.stderr.write("%s [ %s ]\n"
-                % (msg, ", ".join([ x.nodeName for x in node.childNodes ])))
-        sys.stderr.write("\n")
+            lg.warning("%s [ %s ]\n",
+                msg, ", ".join([ x.nodeName for x in node.childNodes ]))
 
     @staticmethod
     def dumpNodeAsJsonX(node:Node, msg:str=""):
-        sys.stderr.write("\n" + msg)
+        lg.warning("\n######## %s", msg)
         try:
             getattr(Node, "toJsonX")
-            sys.stderr.write(node.toJsonX(indent='  ') + "\n")
+            lg.warning("\n####### %s: %s\n", msg, node.toJsonX(indent='  '))
         except AttributeError:
-            sys.stderr.write("\n*** toJsonX not available ***\n")
+            lg.warning("\n*** toJsonX not available ***\n")
 
 
 ###############################################################################
@@ -106,13 +111,14 @@ class DAT_DocBook(DAT):
 #
 class makeTestDoc0:
     """Create a bare minimum document. Subclasses start from this and add.
+        <html></html>
 
     Also provides construction utilities, such as methods to add a bunch
     of nodes of certain kinds, etc.
 
     TODO: Move all the self.nodes into a dict?
     """
-    def __init__(self, dc:type=DAT):
+    def __init__(self, dc:type=DAT, show:bool=False):
         self.alreadyShowedSetup = True
 
         # Define some names to use across various subclasses, even though
@@ -159,13 +165,17 @@ class makeTestDoc0:
         assert (self.n.docEl.nodeName == self.dc.root_name)
         assert len(self.n.docEl.childNodes) == 0
 
+        if show: lg.warning(
+            "makeTestDoc0 produced: %s", self.n.doc.outerXML)
+
     def once(self, *args):
         if (self.alreadyShowedSetup): return
-        sys.stderr.write(*args, "\n")
+        lg.warning(*args, "\n")
 
 
     @staticmethod
-    def addFullTree(node:Node, n:int=10, depth:int=3, types:list=None, withText:bool=False):
+    def addFullTree(node:Node, n:int=10, depth:int=3,
+        types:list=None, withText:bool=False):
         """Recursively create a subtree, adding 'n' more levels (possibly plus
         one for text nodes at the bottom), each node having n children.
         """
@@ -243,14 +253,18 @@ class makeTestDoc0:
 ###############################################################################
 #
 class makeTestDoc2(makeTestDoc0):
-    def __init__(self, dc=DAT):
-        super(makeTestDoc2, self).__init__(dc)
+    def __init__(self, dc=DAT, show:bool=False):
+        super().__init__(dc)
         assert isinstance(self.n.impl, DOMImplementation)
         assert isinstance(self.n.doc, Document)
         assert isinstance(self.n.docEl, Element)
         assert self.n.child1 is None
 
         self.createRestOfDocument()
+
+        if show: lg.warning(
+            "makeTestDoc2 produced: %s", self.n.doc.outerXML)
+
 
     def createRestOfDocument(self):
         """Store stuff we want to refer back to, in self.docItems.

@@ -11,7 +11,7 @@ from typing import Dict, Any
 
 from xmlstrings import XmlStrings as XStr
 #import BaseDOM
-#import DOMBuilder
+#import DomBuilder
 
 __metadata__ = {
     "title"        : "TextPool",
@@ -70,7 +70,7 @@ Washington, DC, August 5 - 8, 2014. In I<Proceedings of Balisage: The Markup Con
 
 * Written ~2016 by Steven J. DeRose. Largely based on binaryXM<L.pl,
 a Perl version I wrote beginning around 2009-12-31.
-* 2019-12-30: Integrate with DomExtensions, DOMBuilder, etc.
+* 2019-12-30: Integrate with DomExtensions, DomBuilder, etc.
 * 2023-11-21: lint, type-hints.
 * 2024-06-28: Split these classes out of Dominus.
 

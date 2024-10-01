@@ -5,9 +5,7 @@ import re
 from urllib.parse import urlparse
 from typing import Union, Dict, Any
 
-from xmlregexes import XmlRegexes
-
-xr = XmlRegexes()
+from xmlstrings import XmlStrings as XStr
 
 descr = """
     <?pyx:default [elem@attr:type=default]*?>
@@ -28,10 +26,10 @@ TODO:
     unify treatment of bultin vs. xml types.
 """
 
-def isXMLNames(s:str) -> bool:
+def isXmlNames(s:str) -> bool:
     tokens = re.split(r"\s+", s.strip())
     for token in tokens:
-        if (not xr.isXmlName(token)): return False
+        if (not XStr.isXmlName(token)): return False
     return True
 
 def isURI(s:str) -> bool:
@@ -42,14 +40,14 @@ def isURI(s:str) -> bool:
         return False
 
 XMLTypes = {
-    "nmtoken":  xr.isXmlName,
-    "nmtokens": isXMLNames,
+    "nmtoken":  XStr.isXmlName,
+    "nmtokens": isXmlNames,
     "cdata":    str,
     "ustr":     lambda x: x.upper(),
     "lstr":     lambda x: x.lower(),
-    "id":       xr.isXmlName,
-    "idref":    xr.isXmlName,
-    "idrefs":   isXMLNames,
+    "id":       XStr.isXmlName,
+    "idref":    XStr.isXmlName,
+    "idrefs":   isXmlNames,
     "uri":      isURI,
 }
 

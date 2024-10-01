@@ -4,8 +4,7 @@
 #
 import unittest
 import basedom
-from basedom import Attr
-from basedom import HIERARCHY_REQUEST_ERR
+from basedom import HIERARCHY_REQUEST_ERR, Document, Element, Attr
 
 class TestAttr(unittest.TestCase):
 
@@ -24,8 +23,8 @@ class TestAttr(unittest.TestCase):
             float:      3.14,
             str:        'aardvark',
             Document:   self.doc,
-            Element:    self.para
-            Attr:       self.obj
+            Element:    self.para,
+            Attr:       self.obj,
         }
 
     def test_self_obj_attrToJson(self):
@@ -78,12 +77,12 @@ class TestAttr(unittest.TestCase):
             self.fail(f"Accessing property isConnected raised: {e}")
 
 
-    def test_self_obj_isEqualAttr(self):
-        #self.assertRaises(Exception, self.obj.isEqualAttr())
-        self.assertRaises(Exception, self.obj.isEqualAttr([1, 2, 3]))
-        self.assertRaises(Exception, self.obj.isEqualAttr([1, 2, 3], 'test_string'))
-        self.assertRaises(Exception, self.obj.isEqualAttr(True, 3.14))
-        self.assertTrue(isinstance(self.obj.isEqualAttr(42, 'test_string'), bool))
+    def test_self_obj_isEqualNode(self):
+        #self.assertRaises(Exception, self.obj.isEqualNode())
+        self.assertRaises(Exception, self.obj.isEqualNode([1, 2, 3]))
+        self.assertRaises(Exception, self.obj.isEqualNode([1, 2, 3], 'test_string'))
+        self.assertRaises(Exception, self.obj.isEqualNode(True, 3.14))
+        self.assertTrue(isinstance(self.obj.isEqualNode(42, 'test_string'), bool))
 
 
     def test_self_obj_outerJSON(self):

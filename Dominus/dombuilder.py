@@ -6,12 +6,20 @@
 #
 #pylint: disable=W0613, W0603, W0212
 #
-import sys
 import os
 import re
 import codecs
+from typing import IO, Union, Dict
+import logging
 
 from xml.parsers import expat
+
+#from basedom import Document, Element
+#from xml.dom import minidom  # TODO Lose this
+#from xml.dom.minidom import Node
+#from documenttype import DocType
+
+lg = logging.getLogger("dombuilder")
 
 __metadata__ = {
     "title"        : "dombuilder",
@@ -20,7 +28,7 @@ __metadata__ = {
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.7",
     "created"      : "2016-02-06",
-    "modified"     : "2020-01-11",
+    "modified"     : "2024-09",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
@@ -63,12 +71,14 @@ So far, it only talks to `expat` for parsing.
 
 =History=
 
-By Steven J. DeRose, ~Feb 2016.
+* By Steven J. DeRose, ~Feb 2016.
 
-2018-04-18: lint.
+* 2018-04-18: lint.
 
-2019-12-20: Split out of basedom.py (nee RealDOM.py).
+* 2019-12-20: Split out of basedom.py (nee RealDOM.py).
 Hook to expat. Add test driver.
+
+* 2024-08ff: Integrate with basedom.
 
 
 =To do=
@@ -91,14 +101,12 @@ or [http://github.com/sderose].
 """
 
 # So we can get at file offsets, errors, etc. from expat:
-theParser = None
 theDomB = None
-args = None
 
 
 ###############################################################################
 #
-class DOMBuilder():
+class DomBuilder():
     """Build a DOM structure by parsing something.
     Can hook to various DOM implementations.
     """
@@ -110,32 +118,27 @@ class DOMBuilder():
         "&amp;"  : "&",
     }
 
-    def __init__(self, domImpl=None, nodeClass=None, wsn=False,
-        verbose=1, nsSep=None
-        ):
+    def __init__(self, domImpl=None, wsn:bool=False, verbose:int=1, nsSep:str=":"):
         """Set up to parse an XML file(s) and have the callbacks create a DOM.
 
-        @param domImpl: a class.
+        @param domImpl: a DOM implementation to use.
         @param wsn: Discard whitespace-only text nodes.
         @param verbose: Trace some stuff.
         """
-        #super(DOMBuilder, self).__init__()
-        global theDomB
-        theDomB = self                  # So callbacks can see us
-
-        # The first start tag event will trigger createDocument().
-        self.domImpl = domImpl
-        self.nodeClass = nodeClass
-
         self.IdIndex = {}               # Keep index of ID attributes
         self.nodeStack = []             # Open Element objects
         self.wsn = wsn                  # Include whitespace-only nodes?
         self.verbose = verbose
         self.nsSep = nsSep
+
+        # The first start tag event will trigger createDocument().
+        self.domImpl = domImpl
         self.domDoc = None
+        self.domDocType = None
+        self.theParser = None
 
 
-    def parse(self, path_or_fh):
+    def parse(self, path_or_fh:Union[IO, str]) -> 'Document':
         """Actually run the parser.
 
         @param path_or_fh: Path or file handle to XML file to parse.
@@ -154,106 +157,98 @@ class DOMBuilder():
             raise ValueError(
                 "Not a path or file handle, but %s." % (type(path_or_fh)))
 
-        p = self.parser_setup()
-        p.ParseFile(fh)
+        self.parser_setup()
+        self.theParser.ParseFile(fh)
         if (not isinstance(path_or_fh, str)): fh.close()
         return self.domDoc
 
-    def parse_string(self, s):
+    def parse_string(self, s) -> 'Document':
         if (not isinstance(s, str)):
             raise ValueError("Not a string.")
         p = self.parser_setup()
         p.Parse(s)
         return self.domDoc
 
-    def parser_setup(self):
+    def parser_setup(self, encoding:str="utf-8", dcls:bool=True) -> None:
         p = expat.ParserCreate(
-            encoding=args.iencoding, namespace_separator=self.nsSep)
+            encoding=encoding, namespace_separator=self.nsSep)
+        self.theParser = p
 
-        global theParser # For getting at location and error info
-        theParser = p
+        p.StartElementHandler           = StartElementHandler
+        p.EndElementHandler             = EndElementHandler
+        p.CharacterDataHandler          = CharacterDataHandler
+        p.ProcessingInstructionHandler  = ProcessingInstructionHandler
+        p.CommentHandler                = CommentHandler
 
-        p.StartElementHandler          = StartElementHandler
-        p.EndElementHandler            = EndElementHandler
-        p.CharacterDataHandler         = CharacterDataHandler
-        p.ProcessingInstructionHandler = ProcessingInstructionHandler
-        p.CommentHandler               = CommentHandler
+        if (dcls):
+            p.XmlDeclHandler           = XmlDeclHandler
+            p.StartDoctypeDeclHandler  = StartDoctypeDeclHandler
+            p.EndDoctypeDeclHandler    = EndDoctypeDeclHandler
 
-        #p.XmlDeclHandler               = XmlDeclHandler
-        #p.StartDoctypeDeclHandler      = StartDoctypeDeclHandler
-        #p.EndDoctypeDeclHandler        = EndDoctypeDeclHandler
-
-        #p.ElementDeclHandler           = ElementDeclHandler
-        #p.AttlistDeclHandler           = AttlistDeclHandler
-        #p.EntityDeclHandler            = EntityDeclHandler
-        #p.UnparsedEntityDeclHandler    = UnparsedEntityDeclHandler
-        #p.NotationDeclHandler          = NotationDeclHandler
+            p.ElementDeclHandler       = ElementDeclHandler
+            p.AttlistDeclHandler       = AttlistDeclHandler
+            p.EntityDeclHandler        = EntityDeclHandler
+            p.UnparsedEntityDeclHandler= UnparsedEntityDeclHandler
+            p.NotationDeclHandler      = NotationDeclHandler
 
         return p
 
-    def tostring(self):
-        #self.trace(1, "DOMBuilder, domDoc is a %s." % (type(self.domDoc)))
+    def tostring(self) -> str:
+        #lg.info("DomBuilder, domDoc is a %s." , type(self.domDoc))
         return self.domDoc.collectAllXml2()
 
-    def isCurrent(self, name):
+    def isCurrent(self, name) -> bool:
         """Is the innermost open element of the given type?
         """
         if (self.nodeStack and self.nodeStack[-1] == name):
             return True
         return False
 
-    def isOpen(self, name):
+    def isOpen(self, name) -> bool:
         """Is any element of the given type open?
         """
         if (name in self.nodeStack): return True
         return False
 
-    def trace(self, lvl, msg):
-        if (self.verbose >= lvl): sys.stderr.write(self.ind()+msg+"\n")
-
-    def ind(self):
+    def ind(self) -> bool:
         return("    " * len(self.nodeStack))
 
 
 ### Handlers ##############################################################
 #
-def StartElementHandler(name, attributes=None):
-    theDomB.trace(1, "StartElement: '%s'" % (name))
-    if (len(theDomB.nodeStack) == 0):
-        theDomB.trace(1, "Creating Document().")
-        e = makeDocument(name)
-    else:
-        theDomB.trace(1, "Appending %s to a %s (depth %d, nChildren %d)." % (
-            name, theDomB.nodeStack[-1].nodeName,
-            len(theDomB.nodeStack), theDomB.nodeStack[-1].getNChildNodes()))
-        e = theDomB.domDoc.createElement(name)
-        theDomB.nodeStack[-1].appendChild(e)
+def StartElementHandler(p:DomBuilder, name, attributes=None):
+    def addAttrs(node, attributes:Dict) -> 'Node':
+        for n, v in attributes.items():
+            node.setAttribute(n, v)
+            if ("*@"+n in theDomB.IdIndex
+                or node.nodeName+"@"+n in theDomB.IdIndex):
+                #if (theDomB.theMLD.caseInsensitive): v = v.lower()
+                if (v in theDomB.IdIndex):
+                    raise ValueError("Duplicate ID value '%s' @ %s." %
+                        (v, p.theParser.CurrentByteIndex))
+                else:
+                    theDomB.IdIndex[v] = node
+        return node
 
-    e.startLoc = theParser.CurrentByteIndex
-    if (attributes): addAttrs(e, attributes)
-    theDomB.nodeStack.append(e)
+    lg.info("StartElement: '%s'", name)
+    if (len(theDomB.nodeStack) == 0):
+        lg.info("Creating Document().")
+        assert (theDomB is not None)
+        theDomB.domDoc = theDomB.domImpl.createDocument(None, name, None)
+        el = theDomB.domDoc.documentElement
+    else:
+        lg.info("Appending %s to a %s (depth %d, nChildren %d).",
+            name, theDomB.nodeStack[-1].nodeName,
+            len(theDomB.nodeStack), theDomB.nodeStack[-1].getNChildNodes())
+        el = theDomB.domDoc.createElement(name)
+        theDomB.nodeStack[-1].appendChild(el)
+
+    el.startLoc = p.theParser.CurrentByteIndex
+    if (attributes): addAttrs(el, attributes)
+    theDomB.nodeStack.append(el)
     return
 
-def makeDocument(name):
-    assert (theDomB is not None)
-    print("domImpl type is %s" % (type(theDomB.domImpl)))
-    theDomB.domDoc = theDomB.domImpl.createDocument(None, name, None)
-    return theDomB.domDoc.documentElement
-
-def addAttrs(node, attributes):
-    for n, v in attributes.items():
-        node.setAttribute(n, v)
-        if ("*@"+n in theDomB.IdIndex
-            or node.nodeName+"@"+n in theDomB.IdIndex):
-            #if (theDomB.theMLD.caseInsensitive): v = v.lower()
-            if (v in theDomB.IdIndex):
-                raise ValueError("Duplicate ID value '%s' @ %s." %
-                    (v, theParser.CurrentByteIndex))
-            else:
-                theDomB.IdIndex[v] = node
-    return node
-
-def EndElementHandler(name):
+def EndElementHandler(p:DomBuilder, name) -> None:
     if (not theDomB.nodeStack):
         raise IndexError(
             "EndElementHandler: closing '%s' but empty nodeStack." % (name))
@@ -264,123 +259,84 @@ def EndElementHandler(name):
             (name, theDomB.nodeStack[-1].nodeName))
 
     theDomB.nodeStack.pop()
-    theDomB.trace(1, "EndElement: '%s'" % (name))
+    lg.info("EndElement: '%s'", name)
     return
 
-def EmptyElementHandler(name, attributes):
+def EmptyElementHandler(p:DomBuilder, name, attributes) -> None:
     assert(False)
-    theDomB.trace(1, "EmptyElement: got '%s'" % (name))
-    StartElementHandler(name, attributes)
-    EndElementHandler(name)
+    lg.info("EmptyElement: got '%s'", name)
+    StartElementHandler(p, name, attributes)
+    EndElementHandler(p, name)
     return
 
-def CharacterDataHandler(data):     # FIX: Coalesce adjacent text nodes?
+def CharacterDataHandler(p:DomBuilder, data) -> None:  # FIX: Coalesce adjacent text nodes?
     if (not re.match(r"\S", data)):  # whitespace-only
         if (not theDomB.wsn): return
     else:
         if (not theDomB.nodeStack):
             raise("Found data outside any element: '%s'." % (data))
-    theDomB.trace(1, "CharacterData: got '%s'" % (data))
+    lg.info("CharacterData: got '%s'", data)
     tn = theDomB.domDoc.createTextNode(data)
     theDomB.nodeStack[-1].appendChild(tn)
     return
 
-def CommentHandler(data):
-    theDomB.trace(1, "Comment: got '%s'" % (data))
+def CommentHandler(p:DomBuilder, data) -> None:
+    lg.info("Comment: got '%s'", data)
     newCom = theDomB.domDoc.createComment(data)
     theDomB.nodeStack[-1].appendChild(newCom)
     return
 
-def DeclHandler(data):  # TODO Handle Declarations
-    theDomB.trace(1, "Decl: ignoring '%s'" % (data))
+def DeclHandler(p:DomBuilder, data) -> None:  # TODO Handle Declarations
+    lg.info("Decl: ignoring '%s'", data)
     #newDcl = theDomB.domDoc.create(data)
     #theDomB.nodeStack[-1].appendChild(newDcl)
     return
 
-def ProcessingInstructionHandler(target, data):
-    theDomB.trace(1, "ProcessingInstruction: got '%s'" % (data))
+def ProcessingInstructionHandler(p:DomBuilder, target, data) -> None:
+    lg.info("ProcessingInstruction: got '%s'", data)
     newPI = theDomB.domDoc.createProcessingInstruction(target, data)
     theDomB.nodeStack[-1].appendChild(newPI)
     return
 
-def Unknown_declHandler(data):
-    theDomB.trace(1, "Unknown_decl: got '%s'" % (data))
+def Unknown_declHandler(p:DomBuilder, data) -> None:
+    lg.info("Unknown_decl: got '%s'", data)
     # raise ValueError("Unknown markup declaration: '%s'" % (data))
     newDcl = theDomB.domDoc.createComment(data)
     theDomB.nodeStack[-1].appendChild(newDcl)
     return
 
 
-###############################################################################
+### Markup declaration handlers
 #
-if __name__ == "__main__":
-    import argparse
+def XmlDeclHandler(p:DomBuilder,
+    version:str="", encoding:str="", standalone:str="") -> None:
+    pass
 
-    def processOptions():
-        try:
-            from BlockFormatter import BlockFormatter
-            parser = argparse.ArgumentParser(
-                description=descr, formatter_class=BlockFormatter)
-        except ImportError:
-            parser = argparse.ArgumentParser(description=descr)
+def StartDoctypeDeclHandler(p:DomBuilder, name:str,
+    literal=None, publicId:str=None, systemId:str=None) -> None:
+    #p.domDocType = DocType(name, literal, publicId, systemId)
+    # TODO Figure out circular import
+    pass
 
-        parser.add_argument(
-            "--baseDom", action="store_true",
-            help="Try building using BaseDOM.")
-        parser.add_argument(
-            "--echo", action="store_true",
-            help="Reconstruct and print the XML.")
-        parser.add_argument(
-            "--iencoding", type=str, default="UTF-8",
-            choices=[ "UTF-8", "UTF-16", "ISO-8859-1", "ASCII" ],
-            help="Encoding to assume for the input. Default: UTF-8.")
-        parser.add_argument(
-            "--istring", type=str, default="    ",
-            help="String to repeat to make indentation.")
-        parser.add_argument(
-            "--ns", action="store_true",
-            help="Activate expat namespace handling.")
-        parser.add_argument(
-            "--quiet", "-q", action="store_true",
-            help="Suppress most messages.")
-        parser.add_argument(
-            "--verbose", "-v", action="count", default=0,
-            help="Add more messages (repeatable).")
-        parser.add_argument(
-            "--version", action="version", version=__version__,
-            help="Display version information, then exit.")
+def EndDoctypeDeclHandler(p:DomBuilder) -> None:
+    pass
 
-        parser.add_argument(
-            "files", nargs=argparse.REMAINDER,
-            help="Path(s) to input file(s).")
+def ElementDeclHandler(p:DomBuilder, name:str, model:str="ANY") -> None:
+    p.domDocType.ElementDef(name, aliasFor=None, model=model)
 
-        args0 = parser.parse_args()
-        return args0
+def AttlistDeclHandler(p:DomBuilder, ename:str, aname:str, atype:str, adefault:str) -> None:
+    p.domDocType.AttributeDef(ename, aname, atype, adefault)
 
-    if (os.environ["PYTHONIOENCODING"] != "utf_8"):
-        theDomB.trace(0, "Warning: PYTHONIOENCODING is not utf_8.\n")
+# TODO Special types etc.
 
-    args = processOptions()
+def EntityDeclHandler(p:DomBuilder, name:str,
+    literal=None, publicId:str=None, systemId:str=None) -> None:
+    p.domDocType.EntityDef(name, literal, publicId, systemId)
 
-    import basedom
-    from basedom import Node
-    impl = basedom.getDOMImplementation()
+def UnparsedEntityDeclHandler(p:DomBuilder, name:str,
+    literal=None, publicId:str=None, systemId:str=None) -> None:
+    p.domDocType.EntityDef(name, literal, publicId, systemId)
 
-    if (len(args.files) == 0):
-        tfileName = "testDoc.xml"
-        print("No files specified, trying %s." % (tfileName))
-        args.files.append(tfileName)
-
-    for thePath in args.files:
-        if (not os.path.isfile(thePath)):
-            theDomB.trace(0, "No file at '%s'." % (thePath))
-            continue
-        print("Building the DOM for '%s'." % (thePath))
-
-        theDBuilder = DOMBuilder(domImpl=impl,
-            nodeClass=Node, verbose=args.verbose,
-            nsSep = ":" if (args.ns) else None
-        )
-        theDom = theDBuilder.parse(thePath)
-        print("\nResults:")
-        print(theDom.tostring())
+def NotationDeclHandler(p:DomBuilder, name:str,
+    literal=None, publicId:str=None, systemId:str=None) -> None:
+    p.domDocType.NotationDef(name, literal, publicId, systemId)

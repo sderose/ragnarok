@@ -2,7 +2,16 @@
 #
 import unittest
 #from xml.dom.minidom import getDOMImplementation
-from basedom import getDOMImplementation
+#from basedom import getDOMImplementation
+from typing import Any
+
+class sliceTester(list):
+    def __init__(self):
+        self.stuff = [ 1, 2, "p", "q" ]
+
+    def __getitem__(self, v:Any):
+        print("Type of arg is %s." % (type(v)))
+
 
 class TestDOMNode(unittest.TestCase):
     def setUp(self):
@@ -22,7 +31,6 @@ class TestDOMNode(unittest.TestCase):
             for ch in [ el, pi, tx, cm, cd ]:
                 ch2 = ch.cloneNode()
                 self.docEl.appendChild(ch2)
-
 
     def test_getitem(self):
         nch = len(self.docEl)
@@ -56,4 +64,12 @@ class TestDOMNode(unittest.TestCase):
         x = self.docEl["#cdata"]
         x = self.docEl["#comment"]
 
-unittest.main()
+print("Starting")
+x = sliceTester()
+x[1]
+x["p"]
+x["p":1]
+print("Done")
+print(x)
+
+#unittest.main()

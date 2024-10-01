@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-class CSSSelectors:
+class CssSelectors:
     """
     name
     *
@@ -50,7 +50,6 @@ class CSSSelectors:
     topExpr = r"(\w+|\*)?(\.\w+)"
 
 
-class CSSSelector:
     """Drafted by Claude 3.5.
     These methods can be added to a Node class.
     """
@@ -182,15 +181,14 @@ class CSSSelector:
             return node.tagName == selector
 
     def testAttr(self, node, aname:str, op:str, tgtValue:str, caseFlag:str) -> bool:
-        """Test whether the node's @aname satisfies the [] condition.
+        """Test whether a node's attribute satisfies the [] condition.
         """
         if (not op and not tgtValue):
             return node.hasAttribute(aname)
         tgtValue = tgtValue.strip(" \t\n\r\"'")
         docValue = node.getAttribute(aname).strip()
-        if (caseFlag in "iI"):
-            tgtValue = tgtValue.lower()
-            docValue = docValue.lower()
+        tgtValue = CssSelectors.maybeFold(tgtValue, caseFlag)
+        docValue = CssSelectors.maybeFold(docValue, caseFlag)
 
         if (op == '='):                                 # equal
             return docValue == tgtValue
@@ -253,10 +251,14 @@ class CSSSelector:
         return self._match_parts(root, self.parsed_selector)
 
     @staticmethod
-    def looseEqual(s1:str, s2:str, caseFlag:str):
+    def maybeFold(s:str, caseFlag:str=None) -> str:
         """Seemingly CSS only does ASCII case-folding. srsly?
         """
-        if (caseFlag in "iI"):
-            return s1.strip().lower() == s2.strip().lower()
-        else:
-            return s1.strip() == s2.strip()
+        if (caseFlag in "iI"): return s.lower()
+        if (caseFlag in "Ff"): return s.casefold()
+        return s
+
+    @staticmethod
+    def looseEqual(s1:str, s2:str, caseFlag:str) -> bool:
+        return (CssSelectors.maybeFold(s1.strip(), caseFlag)
+            == CssSelectors.maybeFold(s2.strip(), caseFlag))

@@ -5,10 +5,10 @@ import logging
 #from typing import Callable
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation,Element
-from basedom import NodeTypes
+from domenums import NodeType
 
 #import DocumentType
-#import DOMBuilder
+#import DomBuilder
 #import XmlStrings
 #import XMLRegexes
 #import BaseDOM
@@ -56,7 +56,7 @@ class TestDOMNode(unittest.TestCase):
             prv = self.n.docEl.childNodes[i-1]
             cur = self.n.docEl.childNodes[i]
             nxt = self.n.docEl.childNodes[i+1]
-            self.assertEqual(cur.nodeType, NodeTypes.ELEMENT_NODE)
+            self.assertEqual(cur.nodeType, NodeType.ELEMENT_NODE)
             self.assertEqual(cur.nodeName, pType)
             self.assertEqual(len(cur.childNodes), 1)
 
@@ -72,32 +72,32 @@ class TestDOMNode(unittest.TestCase):
          cf makeTestDoc2.addAllTypes(troot)
         """
         troot = self.n.doc.createElement("div")
-        self.tryAllIsA(troot, NodeTypes.ELEMENT_NODE)
+        self.tryAllIsA(troot, NodeType.ELEMENT_NODE)
 
         ncd = self.n.doc.createCDATASection("Whew, I'm a <section>.")
-        self.tryAllIsA(ncd, NodeTypes.CDATA_SECTION_NODE)
+        self.tryAllIsA(ncd, NodeType.CDATA_SECTION_NODE)
         troot.appendChild(ncd)
 
         nco = self.n.doc.createComment("So, comments are needed, too.")
-        self.tryAllIsA(nco, NodeTypes.COMMENT_NODE)
+        self.tryAllIsA(nco, NodeType.COMMENT_NODE)
         troot.appendChild(nco)
 
         npi = self.n.doc.createProcessingInstruction(target="myTarget", data="duh")
-        self.tryAllIsA(npi, NodeTypes.PROCESSING_INSTRUCTION_NODE)
+        self.tryAllIsA(npi, NodeType.PROCESSING_INSTRUCTION_NODE)
         troot.appendChild(npi)
 
         nat = self.n.doc.createAttribute("class", "someClass", parentNode=None)
-        self.tryAllIsA(nat, NodeTypes.ATTRIBUTE_NODE)
+        self.tryAllIsA(nat, NodeType.ATTRIBUTE_NODE)
 
         #ndf = createDocumentFragment()
-        #self.tryAllIsA(ndf, NodeTypes.FRAGMENT_NODE)
+        #self.tryAllIsA(ndf, NodeType.FRAGMENT_NODE)
 
         #ndt = self.n.impl.createDocumentType("docbook")
-        #self.tryAllIsA(ndt, NodeTypes.DOCTYPE_NODE)
+        #self.tryAllIsA(ndt, NodeType.DOCTYPE_NODE)
 
         # NodeList, NamedNodeMap, ....
 
-    def tryAllIsA(self, node, expectedNodeType:NodeTypes):
+    def tryAllIsA(self, node, expectedNodeType:NodeType):
         """Try all the nodeType test properties; only one should be true.
         But they're properties.
         """
@@ -107,11 +107,10 @@ class TestDOMNode(unittest.TestCase):
             node.isAttribute,
             node.isCDATA,
             node.isComment,
-            node.isDoctype,
+            node.isDocumentType,
             node.isDocument,
             node.isElement,
             node.isEntRef,
-            node.isEntity,
             node.isFragment,
             node.isNotation,
             node.isPI,

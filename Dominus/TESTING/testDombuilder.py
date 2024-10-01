@@ -5,6 +5,7 @@
 # 2024-09: Written by Steven J. DeRose.
 #
 import unittest
+import dombuilder
 
 sampleDoc = """
 <html>
@@ -28,6 +29,6 @@ class TestDomBuilder(unittest.TestCase):
         self.aDom = self.db.parse_string(sampleDoc)
 
     def test_selectors(self):
-        xml2 = self.aDom.documentElement.outerXML)
+        xml2 = self.aDom.documentElement.outerXML
         # TODO: Normalize space, attr order.
         self.assertEqual(xml2, sampleDoc)

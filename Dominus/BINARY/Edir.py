@@ -12,7 +12,7 @@ from typing import IO, Dict
 from xmlstrings import XmlStrings as XStr
 #import BaseDOM
 from basedom import Node
-import DOMBuilder
+import DomBuilder
 
 __metadata__ = {
     "title"        : "Edir",
@@ -95,7 +95,7 @@ Washington, DC, August 5 - 8, 2014. In I<Proceedings of Balisage: The Markup Con
 * Written ~2016 by Steven J. DeRose. Largely based on binaryXM<L.pl,
 a Perl version I wrote beginning around 2009-12-31.
 
-* 2019-12-30: Integrate with DomExtensions, DOMBuilder, etc.
+* 2019-12-30: Integrate with DomExtensions, DomBuilder, etc.
 
 * 2023-11-21: lint, type-hints.
 
@@ -531,7 +531,7 @@ if __name__ == "__main__":
             print("No file at '%s'." % (thePath))
             continue
         print("Building the DOM for '%s'." % (thePath))
-        theDom = DOMBuilder.DOMBuilder(
+        theDom = DomBuilder.DomBuilder(
             #thePath, domImpl=xml.dom.minidom, verbose=args.verbose)
             thePath, verbose=args.verbose)
         print("\nResults:")

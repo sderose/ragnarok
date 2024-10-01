@@ -1,22 +1,31 @@
-#!/usr/bin/env python3
-#
-# 2024-08-19: sjd.
-#
-from enum import Enum
-import xml.dom.minidom
-
-descr = """
 Generate a ton of picky test cases for an XML parser.
 
 ==To do==
 
-* Give each test an ID.
-* Hook up to generate a pack of XML files (marked good/bad)
-* Hook up to parse directly given a parser.
-* Hook up to generate a standard test result, to compare parsers with.
+* Coverage re-check
 
-* Option to choose max depth, name-length for elements and attr names,
-content length for
+* Basic tests still needed (?)
+** eachNode
+
+* Much more on namespaces
+
+* lookupNamespaceURI
+** For DocumentFragment nodes: It will check the child elements of the fragment.
+** Allow on Document nodes
+* Finish charstestXmlNameUnicode.py
+* Option to test all HTML named entities
+* Integrate Whitespace, case, unorm options
+* Test super-long &#x0000000XX, names, comments, etc.
+
+* Questions
+** Can you change ns defs after loading?
+
+* Integrations
+** Hook up to generate a pack of XML files (marked good/bad)
+** Hook up to parse directly given a parser.
+** Hook up to generate a standard test result, to compare parsers with?
+
+* makeTestDoc.py options for max depth, name-length, content length for
 ** text
 ** attr values
 ** comments
@@ -25,14 +34,6 @@ content length for
 ** numeric ent leading 0s
 ** ent names
 ** excess whitespace in markup
-
-* Broad test
-** Test all Unicode chars, perhaps by language/orthography
-    *** (non-)Startchar for element and attr names
-    *** (non-)Namechar for element and attr names, and ids
-** Option to test all HTML named entities
-** Test all dec and hex ents against character returned.
-** Whitespace in Unicode vs. XML
 
 """
 

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 #
-import sys
+#import sys
 import unittest
-import logging
+#import logging
+from typing import List
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation, Document, Node, Element
 #from basedom import getDOMImplementation, DOMImplementation, Document, Node, Element
 
-from testNode2 import DAT
+from maketestdoc import makeTestDoc0, DAT, DAT_DocBook
 
 whatWG = True
 correctCaseFold = True
@@ -15,48 +16,31 @@ correctCaseFold = True
 class TextExtensions(unittest.TestCase):
 
     def setUp(self):
-        dat = DAT()
-        self.impl       = dat.impl
-        self.doc        = dat.doc
-        self.docEl      = dat.docEl
-        self.child1     = dat.child1
-        self.child2     = dat.child2
-        self.grandchild = dat.grandchild
-        self.textNode1  = dat.textNode1
-        self.emptyNode  = dat.emptyNode
-        self.mixedNode  = dat.mixedNode
+        self.makeDocObj = makeTestDoc0(dc=DAT_DocBook)
+        self.n = self.makeDocObj.n
 
-    def testHasFeature(self):
-        """See also testExtensions
-        """
-        self.assertTrue(self.impl.hasFeature("caseSensitive", True))
-        self.assertTrue(self.impl.hasFeature("verbose", 0))
-        self.assertTrue(self.impl.hasFeature("prev-next", 1))
-        self.assertTrue(self.impl.hasFeature("getitem-n", 1))
-        self.assertTrue(self.impl.hasFeature("getitem-name", 1))
-        self.assertTrue(self.impl.hasFeature("getitem-attr", 1))
-        self.assertTrue(self.impl.hasFeature("nodeTypeProps", 1))
-        self.assertTrue(self.impl.hasFeature("NodeTypesEnum", 1))
-        self.assertTrue(self.impl.hasFeature("attr-types", 1))
-        self.assertTrue(self.impl.hasFeature("constructor-content", 1))
-        self.assertTrue(self.impl.hasFeature("NS-any", 1))
-        self.assertTrue(self.impl.hasFeature("value-indexer", 1))
-        self.assertTrue(self.impl.hasFeature("jsonx", 1))
+        self.impl       = self.n.impl
+        self.doc        = self.n.doc
+        self.docEl      = self.n.docEl
+        self.child1     = self.n.child1
+        self.child2     = self.n.child2
+        self.grandchild = self.n.grandchild
+        self.textNode1  = self.n.textNode1
+        self.emptyNode  = self.n.emptyNode
+        self.mixedNode  = self.n.mixedNode
 
     def test_nodeType_predicates(self, el, ok:List):
-        self.assertEqual(el.isElement,   el.isElement in ok)
-        self.assertEqual(el.isAttribute, el.isAttribute in ok)
-        self.assertEqual(el.isText,      el.isText in ok)
-        self.assertEqual(el.isCDATA,     el.isCDATA in ok)
-        self.assertEqual(el.isEntRef,    el.isEntRef in ok)
-        self.assertEqual(el.isEntity,    el.isEntity in ok)
-        self.assertEqual(el.isPI,        el.isPI in ok)
-        self.assertEqual(el.isComment,   el.isComment in ok)
-        self.assertEqual(el.isDocument,  el.isDocument in ok)
-        self.assertEqual(el.isDoctype,   el.isDoctype in ok)
-        self.assertEqual(el.isFragment,  el.isFragment in ok)
-        self.assertEqual(el.isNotation,  el.isNotation in ok)
-
+        self.assertEqual(el.isElement,      el.isElement in ok)
+        self.assertEqual(el.isAttribute,    el.isAttribute in ok)
+        self.assertEqual(el.isText,         el.isText in ok)
+        self.assertEqual(el.isCDATA,        el.isCDATA in ok)
+        self.assertEqual(el.isEntRef,       el.isEntRef in ok)
+        self.assertEqual(el.isPI,           el.isPI in ok)
+        self.assertEqual(el.isComment,      el.isComment in ok)
+        self.assertEqual(el.isDocument,     el.isDocument in ok)
+        self.assertEqual(el.isDocumentType, el.isDocumentType in ok)
+        self.assertEqual(el.isFragment,     el.isFragment in ok)
+        self.assertEqual(el.isNotation,     el.isNotation in ok)
 
     def test_whatwg(self):
         self.child2.setAttribute("class", "Foo bar baz  \t ba" + DAT.final_sigma)
@@ -72,6 +56,8 @@ class TextExtensions(unittest.TestCase):
             self.assertFalse("ba"+DAT.lc_sigma in dtl)
             self.assertFalse("ba" in dtl)
 
+        el = self.n.docEl
+
         self.assertTrue(el.lastElementChild)
         self.assertTrue(el.elementChildNodes)
         self.assertIs(el.elementChildN(5), el.childNodes[5])
@@ -84,6 +70,7 @@ class TextExtensions(unittest.TestCase):
         # On all CharacterData types and Attrs etc.:
         self.assertTrue(el.hasIdAttribute)
 
+        ch10 = el[10]
         self.assertFalse(ch10.hasIdAttribute())
         ch10.setAttribute("xml:id", "SomeIdValue_37")
         self.assertTrue(ch10.hasIdAttribute())
@@ -92,4 +79,4 @@ class TextExtensions(unittest.TestCase):
         self.assertFalse(ch10.hasAttribute("xml:id"))
 
         ner = self.doc.createEntityReference(name="chap1")
-        self.tryAllIsA(ner, Node.isEntRef)
+        self.assertTrue(ner.isEntRef)

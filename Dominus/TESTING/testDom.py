@@ -20,7 +20,7 @@ from basedom import Node, NamedNodeMap
 #CDATASection, ProcessingInstruction, Comment, EntityReference, Notation, \
 #DocumentType, Attr, NodeList,
 
-import DOMBuilder
+import DomBuilder
 
 cm = ColorManager.ColorManager()
 
@@ -146,7 +146,7 @@ def fillDoc(docObj):
     """Use DOM to create a document from scratch, thus exercising the
     createXXX() methods.
 
-    See also DOMBuilder, which maps SAX events from a parser, to the DOM
+    See also DomBuilder, which maps SAX events from a parser, to the DOM
     calls needed to create the corresponding DOM structure.
     """
     docEl = docObj.documentElement
@@ -758,8 +758,7 @@ def exerciseAttr(n):
         print("    *** No attr there ***")
         return
     n2 = n.ownerDocument.createElement(sampleValues["tagName"])
-    if (args.testBaseDOMAdditions):
-        n.isEqualAttr(n2)
+    n.isEqualNode(n2)
     print("******* End exerciseAttr *******")
 
 
@@ -954,7 +953,7 @@ if __name__ == "__main__":
     if (len(args.files) > 0):
         for path0 in args.files:
             if (args.baseDom):
-                db = DOMBuilder.DOMBuilder(path0)
+                db = DomBuilder.DomBuilder(path0)
                 theDom = db.parse(path0)
                 print("\nResults:")
                 print(theDom.tostring())

@@ -33,6 +33,14 @@ node you checked (even nodes from other documents). That's pretty useless in
 this context, so "contains" and "in" are overridden for Node and its
 subclasses, to check whether the actual node is an actual child.
 
+* This raises an issue with what the boolean values of nodes should be.
+An empty list in Python is conventionally false; but an empty Element in DOM
+can still have all kinds of information via attributes, so probably should be
+True -- it's not "empty" in the same way as a bare list of dict.
+Similarly, Attr nodes implement bool() as the bool() of their *value*, so
+testing "if myNode.getAttribute("x")" tells you if the attribute exists and
+is non-empty, which sure seems Pythonic to me.
+
 * On the other hand, DOM has a "contains" method (not an infix operator),
 and "node1.contains(node2)" checks whether node2 is a *descendant*, not
 just a child. That method is also available, and does what DOM days. However,
@@ -178,34 +186,47 @@ Rename? Maybe SpamNX?
 (like spam, spam, baked beans, 'n spam, it ain't got much spam in it)
 
 
-==Big issues==
+==issues==
 
-* Naming issues for remove...
-** DOM removeChild(self, oldChild:'Node') -> 'Node'
-** removeNode(self) -> 'Node':  ### rrename to emoveSelf?
-** remove(self, x:Any=None) -> 'Node'
-** removeAttribute(self, aname:NmToken) -> None
-** removeAttributeNS(self, ns, aname:NmToken) -> None
-** removeAttributeNode(self, aname:NmToken) -> 'Attr'
-** remove(self) -> None
-** removeChild(self, oldChild:Node)
-** remove(self, token:str)
-** removeNamedItem(self, name:NmToken) -> Attr
-** removeNamedItemNS(self, attrNode:Node) -> None
+* Pythonicity
+** __contains__ vs. contains
+** removeNode vs. removeSelf
 
-* Clean way to make [] extensible -- pass it a callable?
+* Speed
+** compareDocumentPosition -- can we do better by not building all the way to
+root, but co-recursing up both sides, only until we hit a common ancestor, then
+back down?
+** Any more places to avoid getChildIndex()? Already added int position for
+insertBefore.
 
-* How to organize CSS, XPath, et, etc. into separate add-on-ish classes.
+* Structure and organization
+** Segregate namespace into subclass?
+** Clean way to make [] extensible -- pass it a callable?
+** How to organize CSS, XPath, et, etc. into separate add-on-ish classes.
 Protocols?
+** Could NamedNodeMap just go away?
 
-* Best way to incorporate case-ignorance.
+* Semantic questions
+** Should Node be constructable?
+** Should cloneNode copy userData and/or ownerDocument?
+** Should removeAttribute___ unlink from ownerDoc/ownerEl?
+** Effect of changing xmlns: attributes.
 
-* Segregate namespace into subclass?
+* Added functions?
+** Add moveNode(s) operation? Meh
+** Best way to incorporate case-ignorance.
 
-* Add moveNode(s) operation? Meh
+* Would this bit from minidom be useful?
+    # A Node is its own context manager, to ensure that an unlink() call occurs.
+    # This is similar to how a file object works.
+    def __enter__(self):
+        return self
 
-
+    def __exit__(self, et, ev, tb):
+        self.unlink()
 ==Testing to beef up==
+
+(see also testingNotes.md)
 
 * Ramp up coverage
 * Namespaces, esp. defaulting

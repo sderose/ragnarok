@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 #
+import sys
 import unittest
 import unicodedata
 
@@ -62,23 +63,23 @@ class fromXmlRec:
     ]
 
     @staticmethod
-    getNameStarts() -> str:
+    def getNameStarts() -> str:
         buf = ""
         lastEnd = 0
-        for rg in nameStartRanges:
-            fr, to = *rg
-            assert fr > lastEnd and fr <= to and to < sys.maxUnicode
+        for rg in fromXmlRec.nameStartRanges:
+            fr = rg[0]; to = rg[1]
+            assert fr > lastEnd and fr <= to and to < sys.maxunicode
             for cp in range(fr, to):
                 buf += chr(cp)
         return buf
 
     @staticmethod
-    getNameChars() -> str:
-        buf = getNameStarts()
+    def getNameChars() -> str:
+        buf = fromXmlRec.getNameStarts()
         lastEnd = 0
-        for rg in addlNameRanges:
-            fr, to = *rg
-            assert fr > lastEnd and fr <= to and to < sys.maxUnicode
+        for rg in fromXmlRec.addlNameRanges:
+            fr = rg[0]; to = rg[1]
+            assert fr > lastEnd and fr <= to and to < sys.maxunicode
             for cp in range(fr, to):
                 buf += chr(cp)
         return buf
@@ -88,9 +89,9 @@ class fromXmlRec:
         """Undefined chars return False.
         """
         cp = ord(c)
-        for rg in nameStartRanges:
-            fr, to = *rg
-            if (ord >= fr and ord <= to): return True
+        for rg in fromXmlRec.nameStartRanges:
+            fr = rg[0]; to = rg[1]
+            if (cp >= fr and cp <= to): return True
         return False
 
     @staticmethod
@@ -99,48 +100,48 @@ class fromXmlRec:
         """
         cp = ord(c)
         if isNameStart(cp): return True
-        for rg in addlNameRanges:
-            fr, to = *rg
-            if (ord >= fr and ord <= to): return True
+        for rg in fromXmlRec.addlNameRanges:
+            fr = rg[0]; to = rg[1]
+            if (cp >= fr and cp <= to): return True
         return False
 
 
 ###############################################################################
 #
+nameStartCategories = ("Lu", "Ll", "Lt", "Lm", "Lo", "Nl")
+addlNameCategories = ("Nd", "Mn", "Mc", "Nd", "Pc", "Sk")
+
 class fromUnicodeCategories:
     """Identify name and name start characters from the character categories.
     the grammer in the XML REC.
     """
-    nameStartCategories = (Lu, Ll, Lt, Lm, Lo, Nl)
-    addlNameCategories = (Nd, Mn, Mc, Nd, Pc, Sk)
-
     @staticmethod
-    getNameStarts() -> str:
+    def getNameStarts() -> str:
         nonUnicode = 0
         buf = ""
-        for cp in range:(0, sys.maxUnicode):
+        for cp in range(0, sys.maxunicode):
             try:
-                uname = unicodedata.name(char)
+                _ = unicodedata.name(cp)
             except ValueError:
                 nonUnicode += 1
                 continue
-            cat = unicodedata.category(c)
+            cat = unicodedata.category(cp)
             if cat in nameStartCategories:
                 buf += chr(cp)
         return buf
 
     @staticmethod
-    getNameChars() -> str:
-         nonUnicode = 0
+    def getNameChars() -> str:
+        nonUnicode = 0
         buf = ""
-        for cp in range:(0, sys.maxUnicode):
+        for cp in range(0, sys.maxunicode):
             try:
-                uname = unicodedata.name(char)
+                _uname = unicodedata.name(cp)
             except ValueError:
                 nonUnicode += 1
                 continue
-            cat = unicodedata.category(c)
-            if (cat in nameStartCategories or cat in addlNameCategories:
+            cat = unicodedata.category(cp)
+            if cat in nameStartCategories or cat in addlNameCategories:
                 buf += chr(cp)
         return buf
 
@@ -158,7 +159,7 @@ class fromUnicodeCategories:
         """Undefined chars return False.
         """
         cat = unicodedata.category(c)
-        if cat in nameStartCategories cat in addlNameCategories:
+        if cat in nameStartCategories or cat in addlNameCategories:
             return True
         return False
 
@@ -169,11 +170,11 @@ class TestXMLNameChars(unittest.TestCase):
     #lastChar = sys.maxunicode + 1
     lastChar = 0x10100  # good enough for now
 
-    def testClassVsRule():
-        for c in in cls.namestart_chars:
-            assertTrue(isNameStartByCategory(c))
-        for c in in cls.name_chars:
-            assertTrue(isNameCharByCategory(c))
+    def testClassVsRule(self):
+        for c in cls.namestart_chars:
+            self.assertTrue(isNameStartByCategory(c))
+        for c in cls.name_chars:
+            self.assertTrue(isNameCharByCategory(c))
 
     def test_xml_namestart_chars(self):
         nonUnicode = 0
