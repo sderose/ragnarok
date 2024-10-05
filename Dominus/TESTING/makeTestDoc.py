@@ -13,8 +13,11 @@ from xmlstrings import XmlStrings as XStr
 from basedom import getDOMImplementation, DOMImplementation, Document, Node, Element
 
 #from gendoc import genDoc
+from alogging import FormatRec
+
 
 lg = logging.getLogger("makeTestDoc")
+fr = FormatRec()
 
 nameStartChars = XStr.allNameStartChars()
 nameChars = nameStartChars + XStr.allNameChars()
@@ -33,6 +36,41 @@ class DBG:
     def dumpNode(node:Node, msg:str=""):
         lg.warning("\n####### %s (nodeName %s)",msg, node.nodeName)
         node.writexml(sys.stderr, indent='    ', addindent='  ', newl='\n')
+
+    @staticmethod
+    def dumpNodeData(node:Node, msg:str=""):
+        lg.warning("\n####### %s (nodeName %s, addr %x)",
+            msg, node.nodeName, id(node))
+        if node.parentNode is None:
+            pname = lname = rname = "None"
+            cnum = cof = -1
+        else:
+            pname = node.parentNode.nodeName
+            cnum = node.getChildIndex()
+            cof = len(node.parentNode)
+            try:
+                lname = node.previousSibling.nodeName
+            except AttributeError:
+                lname = "None"
+            try:
+                rname = node.nextSibling.nodeName
+            except AttributeError:
+                rname = "None"
+        if (node.childNodes is not None):
+            ctypes = list(c.nodeName for c in node.childNodes)
+        else:
+            ctypes = []
+
+        lg.warning("\n".join([
+            "  nodeType     %s (%s)"
+                % (node.nodeType, node.nodeType.value),
+            "  nodeName     '%s' (prefix '%s', local '%s')"
+                % (node.nodeName, node.prefix, node.localName),
+            "  index        %d of %d (parent type %s)" % (cnum, cof, pname),
+            "  l/r sibs     '%s', '%s'" % (lname, rname),
+            "  children     [ %s ]" % (", ".join(ctypes)),
+            "  path         %s" % (node.getNodePath())
+        ]))
 
     @staticmethod
     def dumpChildNodes(node:Node, msg:str="", addrs:bool=False):

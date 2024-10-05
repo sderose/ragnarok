@@ -12,7 +12,11 @@ from typing import List
 
 from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
 
+#pylint: disable=W0401,W0611,W0621
 from domexceptions import *
+#from domexceptions import HierarchyRequestError
+#from domexceptions import NotFoundError
+
 from domenums import NodeType
 from xmlstrings import XmlStrings as XStr
 
@@ -89,26 +93,54 @@ class makeTestDocEachMethod(makeTestDoc0):
 ###############################################################################
 #
 class TestExceptions(unittest.TestCase):
+    """This only tests that all the whatwg-defined ones exist,
+    not whether there are extras, and not the legacy DOM ones.
+    """
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.n = madeDocObj.n
 
-    @staticmethod
-    def makeSampleDoc():
-        pass
+    def isEx(self, theClass:type):
+        self.assertIsInstance(theClass(), Exception)
 
-    def testExceptions(self):
-        self.assertTrue(isinstance(HIERARCHY_REQUEST_ERR(), Exception))
-        self.assertTrue(isinstance(WRONG_DOCUMENT_ERR(), Exception))
-        self.assertTrue(isinstance(INVALID_CHARACTER_ERR(), Exception))
-        self.assertTrue(isinstance(NOT_FOUND_ERR(), Exception))
-        self.assertTrue(isinstance(NOT_SUPPORTED_ERR(), Exception))
-        self.assertTrue(isinstance(NAMESPACE_ERR(), Exception))
+    def tests(self):
+        self.isEx(DOMException)
+        self.isEx(RangeError)
+        self.isEx(IndexSizeError)
+        self.isEx(HierarchyRequestError)
+        self.isEx(WrongDocumentError)
+        self.isEx(InvalidCharacterError)
+        self.isEx(NoModificationAllowedError)
+        self.isEx(NotFoundError)
+        self.isEx(NotSupportedError)
+        self.isEx(InUseAttributeError)
+        self.isEx(InvalidStateError)
+        self.isEx(InvalidModificationError)
+        self.isEx(NamespaceError)
+        self.isEx(InvalidAccessError)
+        self.isEx(TypeMismatchError)
+        self.isEx(SecurityError)
+        self.isEx(NetworkError)
+        self.isEx(AbortError)
+        self.isEx(QuotaExceededError)
+        self.isEx(InvalidNodeTypeError)
+        self.isEx(DataCloneError)
+        self.isEx(EncodingError)
+        self.isEx(NotReadableError)
+        self.isEx(UnknownError)
+        self.isEx(ConstraintError)
+        self.isEx(DataError)
+        self.isEx(TransactionInactiveError)
+        self.isEx(ReadOnlyError)
+        self.isEx(VersionError)
+        self.isEx(OperationError)
+        self.isEx(NotAllowedError)
+        self.isEx(OptOutError)
 
 
 ###############################################################################
 #
-class test_NodeType(unittest.TestCase):
+class testNodeType(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.n = madeDocObj.n
@@ -144,7 +176,7 @@ class TestDOMImplementation(unittest.TestCase):
         madeDocObj = makeTestDoc2()
         self.n = madeDocObj.n
 
-    def NOTYET_testDImpl(self):
+    def NOTYET_tests(self):
         x = self.n.impl.createDocument("exampl", "html", None)
         self.assertTrue(x.isDocument)
 
@@ -163,32 +195,17 @@ class TestDOMImplementation(unittest.TestCase):
 
 ###############################################################################
 #
-class test_DomBuilder(unittest.TestCase):
+@unittest.skip
+class testDomBuilder(unittest.TestCase):
+    """See separate file.
+    """
     def setUp(self):
         pass
-
-    def NOTYET_testDBuild(self):
-        import dombuilder
-        #_create_document(self)
-        #el.registerDOMImplementation(name, factory)
-
-        #adoc = self.n.impl.parse(self.dc.doc_path)
-        dbuilder = dombuilder.DomBuilder()
-
-        theSamplePath = "./TESTING/docForTestEachMethod_testDI.xml"
-        assert os.path.exists(theSamplePath)
-        theDom = dbuilder.parse(theSamplePath)
-        self.assertTrue(isinstance(theDom. Document))
-
-        dum_doc = """<?xml version="1.0"?><doc>Hello</doc>"""
-        theDom = dbuilder.parse_string(s=dum_doc)
-        self.assertTrue(isinstance(theDom, Document))
-        self.assertEqual(theDom.documentElement.toxml(), dum_doc)
 
 
 ###############################################################################
 #
-class test_NodeList(unittest.TestCase):
+class testNodeList(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.n = madeDocObj.n
@@ -212,13 +229,13 @@ class test_NodeList(unittest.TestCase):
         for n in range(len(nl)):
             self.assertEqual(nl.item(n), self.n.docEl.childNodes[origLen-n-1])
 
-        #self.assertRaises(NotImplementedError, nl.__mul__, 2)
-        #self.assertRaises(NotImplementedError, nl.__rmul__, 2)
+        #self.assertRaises(NotSupportedError, nl.__mul__, 2)
+        #self.assertRaises(NotSupportedError, nl.__rmul__, 2)
 
 
 ###############################################################################
 #
-class test_PlainNode(unittest.TestCase):
+class testPlainNode(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -232,21 +249,21 @@ class test_PlainNode(unittest.TestCase):
         #self.assertRaises(IndexError, self.n.docEl.childNodes[-200])
 
         if (0):
-            self.assertEqual(None, pnode.prefix)
+            self.assertIsNone(pnode.prefix)
             #self.assertEqual("notAnElement", pnode.localName)
-            self.assertEqual(None, pnode.namespaceURI)
+            self.assertIsNone(pnode.namespaceURI)
         else:
-            self.assertEqual(None, pnode.prefix)
-            self.assertEqual(None, pnode.localName)
-            self.assertEqual(None, pnode.namespaceURI)
+            self.assertIsNone(pnode.prefix)
+            self.assertIsNone(pnode.localName)
+            self.assertIsNone(pnode.namespaceURI)
 
         self.assertFalse(pnode.isConnected)
 
-        self.assertEqual(None, pnode.nextSibling)
-        self.assertEqual(None, pnode.previousSibling)
+        self.assertIsNone(pnode.nextSibling)
+        self.assertIsNone(pnode.previousSibling)
         self.assertFalse(pnode.childNodes)  # None or [] is ok.
 
-        self.assertEqual(None, pnode.nodeValue)
+        self.assertIsNone(pnode.nodeValue)
 
         self.assertFalse(el8.isEqualNode(pnode))
         self.assertFalse(el8.isSameNode(pnode))
@@ -284,7 +301,7 @@ class test_PlainNode(unittest.TestCase):
 
         # pnode is still detached
         self.assertFalse(pnode.isConnected)
-        self.assertEqual(pnode.getChildIndex(), None)
+        self.assertIsNone(pnode.getChildIndex())
 
         nch = len(pnode)
         x = self.dc.p_name
@@ -312,7 +329,7 @@ class test_PlainNode(unittest.TestCase):
 
 ###############################################################################
 #
-class test_Node(unittest.TestCase):
+class testNode(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -325,26 +342,21 @@ class test_Node(unittest.TestCase):
         #self.assertRaises(IndexError, self.n.docEl.childNodes[200])
         #self.assertRaises(IndexError, self.n.docEl.childNodes[-200])
 
-        if (0):
-            self.assertEqual(None, node.prefix)
-            #self.assertEqual("notAnElement", node.localName)
-            self.assertEqual(None, node.namespaceURI)
-        else:
-            self.assertEqual(None, node.prefix)
-            self.assertEqual(None, node.localName)
-            self.assertEqual(None, node.namespaceURI)
+        self.assertIsNone(node.prefix)
+        self.assertIsNone(node.localName)
+        self.assertIsNone(node.namespaceURI)
 
         self.assertFalse(node.isConnected)
 
-        self.assertEqual(None, node.nextSibling)
-        self.assertEqual(None, node.previousSibling)
-        self.assertEqual(None, node.previous)
-        self.assertEqual(None, node.next)
+        self.assertIsNone(node.nextSibling)
+        self.assertIsNone(node.previousSibling)
+        self.assertIsNone(node.previous)
+        self.assertIsNone(node.next)
         self.assertFalse(node.childNodes)  # None or [] is ok.
-        self.assertEqual(None, node.firstChild)
-        self.assertEqual(None, node.lastChild)
+        self.assertIsNone(node.firstChild)
+        self.assertIsNone(node.lastChild)
 
-        self.assertEqual(None, node.nodeValue)
+        self.assertIsNone(node.nodeValue)
         #node.nodeValue(newData:str="")
         self.assertFalse(node.textContent)
         #node.textContent(newData:str)
@@ -392,19 +404,19 @@ class test_Node(unittest.TestCase):
 
         # node is still detached
         self.assertFalse(node.isConnected)
-        self.assertEqual(node.rightmost, None)
-        self.assertEqual(node.getChildIndex(), None)
+        self.assertIsNone(node.rightmost)
+        self.assertIsNone(node.getChildIndex())
 
         #node.moveToOtherDocument(otherDocument)
 
-        self.assertEqual(node.getUserData(self.dc.udk1_name), None)
+        self.assertIsNone(node.getUserData(self.dc.udk1_name))
         node.setUserData(self.dc.udk1_name, self.dc.udk1_value)
         self.assertEqual(node.getUserData(self.dc.udk1_name), self.dc.udk1_value)
 
         #self.assertEqual(node.collectAllXml(), stag+etag)
-        self.assertEqual(node.getNodeSteps(), None)
-        self.assertEqual(node.getNodePath(), None)
-        self.assertRaises(HIERARCHY_REQUEST_ERR, node.removeNode)
+        self.assertIsNone(node.getNodeSteps())
+        self.assertIsNone(node.getNodePath())
+        self.assertRaises(HierarchyRequestError, node.removeNode)
 
         nch = len(node)
         x = self.dc.p_name
@@ -427,13 +439,13 @@ class test_Node(unittest.TestCase):
         node.checkNode()  # Node
 
 
-class test_NodeType_Predicates(unittest.TestCase):
+class testNodeType_Predicates(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
         self.n = madeDocObj.n
 
-    def testSet(self):
+    def tests(self):
         el = self.n.docEl.childNodes[5]
         for ch in self.n.docEl.childNodes:
             if (ch.nodeType == NodeType.UNSPECIFIED_NODE):
@@ -479,7 +491,7 @@ class test_NodeType_Predicates(unittest.TestCase):
 
 ###############################################################################
 #
-class test_Document(unittest.TestCase):
+class testDocument(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -491,8 +503,8 @@ class test_Document(unittest.TestCase):
         #self.assertTrue(theDoc.contentType)
         self.assertTrue(theDoc.documentElement.isElement)
         self.assertTrue(XStr.isXmlQName(theDoc.documentElement.nodeName))
-        #self.assertEqual(None, theDoc.documentURI)
-        #self.assertEqual(None, theDoc.domConfig)
+        #self.assertIsNone(theDoc.documentURI)
+        #self.assertIsNone(theDoc.domConfig)
         self.assertEqual("utf-8", theDoc.inputEncoding)
         #theDoc.getXmlDcl(encoding:str="utf-8", standalone:bool=None)
         #theDoc.buildIdIndex()
@@ -501,7 +513,7 @@ class test_Document(unittest.TestCase):
 
 ###############################################################################
 #
-class test_Element(unittest.TestCase):
+class testElement(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -523,9 +535,10 @@ class test_Element(unittest.TestCase):
 
         cl = el5.cloneNode(deep=True)
         self.assertTrue(cl.isElement)
-        DBG.dumpNode(cl, msg="post-clione")
+        DBG.dumpNode(cl, msg="el5")
+        DBG.dumpNode(cl, msg="cl")
         self.assertTrue(cl.isEqualNode(el5))
-        self.assertFalse(cl.isSameNode(el8))
+        self.assertFalse(cl.isSameNode(el5))
 
         self.assertEqual(el5.compareDocumentPosition(el8), -1)
         self.assertEqual(el5.compareDocumentPosition(el5), 0)
@@ -561,11 +574,11 @@ class test_Element(unittest.TestCase):
         self.assertEqual(el5.getAttribute(an), av)
 
         DBG.dumpNode(el5, msg=f"Before deleting attr '{an}'.")
-        self.assertEqual(el5.removeAttribute(an), None)
+        self.assertIsNone(el5.removeAttribute(an))
         DBG.dumpNode(el5, msg="After (attr: %s)" % (repr(el5.attributes)))
         self.assertFalse(el5.hasAttribute(an))
 
-        self.assertEqual(el5.getAttribute(an), None)
+        self.assertIsNone(el5.getAttribute(an))
         el5.removeAttribute(an)  # No exception please.
 
         # Attributes / Node
@@ -574,24 +587,24 @@ class test_Element(unittest.TestCase):
         self.assertEqual(el5.getAttributeNode(an), anode)
         el5.removeAttributeNode(anode)
         self.assertFalse(el5.hasAttribute(an))
-        self.assertRaises(NOT_FOUND_ERR, el5.getAttributeNode, anode)
+        self.assertRaises(NotFoundError, el5.getAttributeNode, anode)
         import pudb; pudb.set_trace()
-        self.assertRaises(NOT_FOUND_ERR, el5.removeAttributeNode, anode)
+        self.assertRaises(NotFoundError, el5.removeAttributeNode, anode)
 
         # Attributes / NS
         el5.setAttributeNS(ns, an, av)
         self.assertEqual(el5.getAttributeNS(ns, an), av)
         el5.removeAttributeNS(ns, an)
         self.assertFalse(el5.hasAttributeNS(ns, an))
-        self.assertEqual(el5.getAttributeNS(ns, an), None)
-        self.assertRaises(NOT_FOUND_ERR, el5.removeAttributeNS, ns, an)
+        self.assertIsNone(el5.getAttributeNS(ns, an))
+        self.assertRaises(NotFoundError, el5.removeAttributeNS, ns, an)
 
         # Attributes / NodeNS
         el5.setAttributeNodeNS(ns, anode)
         self.assertEqual(el5.getAttributeNodeNS(ns, an), anode)
         el5.removeAttributeNode(anode)
         self.assertFalse(el5.hasAttributeNS(ns, an))
-        self.assertEqual(el5.getAttributeNodeNS(ns, an), None)
+        self.assertIsNone(el5.getAttributeNodeNS(ns, an))
 
         el5.setAttribute("att1", "val1")
         val2 = "Some longer -- maybe real! long, value."
@@ -622,7 +635,9 @@ class test_Element(unittest.TestCase):
         self.assertTrue(el5.childNodes[0].isText)
 
         el5.innerXML = "hello"
-        DBG.dumpNode(el5, msg=f"after innerXML set, len {len(el5)}")
+        DBG.dumpNode(el5, msg=f"after innerXML set {el5.outerXML}")
+        self.assertEqual(len(el5.childNodes), 1)
+        self.assertTrue(el5.childNodes[0].isTextNode)
         self.assertEqual(len(el5.childNodes[0].data), 5)
         self.assertEqual(el5.startTag, "<%s>" % (self.dc.p_name))
 
@@ -691,7 +706,7 @@ class test_Element(unittest.TestCase):
         el.checkNode()
         el.clear()
         self.assertEqual(len(el), 0)
-        self.assertRaises(HIERARCHY_REQUEST_ERR, el.insert, 1, "Just a string")
+        self.assertRaises(HierarchyRequestError, el.insert, 1, "Just a string")
         newb = self.n.doc.createComment("no comment.")
         el.insert(1, newb)
         self.assertEqual(len(el), 1)
@@ -702,7 +717,7 @@ class test_Element(unittest.TestCase):
 
 ###############################################################################
 #
-class test_Text(unittest.TestCase):
+class testText(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -739,7 +754,7 @@ class test_Text(unittest.TestCase):
 
 ###############################################################################
 #
-class test_CDATASection(unittest.TestCase):
+class testCDATASection(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -769,7 +784,7 @@ class test_CDATASection(unittest.TestCase):
 
 ###############################################################################
 #
-class test_ProcessingInstruction(unittest.TestCase):
+class testProcessingInstruction(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -810,7 +825,7 @@ class test_ProcessingInstruction(unittest.TestCase):
 
 ###############################################################################
 #
-class test_Comment(unittest.TestCase):
+class testComment(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -844,7 +859,8 @@ class test_Comment(unittest.TestCase):
 
 ###############################################################################
 #
-class test_EntityReference(unittest.TestCase):
+@unittest.skip
+class testEntityReference(unittest.TestCase):
     """TODO What else to support for test_EntityReference, if anything?
     """
     def setUp(self):
@@ -853,34 +869,16 @@ class test_EntityReference(unittest.TestCase):
         self.n = madeDocObj.n
 
     def tests(self):
-        sys.stderr.write("\n******* EntRef tests skipped *******\n")
-        return
         #er = self.n.doc.createEntityReference("bull", "\u2022")
         #el = self.n.docEl.childNodes[5]
         #el.appendChild(er)
         #self.assertTrue(er.isEntRef)
-
-
-###############################################################################
-#
-class test_Notation(unittest.TestCase):  # Meh
-    def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
-        self.n = madeDocObj.n
-
-    def tests(self):
-        sys.stderr.write("\n******* Notation tests skipped *******\n")
         return
-        #nn = self.n.doc.createNotation(
-        #    "nname", publicId="-//foo", systemId="http://example.com/png")
-        #el = self.n.docEl.childNodes[5]
-        #el.setAttribute("notn", nn)
 
 
 ###############################################################################
 #
-class test_Attr(unittest.TestCase):
+class testAttr(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -915,24 +913,23 @@ class test_Attr(unittest.TestCase):
         #el.attrToJson()
 
         if (0):
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.getChildIndex)
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.previousSibling)
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.nextSibling)
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.previous)
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.next)
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.firstChild)
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.lastChild)
+            self.assertRaises(HierarchyRequestError, anode3.getChildIndex)
+            self.assertRaises(HierarchyRequestError, anode3.previousSibling)
+            self.assertRaises(HierarchyRequestError, anode3.nextSibling)
+            self.assertRaises(HierarchyRequestError, anode3.previous)
+            self.assertRaises(HierarchyRequestError, anode3.next)
+            self.assertRaises(HierarchyRequestError, anode3.firstChild)
+            self.assertRaises(HierarchyRequestError, anode3.lastChild)
             newChild = self.n.doc.createElement("newb")
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.appendChild, newChild)
-            self.assertRaises(HIERARCHY_REQUEST_ERR, anode3.insertBefore, newChild, el)
+            self.assertRaises(HierarchyRequestError, anode3.appendChild, newChild)
+            self.assertRaises(HierarchyRequestError, anode3.insertBefore, newChild, el)
 
-        DBG.dumpNode(anode2, msg="anode2")
         anode2.checkNode()
 
 
 ###############################################################################
 #
-class test_NamedNodeMap(unittest.TestCase):
+class testNamedNodeMap(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K
@@ -940,17 +937,17 @@ class test_NamedNodeMap(unittest.TestCase):
 
     def tests(self):
         nnm = NamedNodeMap()
-        self.assertEqual(nnm.getNamedItem("class"), None)
+        self.assertIsNone(nnm.getNamedItem("class"))
 
-        nnm.setNamedItem("class")
+        nnm.setNamedItem("class", "classy")
         anAttr = nnm.getNamedItem("class")
-        self.assertTrue(isinstance(anAttr, Attr))
+        self.assertIsInstance(anAttr, Attr)
         self.assertEqual(anAttr.nodeName, "class")
         self.assertEqual(anAttr.value, "classy")
 
-        self.assertEqual(nnm.tostring(), "class=\"classy\"")
+        self.assertEqual(nnm.tostring().strip(), "class=\"classy\"")
         nnm.removeNamedItem("class")
-        self.assertRaises(KeyError, nnm.getNamedItem, "class")
+        self.assertIsNone(nnm.getNamedItem("class"))
         self.assertRaises(IndexError, nnm.item, 3)
         nnm.clear()
         self.assertEqual(nnm.tostring(), "")
@@ -958,7 +955,7 @@ class test_NamedNodeMap(unittest.TestCase):
 
 ###############################################################################
 #
-class test_Generators(unittest.TestCase):
+class testGenerators(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=K)
         self.dc = K

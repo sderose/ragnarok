@@ -565,11 +565,9 @@ class XmlStrings:
 
     @staticmethod
     def getLocalPart(s:str) -> str:
-        #if (not s): return ""
-        #return re.sub(r'^.*:', '', s)
-        return s.partition(":")[2] or s  # This is 10x faster.
+        return s.partition(":")[2] or s  # This is faster
 
     @staticmethod
     def getPrefixPart(s:str) -> str:
-        #if (not s): return ""
-        return s.partition(":")[0] or ""
+        p, _, l = s.partition(":")
+        return p if l else ""

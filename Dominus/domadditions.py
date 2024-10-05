@@ -103,7 +103,7 @@ class EtAdditions:
         return self.nodeName  # localName?
 
     def matches(self):
-        raise NotImplementedError("Element.matches")
+        raise NotSupportedError("Element.matches")
 
     @property
     def tail(self):
@@ -135,17 +135,17 @@ class whatwgAdditions:
     def querySelector(self):
         """Find first match to CSS selector
         """
-        raise NotImplementedError("Element.querySelector")
+        raise NotSupportedError("Element.querySelector")
 
     def querySelectorAll(self):
         """Find all matches to CSS selector
         """
-        raise NotImplementedError("Element.querySelectorAll")
+        raise NotSupportedError("Element.querySelectorAll")
 
     def matches(self:'Node', selector:str) -> bool:
         """Test whether the node is matched bt the selector.
         """
-        raise NotImplementedError("Element.matches")
+        raise NotSupportedError("Element.matches")
 
     def children(self:'Node') -> List:
         """Returns only elements.

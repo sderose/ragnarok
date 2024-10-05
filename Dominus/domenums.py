@@ -69,6 +69,19 @@ class NodeType(Enum):
 
 ###############################################################################
 #
+class RelPosition(Enum):
+    """Places relative to element (mainly for insertAdjacentXML).
+        "This is not the end. It is not even the beginning of the end.
+        But it is, perhaps, the end of the beginning."
+    """
+    beforebegin = "beforebegin"
+    afterbegin = "afterbegin"
+    beforeend = "beforeend"
+    afterend = "afterend"
+
+
+###############################################################################
+#
 class UNormTx(Enum):
     """Whether/how various tokens should be Unicode-normalized.
     """

@@ -32,6 +32,9 @@ to type:
     if (x.nodeType == Node.PROCESSING_INSTRUCTION_NODE)...
     if (x.isPI)...
 
+* BaseDom uses many conventions from the widespread whatwg spec,
+such as extra methods, exceptions in camelCase instead of all aps, etc.
+
 * Conceptually, Elements are essentially lists of children --
 it's just a tree after all (yes, attributed trees are a thing in graph theory).
 Document, NodeList, DocumentFragment, and such are minor variations on that;
@@ -69,8 +72,12 @@ the int can count from either end, and you can append by giving any int
 larger than the current max (or with append(), or extend(), or appendChild()
 for backward compatibility).
 
-* BaseDom round out obvious symmetries -- adding insertAfter for insertBefore,
- and prependChild for appendChild.
+* BaseDom round out obvious symmetries
+** adding insertAfter for insertBefore
+** prependChild for appendChild
+** raise NotSupportedError when appropriate instead of quietly returning None
+(for example methods minidom defines on Node but doesn't support)
+** innerXML/outerXML, setters/getters on all feasible classes.
 
 * Python provides very nice slicing, which minidom does not support.
 BaseDom lets you use all the normal list slicing notations.

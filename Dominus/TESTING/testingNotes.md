@@ -7,7 +7,9 @@ Generate a ton of picky test cases for an XML parser.
 * Basic tests still needed (?)
 ** eachNode
 
-* Much more on namespaces
+* Make sure NodeList can contain nodes that are connected elsewhere?
+
+* Much more on namespaces, esp. inheritance and it changing when you move nodes.
 
 * lookupNamespaceURI
 ** For DocumentFragment nodes: It will check the child elements of the fragment.

@@ -13,6 +13,8 @@ descr = """
 Compare the dir() items in minidom vs. basedom.
 
 [unfinished; rewrite?]
+
+See also makeDefChart.py.
 """
 whLib = minidom
 theClasses = [

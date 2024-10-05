@@ -8,14 +8,19 @@ pluggable replacement for xml.dom.mindom.
 It has pretty extensive unittest coverage.
 
 It is about 40% faster than minidom on my testing (which emphasizes large
-and complex document structures), though individual methods vary.
+document structures), though individual methods vary.
 
 ==Pythonic features==
 
-* Nodes are really a subclass of Python list, so you can apply nearly all
-the list operations, including slice-assignment (which is much faster than
-iterative insertion) and even reverse() and sort().
-Does not have __mul__ and __rmul__, though. Note: A Node with no children
+* Nodes look/act a lot like a list of their children (by my count
+over half their methods and properties are easily covered by Python list ones
+(append vs. appendChild, insertBefore vs. insert, cloneNode vs. copy,
+len vs. length, etc.). So in BaseDom Node is a subclass of list, with
+nearly all the normal operations doing the normal things, including
+slice-assignment (which is much faster than iterative insertion).
+Does not have __mul__ and __rmul__, though.
+
+Note: A Node with no children
 is falsish, just like any empty Python list; if you want to make sure
 you haven't got a Node, use "if myNode is None", not just "if myNode".
 
@@ -23,29 +28,6 @@ you haven't got a Node, use "if myNode is None", not just "if myNode".
 
 * Node types are a Python Enum named NodeTypes (with the same names and values
 as in DOM Node). Methods accept either NodeTypes instances or ints.
-
-* Python "contains" and "in" work for testing whether one node is a
-child of another. This means they are UNLIKE how they work for regular lists.
-If you check whether list L2 is inside list L1 in Python, L2 is cast to a
-boolean value (True if not empty, False if empty) -- by that rule a Node that
-contained one empty node and one non-empty one, would seem to contain any other
-node you checked (even nodes from other documents). That's pretty useless in
-this context, so "contains" and "in" are overridden for Node and its
-subclasses, to check whether the actual node is an actual child.
-
-* This raises an issue with what the boolean values of nodes should be.
-An empty list in Python is conventionally false; but an empty Element in DOM
-can still have all kinds of information via attributes, so probably should be
-True -- it's not "empty" in the same way as a bare list of dict.
-Similarly, Attr nodes implement bool() as the bool() of their *value*, so
-testing "if myNode.getAttribute("x")" tells you if the attribute exists and
-is non-empty, which sure seems Pythonic to me.
-
-* On the other hand, DOM has a "contains" method (not an infix operator),
-and "node1.contains(node2)" checks whether node2 is a *descendant*, not
-just a child. That method is also available, and does what DOM days. However,
-to avoid confusion the author recommends you use the synonymous
-"node1.hasDescendant(node2)" instead.
 
 * [] is supported so you can just walk down through trees in Python style:
     myDoc[0][27][4]
@@ -90,7 +72,7 @@ but also prependChild().
 * You can generate a SAX stream from any subtree, either as a generator
 of (eventType, args) tuples, or via event-type callbacks.
 
-* Methods that DOM defines on Node, but that do not apply to certain
+* Methods that DOM defines on Node but that do not apply to certain
 subclasses (such as manipulating child nodes on non-Elements) are consistently
 overridden to raise an Exception. However, queries that are inapplicable
 (such as hasAttributes on a non-Element) simply return False.
@@ -102,9 +84,6 @@ hasSubElements, hasTextNodes. leftmost and rightmost go all the way down
 either subtree edge.
 
 * getChildIndex() tells you your place among siblings.
-
-* elementChildN() gets you the n-th *element* child,
-ignoring text, pi, comment, etc.
 
 * CSS selectors are largely supported, which is also much like JQuery "find".
 
@@ -125,10 +104,10 @@ ask for the value of attribute A as set on the nearest container 9if any).
 * getAttribute() takes an optional "default" argument, which you get back
 if the attribute does not exists.
 
-* You should never need the "NS" calls like "addAttributeNS", etc. (though they
+* You might never need the "NS" calls like "addAttributeNS", etc. (though they
 are available for backward-compatibility).
-Namespace is just an optional attribute on the regular calls; if you don't
-provide it, or you set it to "" or "*" or "#any" (for compatibility with
+Namespace becomes just an optional attribute on the regular calls; if you don't
+provide it, or you set it to "##any" (for compatibility with
 various other implementations), any namespace is accepted.
 
 * textContent recursively gathers the text of Element,
@@ -171,33 +150,20 @@ from a CSV file. Many lose child order or don't support
 mixed content, PIs, comments, etc.
 
 
-==Related stuff==
-
-My `Dominus` package on, which adds the ability
-to load, save, and edit persistent DOM structures on disk.
-
-For many more handy functions such as a table-management API, XPointer
-support, Trojan milestone support, and so on, see my other utilities.
-
-
 =To do=
 
 Rename? Maybe SpamNX?
 (like spam, spam, baked beans, 'n spam, it ain't got much spam in it)
 
 
-==issues==
-
-* Pythonicity
-** __contains__ vs. contains
-** removeNode vs. removeSelf
-
 * Speed
-** compareDocumentPosition -- can we do better by not building all the way to
+** compareDocumentPosition -- faster by not building all the way to
 root, but co-recursing up both sides, only until we hit a common ancestor, then
 back down?
 ** Any more places to avoid getChildIndex()? Already added int position for
 insertBefore.
+** Fallback to maintaining child-number when fanout gets very high?
+*
 
 * Structure and organization
 ** Segregate namespace into subclass?
@@ -206,24 +172,16 @@ insertBefore.
 Protocols?
 ** Could NamedNodeMap just go away?
 
-* Semantic questions
-** Should Node be constructable?
-** Should cloneNode copy userData and/or ownerDocument?
-** Should removeAttribute___ unlink from ownerDoc/ownerEl?
-** Effect of changing xmlns: attributes.
-
 * Added functions?
 ** Add moveNode(s) operation? Meh
 ** Best way to incorporate case-ignorance.
+** findDiffs(self, other)?
+
+* Add cnum to Nodes? Update becomes O(lg2(fanout)). And only enable it when
+insert/append takes it above some threshold.
 
 * Would this bit from minidom be useful?
-    # A Node is its own context manager, to ensure that an unlink() call occurs.
-    # This is similar to how a file object works.
-    def __enter__(self):
-        return self
 
-    def __exit__(self, et, ev, tb):
-        self.unlink()
 ==Testing to beef up==
 
 (see also testingNotes.md)
@@ -235,13 +193,12 @@ Protocols?
 
 ==DOM compatibility==
 
-* Node: Add getInterface
+* Element
+**Add attributes (move from Node) removeAttributeNodeNS, schemaType
+** setIdAttribute, setIdAttributeNS, setIdAttributeNode
 
-* Element: Add attributes (move from Node) removeAttributeNodeNS,
-  schemaType, setIdAttribute, setIdAttributeNS, setIdAttributeNode
-
-* Document: abort actualEncoding async_ CreateElementNS,
-  encoding, errorHandler, getELementBy(Id/TagName/TagNameNS), implementation
+* Document: ctualEncoding async_ CreateElementNS,
+  encoding, errorHandler,
   importNode, load, loadXML, renameNode, saveXML, standalone, strictErrorChecking,
   version
 * Keep anything for Ent, EntRef, Notation?
@@ -263,27 +220,18 @@ Protocols?
 
 ==Other==
 
-* Move DOMImplementation to sep file?
+* Move DOMImplementation, Node, Document, CharacterData to sep files?
 
 * Segregate NS stuff?
 
-* Segregate extensions (maybe do a core impl, then subclass to extend.
-Except that that poses the naming problem -- "will the real Node please stand up?"
-
-* Add xmlns:#ANY/* like Norm's Balisage '24 paper
-
-* absolutize xpointer (lose id) and v/v
+* Segregate extensions
 
 * Add from domextensions
     ** innerText
     ** getLeastCommonAncestor
-    ** Comparison operators for DOCUMENT ORDER
     ** get fqgi
     ** compound attributes?
     ** generateSaxEvents
-    ** shortcuts to create and append
-        addEl(name, attrs:Dict, children:List[Union[str,Node]])
-        addText(txt)
 
 * Support 'canonical' option for tostring().
 
@@ -298,24 +246,7 @@ __bool__ to return True. Maybe that should be optional, or just not there?
 
 Namespace support is incomplete
 * Implement the ...NS() methods (at present they just call the non-NS versions).
-* Support a #all/#any/* argument.
 * Just make NS an optional arg to the non-NS versions (if no problem)
-
-`cloneNode()` copies any `userData` merely via assignment, not a deep copy,
-even when `deep=True` is set. You can of course copy and reset
-it afterwards if desired.
-
-
-=Related commands=
-
-`DOMBuilder` -- the glue that turns parser events into a DOM.
-
-`DomExtensions.py` -- sits on top and provides lots of added methods.
-
-`DOMTableTools.py` -- extensions specific to table structures.
-
-`Dominus.py` -- alternative that keeps everything on
-disk to allow for very large documents.
 
 
 =References=

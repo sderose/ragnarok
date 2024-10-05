@@ -4,7 +4,8 @@
 #
 import unittest
 import basedom
-from basedom import HIERARCHY_REQUEST_ERR, Document, Element, Attr
+from basedom import Document, Element, Attr
+from domexceptions import HierarchyRequestError
 
 class TestAttr(unittest.TestCase):
 
@@ -55,7 +56,7 @@ class TestAttr(unittest.TestCase):
 
 
     def test_self_obj_getChildIndex(self):
-        self.assertRaises(HIERARCHY_REQUEST_ERR, self.obj.getChildIndex())
+        self.assertRaises(HierarchyRequestError, self.obj.getChildIndex())
         self.assertRaises(Exception, self.obj.getChildIndex(True, False, False, False))
         self.assertRaises(Exception, self.obj.getChildIndex('test_string', 3.14, False, False))
         self.assertRaises(Exception, self.obj.getChildIndex([1, 2, 3], False, 42, False))

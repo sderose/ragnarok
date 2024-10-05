@@ -5,7 +5,7 @@ import unittest
 import unicodedata
 
 #from basedom import
-from xmlstrings import XmlStrings
+from xmlstrings import XmlStrings as XStr
 
 falsePosNameStart = []
 falseNegNameStart = []
@@ -99,7 +99,7 @@ class fromXmlRec:
         """Undefined chars return False.
         """
         cp = ord(c)
-        if isNameStart(cp): return True
+        if fromXmlRec.isNameStart(cp): return True
         for rg in fromXmlRec.addlNameRanges:
             fr = rg[0]; to = rg[1]
             if (cp >= fr and cp <= to): return True
@@ -170,11 +170,9 @@ class TestXMLNameChars(unittest.TestCase):
     #lastChar = sys.maxunicode + 1
     lastChar = 0x10100  # good enough for now
 
-    def testClassVsRule(self):
-        for c in cls.namestart_chars:
-            self.assertTrue(isNameStartByCategory(c))
-        for c in cls.name_chars:
-            self.assertTrue(isNameCharByCategory(c))
+    def setUp(self):
+        self.allStarts = XStr.allNameStartChars()
+        self.name_chars = XStr.allNameChars()
 
     def test_xml_namestart_chars(self):
         nonUnicode = 0
@@ -187,12 +185,12 @@ class TestXMLNameChars(unittest.TestCase):
                 continue
 
             with self.subTest(char=char):
-                if char in self.namestart_chars:
-                    self.assertTrue(XmlStrings.isXmlName(char),
+                if char in self.allStarts:
+                    self.assertTrue(XStr.isXmlName(char),
                         f"Character U+{c:04X} ({uname}) should be a name start")
                     falseNegNameStart.append(ord(char))
                 else:
-                    self.assertFalse(XmlStrings.isXmlName(char),
+                    self.assertFalse(XStr.isXmlName(char),
                         f"Character U+{c:04X} ({uname}) should not be a name start")
                     falsePosNameStart.append(ord(char))
         sys.stderr.write(f"Non, Unicode chars skipped: {nonUnicode}.")
@@ -208,29 +206,29 @@ class TestXMLNameChars(unittest.TestCase):
 
             with self.subTest(char=char):
                 if char in self.name_chars:
-                    self.assertTrue(XmlStrings.isXmlName('a' + char),
+                    self.assertTrue(XStr.isXmlName('a' + char),
                         f"Character U+{c:04X} ({uname}) should be a name character")
                     falseNegName.append(ord(char))
                 else:
-                    self.assertFalse(XmlStrings.isXmlName('a' + char),
+                    self.assertFalse(XStr.isXmlName('a' + char),
                         f"Character U+{c:04X} ({uname}) should not be a name character")
                     falsePosName.append(ord(char))
         sys.stderr.write(f"Non, Unicode chars skipped: {nonUnicode}.")
 
 class TestCharReferences(unittest.TestCase):
     def test_valid_char_reference(self):
-        self.assertEqual(XmlStrings.unescapeXml('&0x10FFFF;'), '\U0010FFFF')
-        self.assertEqual(XmlStrings.unescapeXml('&#1114111;'), '\U0010FFFF')
+        self.assertEqual(XStr.unescapeXml('&0x10FFFF;'), '\U0010FFFF')
+        self.assertEqual(XStr.unescapeXml('&#1114111;'), '\U0010FFFF')
 
     def test_invalid_char_reference(self):
         with self.assertRaises(ValueError):
-            XmlStrings.unescapeXml('&0x110000;')
+            XStr.unescapeXml('&0x110000;')
 
     def test_surrogate_char_reference(self):
         with self.assertRaises(ValueError):
-            XmlStrings.unescapeXml('&0xD800;')
+            XStr.unescapeXml('&0xD800;')
         with self.assertRaises(ValueError):
-            XmlStrings.unescapeXml('&0xDFFF;')
+            XStr.unescapeXml('&0xDFFF;')
 
 class TestReport(unittest.TestCase):
     def test_display(self):
