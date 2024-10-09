@@ -59,7 +59,7 @@ class AttrDefault:
     rawExpr = r"""([-.:\w]*)@([-.:\w]+)(:\w+)?(=(\w+|"[^"]*"|'[^']*'))?"""
 
     def __init__(self, raw:str):
-        mat = re.match(self.rawExpr, raw, re.U)
+        mat = re.match(self.rawExpr, raw, flags=re.U)
         assert mat, "Cannot parse attribute default spec '%s'." % (raw)
 
         self.ename = mat.group(1)

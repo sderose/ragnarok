@@ -106,7 +106,7 @@ that takes a Node and returns True or False.
 Pass the callable inside the brackets (it can even be a lambda like you'd do for
 regex subs or sorts).
 
-* I can't bring myself to use ElementTree because of one thing: it's concept
+* I can't bring myself to use ElementTree because of one thing: its concept
 of text just seems wrong to me.
 Text is put into 2 properties of Elements (well, they do call
 it "Element"Tree, after all). Most obviously, that means that a paragraph

@@ -5,10 +5,11 @@
 import re
 from enum import Enum
 from datetime import datetime  #, date, time
+from collections import defaultdict
 from typing import List, Set, Iterable
 
 from xmlstrings import XmlStrings as XStr
-from domenums import NodeType, UNormTx, CaseTx
+from domenums import NodeType  #, UNormTx, CaseTx
 from basedom import Node
 
 NmToken = str
@@ -151,7 +152,7 @@ IBM’s Websphere Development Studio Client (WDSC) has a utility that converts D
       types = r"CDATA|ID|IDREF|IDREFS|ENTITY|ENTITIES|NMTOKEN|NMTOKENS"
       dfts = r"#REQUIRED|#IMPLIED|#FIXED"  # Plus maybe more
       qLit =  r"('[^']*'|"[^"]*")"
-      r"<!ATTLIST (\\w+) (\\w+) ({type}|NOTATION|\\([^\\)]+\\)) ({dft}) ({qLit})>"
+      f"<!ATTLIST (\\w+) (\\w+) ({type}|NOTATION|\\([^\\)]+\\)) ({dft}) ({qLit})>"
 """
 
 
@@ -264,7 +265,7 @@ class AttrDefault(Enum):
 class EntityType(Enum):
     GENERAL = 1
     PARAMETER = 2
-    NOTATION = 4
+    NOTATION = 4  # Treat as special entity, or not?
     NAMESET = 8
     CHAR = 16
 
@@ -304,6 +305,8 @@ class ElementDef(Def):
         self.allowAnywhere:Set = None
         self.allowNowhere:Set = None
 
+    def toprettyxml(self):
+        return "<!ELEMEMT %-12s %s>\n" % (self.name, self.model)
 
 class ModelType(Enum):
     EMPTY = 0
@@ -326,8 +329,10 @@ class ComplexType:
 
 
 class AttributeDef(Def):
-    def __init__(self, name:str, attrType:AttrType, default:str):
-        super(AttributeDef, self).__init__(name)
+    def __init__(self, ename:str, aname:str, attrType:AttrType, default:str):
+        super(AttributeDef, self).__init__(aname)
+        self.ename = ename
+        self.aname = aname
         self.attrType = attrType
         self.caseTx = None
         self.wsNorm = None
@@ -335,12 +340,17 @@ class AttributeDef(Def):
         self.enumList = None
         self.default = default
 
+    def toprettyxml(self):
+        dclVal = self.enumList if self.enumList else self.attrType
+        return "<!ATTLIST %-12s %12s %12s %s>\n" % (
+            self.ename, self.aname, dclVal, self.default)
+
 
 class EntityDef(Def):
     """Any of several subtypes.
     """
     def __init__(self, name:str, etype:EntityType,
-        literal:str=None, publicID:str=None, systemID:str=None,
+        literal:str=None, publicId:str=None, systemId:str=None,
         parseType:EntityParseType=EntityParseType.PCDATA,
         notation:str=None,
         members:Iterable=None
@@ -348,12 +358,47 @@ class EntityDef(Def):
         super(EntityDef, self).__init__(name)
         self.etype = etype
         self.literal = literal
-        self.publicID = publicID
-        self.systemID = systemID
+        self.publicId = publicId
+        self.systemId = systemId
         self.localPath = None
         self.parseType = parseType
         self.notation = notation
         self.members = members
+
+    def toprettyxml(self):
+        if self.publicId:
+            src = f'PUBLIC "{self.publicId}" "{self.systemId}"'
+        elif self.systemId:
+            src = f'SYSTEM "{self.systemId}"'
+        else:
+            src = f'"{self.literal}"'
+
+        pct = "% " if self.etype == EntityType.PARAMETER else ""
+        return "<!ENTITY %s%-12s %s>\n" % (
+            pct, self.name, src)
+
+
+###############################################################################
+#
+class Notation(Def):
+    """This is for data notation/format applicable to entities. They are normally
+    embedded by declaring an external file or object as an ENTITY, and then
+    mentioning that entity name (not actually referencing the entity) as
+    the value of an attribute that was declared as being of type ENTITY.
+    """
+    def __init__(self, name:str, systemId:str=None, publicId:str=None):
+        super().__init__(name=name)
+        self.nodeType = Node.NOTATION_NODE
+        self.systemId = systemId
+        self.publicId = publicId
+
+    def toprettyxml(self):
+        if self.publicId:
+            src = f'PUBLIC "{self.publicId}" "{self.systemId}"'
+        elif self.systemId:
+            src = f'SYSTEM "{self.systemId}"'
+
+        return "<!NOTATION %-12s %s>\n" % (self.name, src)
 
 
 ###############################################################################
@@ -362,9 +407,9 @@ class DocumentType(Node):
     """Just a stub for the moment.
     See also my Schemas.py, and https://docs.python.org/3.8/library/xml.dom.html
     """
-    def __init__(self, ownerDocument:str, qualifiedName:str, doctypeString:str='',
+    def __init__(self, qualifiedName:str, doctypeString:str='',
         publicId:str='', systemId:str=''):
-        super().__init__(ownerDocument=ownerDocument, nodeName="#doctype")
+        super().__init__(nodeName="#doctype")
         self.nodeType = NodeType.DOCUMENT_TYPE_NODE
 
         self.name = self.nodeName = qualifiedName  # Should come from the DOCTYPE
@@ -499,14 +544,12 @@ class DocumentType(Node):
     def cloneNode(self, deep:bool=False):
         newNode = DocumentType(
             qualifiedName=self.name,
-            ownerDocument=self.ownerDocument,
             doctypeString=self.doctypeString,
             publicId = self.publicId,
             systemId = self.systemId
         )
         if (deep): newNode.elementDefs = self.elementDefs.deepcopy()
         else: newNode.elementDefs = self.elementDefs.copy()
-        if (self.userData): newNode.userData = self.userData
         return newNode
 
     def isEqualNode(self, n2) -> bool:  # Doctype
@@ -523,20 +566,40 @@ class DocumentType(Node):
     ####### EXTENSIONS
 
     @property
-    def outerXML(self) -> str:  # Notation
+    def outerXML(self) -> str:  # DocumentType
         """TODO: Generate entity and notation dcls?
         """
-        buf = ('<!DOCTYPE %s  PUBLIC "%s" "%s" [ %s ]>' + "\n") % (
-            self.nodeName, self.publicId, self.systemId, "[]")
+        return self.toprettyxml()
+
+    def tostring(self) -> str:  # DocumentType
+        return self.toprettyxml
+
+    def toprettyxml(self) -> str:   # DocumentType
+        buf = ('<!DOCTYPE %s  PUBLIC "%s" "%s" [\n') % (
+            self.nodeName, self.publicId, self.systemId)
+
+        for pent in sorted(self.pentityDefs):
+            buf += pent.toprettyxml()
+
+        for notn in sorted(self.notationDefs):
+            buf += notn.toprettyxml()
+
+        for ent in sorted(self.entityDefs):
+            buf += ent.toprettyxml()
+
+        attrsDone = defaultdict(int)
+        for elem in sorted(self.elementDefs):
+            buf += elem.toprettyxml()
+            if elem.name in self.attributeDefs:
+                buf += self.attributeDefs[elem.name].toprettyxml()
+                attrsDone[elem.name] = True
+
+        for attr in self.attributeDefs:
+            if attr.name in attrsDone: continue
+            buf += self.attributeDefs[attr.name].toprettyxml()
+
+        buf += "]>\n"
         return buf
-
-    @property
-    def innerXML(self) -> str:  # Notation
-        return self.data
-
-    def tostring(self) -> str:  # Notation
-        return self.outerXML
-
 
 
 ###########################################################################
@@ -546,19 +609,20 @@ class DocumentType(Node):
 #
 class DTDParse:
     name = r"[\w][-.\w]*"
-    names = r"{name}(  {name})*"
+    names = f"{name}(  {name})*"
     qlit = r"\"[^\"]*\"|\'[^\']*\'"
     rep = r"""([*+?]|\{\d*,\d*\})"""
     ctref = r"""%\w+;"""
     baseInt   = r"""(0x[\da-f]+|\d+)"""
+    modelToken = f"{name}[*?+]?"
 
-    plist = r"""  {modelToken}(  [|,  {modelToken}  """  # Only works if next thing is different
+    plist = f"""  {modelToken}(  [|,  {modelToken}  """  # Only works if next thing is different
     source = f"""PUBLIC  (?P<pub>{qlit})  (?P<sys>{qlit})|SYSTEM  (?P<sys>{qlit})|(?P<lit>{qlit})"""
     subset = r"""\[ [^]* ]"""
     atyp = "|".join(list(AttrType.__members__.keys()))
     adft = "|".join(list(AttrDefault.__members__.keys())) + f"({qlit})?"
     ndata = f"""NDATA  ({name})"""
-    modelToken = r"""(#PCDATA)?|{name}{rep}?|{ctref}{rep}?"""
+    modelToken = f"""(#PCDATA)?|{name}{rep}?|{ctref}{rep}?"""
     model = f"""{plist}|EMPTY|ANY|#PCDATA"""
 
     docTypeExpr = f"""<!DOCTYPE  ({name})  ({source})  """

@@ -46,8 +46,8 @@ class TestDOMNode(unittest.TestCase):
         self.n.docEl.appendChild(child1)
         self.n.docEl.appendChild(child2)
 
-        DBG.dumpNodeData(child1, msg="child1")
-        DBG.dumpNodeData(child2, msg="child2")
+        #DBG.dumpNodeData(child1, msg="child1")
+        #DBG.dumpNodeData(child2, msg="child2")
         self.assertEqual(child1.previousSibling, None)
         self.assertIs(child1.nextSibling, child2)
         self.assertIs(child2.previousSibling, child1)

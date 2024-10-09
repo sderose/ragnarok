@@ -66,6 +66,18 @@ class NodeType(Enum):
         except ValueError:
             return "[UNKNOWN_NODETYPE]"
 
+class RWords(str, Enum):
+    """Reserved words for XML (and additional contexts?)
+    Including superclass str lets us use them in string contexts.
+    """
+    NS_PREFIX   = "xmlns"
+
+    NN_TEXT     = "#text"
+    NN_PI       = "#pi"
+    NN_COMMENT  = "#comment"
+    NN_CDATA    = "#cdata"
+    NN_DOCTYPE  = "#doctype"
+
 
 ###############################################################################
 #

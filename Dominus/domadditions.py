@@ -11,7 +11,7 @@ import re
 from typing import List, Iterable, Union
 import logging
 
-from domexceptions import INVALID_CHARACTER_ERR
+from domexceptions import InvalidCharacterError, NotSupportedError
 from xmlstrings import XmlStrings as XStr
 from domenums import UNormTx, CaseTx, NameTx
 lg = logging.getLogger("BaseDOM")
@@ -29,7 +29,7 @@ __metadata__ = {
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.7",
     "created"      : "2016-02-06",
-    "modified"     : "2024-06-28",
+    "modified"     : "2024-10-08",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
@@ -221,16 +221,16 @@ class DOMTokenList(set):
         # Support varying token rules WhatWG, HTML4, XML NAME, and Python.
         if self.rules == NameTx.XML:
             if  not XStr.isXmlName(key):
-                raise INVALID_CHARACTER_ERR("Key is not an XML NAME.")
+                raise InvalidCharacterError("Key is not an XML NAME.")
         elif self.rules == NameTx.HTML:
             if  not re.search(r"\s", key):
-                raise INVALID_CHARACTER_ERR("Key is not an HTML NAME.")
+                raise InvalidCharacterError("Key is not an HTML NAME.")
         elif self.rules == NameTx.WHATWG:
             if  not re.search(r"\s", key):
-                raise INVALID_CHARACTER_ERR("Key is not a WHATWG NAME.")
+                raise InvalidCharacterError("Key is not a WHATWG NAME.")
         elif self.rules == NameTx.PYTHON:
             if  not key.isidentifier():
-                raise INVALID_CHARACTER_ERR("Key is not a Python NAME.")
+                raise InvalidCharacterError("Key is not a Python NAME.")
 
         if self.unorm: key = UNormTx.normalize(key, self.unorm)
         if self.caseTx == CaseTx.FOLD: key = key.casefold()
@@ -293,6 +293,7 @@ class OtherAdditions:
     """
 
     ### Whence?
+    ### TODO: Not element specifically, but support sel by type
 
     @property
     def nextElementSibling(self):

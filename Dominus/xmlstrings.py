@@ -150,14 +150,14 @@ QName does not allow for "##any", "#text", or other reserved names.
 
 `basedom.py` -- a pure Python DOM++ implementation that uses this.
 
-`DomExtension.py` -- prior home of this package.
+`domextensions.py` -- prior home of this package.
 
 `domtabletools.py` -- DOM additions specifically for tables.
 
 `Dominus.py` -- a disk-resident DOM implementation that can handle absurdly
 large documents (in progress).
 
-`XmlOutput.pm` -- an easy way to produce WF XML output. Provides methods
+`xmloutput.pm` -- an easy way to produce WF XML output. Provides methods
 for escaping data correctly for each relevant context; knows about character
 references, namespaces, and the open-element context; has useful methods for
 inferring open and close tags to keep things in sync.
@@ -396,7 +396,7 @@ class XmlStrings:
         """Check whether the token is a number. This turns off re.Unicode,
         lest we get all the non-Arabic digits (category [Nd]).
         """
-        return bool(re.match(r"\d+$", s, re.ASCII))
+        return bool(re.match(r"\d+$", s, flags=re.ASCII))
 
     @staticmethod
     def escapeAttribute(s:str, quoteChar:str='"') -> str:

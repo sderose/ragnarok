@@ -60,8 +60,27 @@ to avoid confusion the author recommends you use the synonymous
     def __exit__(self, et, ev, tb):
         self.unlink()
 
-* Whether/how to support EntityRefs -- support transclusion? Retention
-of physical structure?
+* Whether/how to support EntityRefs.
+They can be useful b/c:
+** Transclusion could unify them (esp. external/system entities) with linking;
+then they should be able to show up in many places.
+** Sometimes you'd like to retain the physical structure, such as having
+each chapter in a separate entity, or even which characters were references.
+
+One way to do this is to tweak a parser to issue entity start/end events
+with the name (many parsers hand back extra (non-normalized) text events for
+this anyway). Then dombuilder could insert an EntRef node, with at least the
+name, and then a subtree constructed under it. However, that makes the tree
+topology not what you'd expect, so lots of operation would be much more complicated.
+
+Another way is to annotate nodes created within an entity with that entity.
+If we assume that nodes do not start in one entity and end in another (certainly
+seems like good practice), then the annotation is only needed on the topmost
+node(s) of each entity, perhaps with something helpful to distinguish the
+first and/or last such.
+
+For now, I'm ignoring EntRef nodes entirely, and things like innerXML,
+outerXML, and insertAdjacentXML normalize.
 
 * should `cloneNode()` copy `userData`?
 

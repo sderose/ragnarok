@@ -13,6 +13,7 @@ from typing import IO, Union
 import logging
 
 from xml.parsers import expat
+from domenums import RWords
 
 lg = logging.getLogger("dombuilder")
 #logging.basicConfig(level=logging.INFO)
@@ -214,7 +215,13 @@ class DomBuilder():
         el = self.domDoc.createElement(name)
         #el.startLoc = self.theParser.CurrentByteIndex
         if (attributes):
+            nsp = RWords.NS_PREFIX+":"
             for n, v in attributes.items():
+                if (n.startswith(nsp)):
+                    if el.declaredNS is None: el.declaredNS = {}
+                    lName = n[len(nsp):]
+                    el.declaredNS[lName] = v
+                    continue
                 el.setAttribute(n, v)
                 # TODO factor out indexing
                 if ("*@"+n in self.IdIndex or el.nodeName+"@"+n in self.IdIndex):

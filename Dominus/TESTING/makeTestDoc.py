@@ -61,13 +61,19 @@ class DBG:
         else:
             ctypes = []
 
+        if (node.attributes):
+            attrs = " ".join([f"{k}=\"{v}\"" for k, v in node.attributes.items()])
+        else:
+            attrs = ""
+
         lg.warning("\n".join([
             "  nodeType     %s (%s)"
                 % (node.nodeType, node.nodeType.value),
-            "  nodeName     '%s' (prefix '%s', local '%s')"
+            "  nodeName     %s (prefix %s, local %s)"
                 % (node.nodeName, node.prefix, node.localName),
             "  index        %d of %d (parent type %s)" % (cnum, cof, pname),
-            "  l/r sibs     '%s', '%s'" % (lname, rname),
+            "  l/r sibs     %s, %s" % (lname, rname),
+            "  attributes   { %s }" % (attrs),
             "  children     [ %s ]" % (", ".join(ctypes)),
             "  path         %s" % (node.getNodePath())
         ]))
