@@ -121,3 +121,20 @@ Current Exception census:
    1  raise NamespaceError
    1  raise DataError
    1  raise AttributeError
+
+* Should useNodePath count from the node it's invoked on? Or maybe it should
+only be on Document anyway?
+
+* Should things test for bad names?
+    has/get/set/removeAttribute
+    create Element / Attr / Document / PI target
+    ID methods???
+
+* Acronym case, attr vs attribute
+
+* Should the whatwg CharacterData ...data calls return the result?
+How to they count offset/len? Range errors? Negatives?
+
+* Sync forEachSaxEvent with lxml.sax.saxify
+
+*

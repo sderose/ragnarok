@@ -72,7 +72,7 @@ class JsonX(list):
 
     @property
     def nodeType(self):
-        if (self.nodeName.startswith("#")):
+        if self.nodeName.startswith("#"):
             return reservedWords[self.nodeName]
         return Node.ELEMENT_NODE
 
@@ -84,7 +84,7 @@ class JsonX(list):
         """Want elements like
             [{"#name":para, "class":"foo"}, [...], "txt"]
         """
-        if (not isinstance(jroot, list)):
+        if not isinstance(jroot, list):
             assert isinstance(jroot, (str, int, float, bool))
             return
 
@@ -92,7 +92,7 @@ class JsonX(list):
         assert isinstance(jroot[0], dict)
         nam = jroot.nodeName
         assert XStr.isXmlName(nam) or reservedWords[nam]
-        if (len(jroot) > 1):
+        if len(jroot) > 1:
             for ch in jroot[1:]: self.check_jsonx(ch)
 
     def jsonDom(self, jroot):
@@ -116,32 +116,32 @@ class JsonX(list):
 
     def jsonSax_R(self, jroot:Any):
         nn = jroot.nodeName()
-        if (not isinstance(jroot, list)):
+        if not isinstance(jroot, list):
             self.tryEvent(SaxEvents.CHAR, str(jroot))
-        elif (not nn.startswith("#")):
+        elif not nn.startswith("#"):
             self.tryEvent(SaxEvents.START, nn, *jroot[0])
             for ch in self[1:]: self.jsonSax(ch)
             self.tryEvent(SaxEvents.END, nn, *jroot[0])
-        elif (nn == "text"):
+        elif nn == "text":
             self.tryEvent(SaxEvents.CHAR, self.getLeafText())
-        elif (nn == "#pi"):
+        elif nn == "#pi":
             self.tryEvent(SaxEvents.CHAR, self.getLeafText())
-        elif (nn == "#cdata"):
+        elif nn == "#cdata":
             self.tryEvent(SaxEvents.CDATASTART)
             self.tryEvent(SaxEvents.CHAR, self.getLeafText())
             self.tryEvent(SaxEvents.CDATAEND)
-        elif (nn == "#comment"):
+        elif nn == "#comment":
             self.tryEvent(SaxEvents.COMMENT, self.getLeafText())
-        elif (nn == "#doctype"):
+        elif nn == "#doctype":
             return  # TODO Doctype???
 
     def getLeafText(self) -> str:
-        if (isinstance(self, list)):
+        if isinstance(self, list):
             return "".join([ str(s) for s in self[1:]])
         return str(self)
 
     def tryEvent(self, eventType:SaxEvents, *args):
-        if (eventType in self.callbacks):
+        if eventType in self.callbacks:
             self.callbacks[eventType](args)
 
     def makeStartTag(self, empty:bool=False):

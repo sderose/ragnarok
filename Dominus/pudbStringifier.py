@@ -38,4 +38,3 @@ def custom_stringifier(obj):
         return default_stringifier(filtered_dict)
 
     return default_stringifier(obj)
-

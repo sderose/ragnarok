@@ -73,10 +73,10 @@ class CssSelectors:
         in_bracket = 0
         escaped = False
         for char in selector:
-            if (escaped):
+            if escaped:
                 current += char
                 escaped = False
-            if (char == "\\"):
+            if char == "\\":
                 escaped = True
             elif char in '>[]+~' and not in_bracket:
                 if current:
@@ -168,14 +168,14 @@ class CssSelectors:
             if tag and tag != '*' and tag != node.tagName:
                 return False
             mat = re.split(r"\s*([$*^~|]?=)\s*([is])?\s*$", attr)
-            if (not mat): raise ValueError("Bad [] syntax in '%s'." % (attr))
+            if not mat: raise ValueError("Bad [] syntax in '%s'." % (attr))
             return self.testAttr(
                 node, mat.group(1), mat.group(2), mat.group(3), mat.group(4))
         elif ':' in selector:  # TODO Handle multiple pseudos
             tag, pseudo = selector.split(':')
             if tag and tag != '*' and tag != node.tagName: return False
             pseudo, _lpar, arg = pseudo.partition("(")
-            if (arg): theArg = arg.strip(" )")
+            if arg: theArg = arg.strip(" )")
             return self.testPseudo(node, pseudo, theArg)
         else:
             return node.tagName == selector
@@ -183,24 +183,24 @@ class CssSelectors:
     def testAttr(self, node, aname:str, op:str, tgtValue:str, caseFlag:str) -> bool:
         """Test whether a node's attribute satisfies the [] condition.
         """
-        if (not op and not tgtValue):
+        if not op and not tgtValue:
             return node.hasAttribute(aname)
         tgtValue = tgtValue.strip(" \t\n\r\"'")
         docValue = node.getAttribute(aname).strip()
         tgtValue = CssSelectors.maybeFold(tgtValue, caseFlag)
         docValue = CssSelectors.maybeFold(docValue, caseFlag)
 
-        if (op == '='):                                 # equal
+        if op == '=':                                 # equal
             return docValue == tgtValue
-        elif (op == '~='):                              # has token
+        elif op == '~=':                              # has token
             return " " + tgtValue + " " in " " + docValue + " "
-        elif (op == '|='):                              # eq or starts w/ val+"-"
+        elif op == '|=':                              # eq or starts w/ val+"-"
             return docValue.startswith(tgtValue+"-")
-        elif (op == "^="):                              # starts w/
+        elif op == "^=":                              # starts w/
             return docValue.startswith(tgtValue)
-        elif (op == "$="):                              # endswith
+        elif op == "$=":                              # endswith
             return docValue.endswith(tgtValue)
-        elif (op == "*="):                              # contains
+        elif op == "*=":                              # contains
             return tgtValue in docValue
         else:
             raise ValueError("Unexpected operator '%s'." % (op))
@@ -211,37 +211,37 @@ class CssSelectors:
         Maybe add: dir (bidi)
         Presumably the CSS "nth" items count from 1.
         """
-        if (pseudo == "only-child"):
+        if pseudo == "only-child":
             return len(node.parentNode.childNodes) == 1
-        elif (pseudo == "only-of-type"):
+        elif pseudo == "only-of-type":
             return (node.getChildIndex(ofType=True) == 0
                 and node.getRChildIndex(ofType=True) == -1)
-        elif (pseudo == "first-child"):
+        elif pseudo == "first-child":
             return node.parentNode.firstChild == node
-        elif (pseudo == "first-of-type"):
+        elif pseudo == "first-of-type":
             return node.getChildIndex(ofType=True) == 0
-        elif (pseudo == "nth-child"):
+        elif pseudo == "nth-child":
             return node.getChildIndex() == int(n)-1
-        elif (pseudo == "nth-of-type"):
+        elif pseudo == "nth-of-type":
             return node.getChildIndex(ofType=True) == int(n)-1
-        elif (pseudo == "nth-last-child"):
+        elif pseudo == "nth-last-child":
             return node.getRChildIndex() == -int(n)
-        elif (pseudo == "nth-last-of-type"):
+        elif pseudo == "nth-last-of-type":
             return node.getRChildIndex(ofType=True) == -int(n)
-        elif (pseudo == "last-child"):
+        elif pseudo == "last-child":
             return node.parentNode.lastChild == node
-        elif (pseudo == "last-of-type"):
+        elif pseudo == "last-of-type":
             return node.getRChildIndex(ofType=True) == -1
 
-        elif (pseudo == "root"):
+        elif pseudo == "root":
             return node == node.ownerDocument
-        elif (pseudo == "empty"):
+        elif pseudo == "empty":
             return not node.childNodes
-        elif (pseudo == "has"):
+        elif pseudo == "has":
             raise KeyError("Unsupported")
-        elif (pseudo == "is (aka matches) (cf where)"):
+        elif pseudo == "is (aka matches) (cf where)":
             raise KeyError("Unsupported")
-        elif (pseudo == "lang"):
+        elif pseudo == "lang":
             curLang = node.getInheritedAttribute("xml:lang")
             return curLang == n  # TODO: ignore case? Strip subcode?
         else:
@@ -254,8 +254,8 @@ class CssSelectors:
     def maybeFold(s:str, caseFlag:str=None) -> str:
         """Seemingly CSS only does ASCII case-folding. srsly?
         """
-        if (caseFlag in "iI"): return s.lower()
-        if (caseFlag in "Ff"): return s.casefold()
+        if caseFlag in "iI": return s.lower()
+        if caseFlag in "Ff": return s.casefold()
         return s
 
     @staticmethod

@@ -184,23 +184,10 @@ But you can have it the other way if you prefer.
 be applied to minidom (extensions are tested separately). That should help
 reliability for everyone.
 
-* ElementTree seems quite well-liked, but I think that is mainly because of
-two things:
-
-2:
-1: it lets you pretend there's no text at all -- which is great if you're using XML
-for what is really CSV-ish data (and indeed, that's what a very large share
-of "example documents" are -- the 3-record personnel database, the config file,
-etc. But XML is mainly designed and intended for *documents* -- where text is
-*the* main thing. Try putting a play or novel or term paper into CSV or JSON;
-it's not fun unless you re-invent XML (or at least DOM) on the way -- by which
-time XML ends up *less* verbose (for example, you don't have to quote all the names
-and all the text chunks, have commas between attributes, etc.
-
-
-* But since BaseDom is interested in the structure and model, not the syntax,
+* Since BaseDom is interested in the structure and model, not the syntax,
 it comes with a variety of serializers -- including one that can round-trip to
-JSON.
+JSON (not actually possible with any of the XML/JSON translators I've found
+in the wild).
 
 * minidom doesn't give very good access to schema information. Which is fine for
 some purposes, and understandable given there are several important schemas
@@ -216,16 +203,4 @@ once XML was out, such as
 
 * I was there when we made XML, and there are a few things I wish I had gotten
 that I didn't, or vice versa. Just a few. With my own DOM, which mostly
-isolates serialization at the edges, I can easily experiment hooking up various
-parsers -- adding support. You don't have to try any of those -- they're completely
-separate tools, but in case you're interested, some things include:
-
-** Boolean attributes:  <table +border>
-** Unquoted attributes -- but only when the value is an XML NAME (to avoid
-introducing a new concept):  <table class=BIG>
-** Empty end-tag: </>
-** Omitted end-tags (we've got the stack, right?):  <b><i><tt>foo</b>
-** Simultaneous open/close:  <b|i>foo</b|i>
-** "Close innermost element and re-open (nice for compact tables):  <tr><td>foo|bar|baz</tr>
-**
-
+isolates serialization at the edges, I can easily experiment.

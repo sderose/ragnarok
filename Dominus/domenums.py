@@ -14,6 +14,10 @@ def toEnum(whichEnum:type, s:Any, onFail:Any=None):
         2: a string that names one,
         3: a value that one represents, or
         4: the default value given in 'onFail'
+
+    "The necessity of an enumeration of Existences, as the basis of Logic, did
+    not escape the attention of the schoolmen, and of their master Aristotle."
+        -- J. S. Mill, A System of Logic: Ratiocinative and Inductive
     """
     if isinstance(s, whichEnum):
         return whichEnum
@@ -69,6 +73,11 @@ class NodeType(Enum):
 class RWords(str, Enum):
     """Reserved words for XML (and additional contexts?)
     Including superclass str lets us use them in string contexts.
+
+    "'It is a most repulsive quality, indeed,’ said he.
+    ‘Oftentimes very convenient, no doubt, but never pleasing.
+    There is safety in reserve, but no attraction.'"
+        -- Jane Austen, Emma, chapter VI
     """
     NS_PREFIX   = "xmlns"
 
@@ -82,9 +91,11 @@ class RWords(str, Enum):
 ###############################################################################
 #
 class RelPosition(Enum):
-    """Places relative to element (mainly for insertAdjacentXML).
-        "This is not the end. It is not even the beginning of the end.
-        But it is, perhaps, the end of the beginning."
+    """Places relative to element, mainly for insertAdjacentXML().
+
+    "Now this is not the end. It is not even the beginning of the end.
+    But it is, perhaps, the end of the beginning."
+        -- Churchhill, Lord Mayor's Day Luncheon, 10 November 1942
     """
     beforebegin = "beforebegin"
     afterbegin = "afterbegin"
@@ -96,6 +107,9 @@ class RelPosition(Enum):
 #
 class UNormTx(Enum):
     """Whether/how various tokens should be Unicode-normalized.
+
+    "Lest one good custom should corrupt the world."
+        -- Alfred Lord Tennyson, "The Passing of Arthur"
     """
     NONE = "NONE"
     NFKC = "NFKC"
@@ -106,24 +120,47 @@ class UNormTx(Enum):
     @staticmethod
     def normalize(s:str, which:'UNormTx'="NONE") -> str:
         which = toEnum(UNormTx, which)
-        if not which: return s
+        if not which or which == UNormTx.NONE: return s
         return unicodedata.normalize(str(which), s)
 
 
 ###############################################################################
 #
 class CaseTx(Enum):
-    """How case should be handled
+    """How case should be handled.
+
+    "You've got to know when to hold 'em,
+    know when to fold 'em,
+    know when to walk away
+    know when to run."
+        -- Don Schlitz, "The Gambler"
     """
     NONE = "NONE"
     FOLD = "FOLD"
     LOWER = "LOWER"
+    UPPER = "UPPER"
+
+    @staticmethod
+    def fold(how:'CaseTx', s:str) -> str:
+        if how == CaseTx.NONE: return s
+        elif how == CaseTx.FOLD: return s.casefold()
+        elif how == CaseTx.LOWER: return s.lower()
+        elif how == CaseTx.UPPER: return s.upper()
+        raise ValueError(f"Unknown CaseTx value {how}.")
 
 
 ###############################################################################
 #
 class WSDefs(Enum):
-    """And everyone defined whitespace as seemed right in their eyes.
+    """Ways to define blank space.
+
+    "And the people did whatever seemed right in their own eyes."
+        -- Judges 21:25
+
+    “And then I have a secret. Did you know what will happen if you
+    eliminate the empty spaces from the universe, eliminate the  empty
+    spaces in all the atoms? The universe will become as big as my fist."
+        -- Umberto Ecu, Interview with Mukund Padmanabhan, Oct 23, 2005
     """
     UNKNOWN = ""
     XML = "XML"  # SQL same?
@@ -210,6 +247,9 @@ class WSDefs(Enum):
 #
 class NameTx(Enum):
     """And name/identifier characters likewise vary.
+
+    "Stat rosa pristina nomine, nomina nuda tenemus"
+        -- Umberto Ecu, Il nome d'rosa
     """
     XML = "XML"         # XML NAME
     HTML = "HTML"       # ANY but XML SPACE?
@@ -225,7 +265,8 @@ class NameTx(Enum):
         """
         which = toEnum(NameTx, which)
         if which == NameTx.XML:
-            return re.match(r"^\w[-_.:\s]*$", s)
+            # TODO Use real XmlStrings.isXmlName().
+            return re.match(r"^\w[-_.:\w]*$", s)
         elif which == NameTx.HTML:
             return re.match(r"^[^ \t\r\n]+$", s)
         elif which == NameTx.WHATWG:

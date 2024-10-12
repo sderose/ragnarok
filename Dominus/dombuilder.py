@@ -121,6 +121,9 @@ class DomBuilder():
         self.domDocType = None
         self.theParser = None
 
+        self.characterSet = 'utf-8'
+        self.version = "1.1"
+        self.standalone = None
 
     def parse(self, path_or_fh:Union[IO, str]) -> 'Document':
         """Actually run the parser.
@@ -130,12 +133,11 @@ class DomBuilder():
         @return A DOM object representing the document.
         """
         import _io
-        if (isinstance(path_or_fh, str)):
-            if (not os.path.isfile(path_or_fh)):
+        if isinstance(path_or_fh, str):
+            if not os.path.isfile(path_or_fh):
                 raise IOError("'%s' is not a regular file." % (path_or_fh))
             fh = codecs.open(path_or_fh, "rb")
-        elif (isinstance(path_or_fh,
-            (_io.TextIOWrapper, _io.BufferedWriter))):
+        elif isinstance(path_or_fh, (_io.TextIOWrapper, _io.BufferedWriter)):
             fh = path_or_fh
         else:
             raise ValueError(
@@ -143,11 +145,11 @@ class DomBuilder():
 
         self.parser_setup()
         self.theParser.ParseFile(fh)
-        if (not isinstance(path_or_fh, str)): fh.close()
+        if not isinstance(path_or_fh, str): fh.close()
         return self.domDoc
 
     def parse_string(self, s) -> 'Document':
-        if (not isinstance(s, str)):
+        if not isinstance(s, str):
             raise ValueError("Not a string.")
         self.theParser = self.parser_setup()
         self.theParser.Parse(s)
@@ -166,7 +168,7 @@ class DomBuilder():
         p.ProcessingInstructionHandler  = self.ProcessingInstructionHandler
         p.CommentHandler                = self.CommentHandler
 
-        if (dcls):
+        if dcls:
             p.XmlDeclHandler            = self.XmlDeclHandler
             p.StartDoctypeDeclHandler   = self.StartDoctypeDeclHandler
             p.EndDoctypeDeclHandler     = self.EndDoctypeDeclHandler
@@ -186,14 +188,14 @@ class DomBuilder():
     def isCurrent(self, name) -> bool:
         """Is the innermost open element of the given type?
         """
-        if (self.nodeStack and self.nodeStack[-1] == name):
+        if self.nodeStack and self.nodeStack[-1] == name:
             return True
         return False
 
     def isOpen(self, name) -> bool:
         """Is any element of the given type open?
         """
-        if (name in self.nodeStack): return True
+        if name in self.nodeStack: return True
         return False
 
     def ind(self) -> bool:
@@ -203,9 +205,12 @@ class DomBuilder():
     ### Handlers ##############################################################
     #
     def StartElementHandler(self, name, attributes=None):
-        if (self.domDoc is None):
-            lg.info("Creating Document().")
+        if self.domDoc is None:
+            lg.info("Creating Document via {self.theDocumentClass.__name__}.")
             self.domDoc = self.theDocumentClass()
+            self.domDoc.characterSet = self.characterSet
+            self.domDoc.version = self.version
+            self.domDoc.standalone = self.standalone
         else:
             lg.info("Appending %s to a %s (depth %d, nChildren %d).",
                 name, self.nodeStack[-1].nodeName,
@@ -214,25 +219,25 @@ class DomBuilder():
         lg.info("StartElement: '%s'", name)
         el = self.domDoc.createElement(name)
         #el.startLoc = self.theParser.CurrentByteIndex
-        if (attributes):
+        if attributes:
             nsp = RWords.NS_PREFIX+":"
             for n, v in attributes.items():
-                if (n.startswith(nsp)):
+                if n.startswith(nsp):
                     if el.declaredNS is None: el.declaredNS = {}
                     lName = n[len(nsp):]
                     el.declaredNS[lName] = v
                     continue
                 el.setAttribute(n, v)
                 # TODO factor out indexing
-                if ("*@"+n in self.IdIndex or el.nodeName+"@"+n in self.IdIndex):
-                    #if (self.theParser.theMLD.caseInsensitive): v = v.lower()
-                    if (v in self.IdIndex):
+                if "*@"+n in self.IdIndex or el.nodeName+"@"+n in self.IdIndex:
+                    #if self.theParser.theMLD.caseInsensitive: v = v.lower()
+                    if v in self.IdIndex:
                         raise ValueError("Duplicate ID value '%s' @ %s." %
                             (v, self.theParser.CurrentByteIndex))
                     else:
                         self.IdIndex[v] = el
 
-        if (self.nodeStack): self.nodeStack[-1].appendChild(el)
+        if self.nodeStack: self.nodeStack[-1].appendChild(el)
         else: self.domDoc.appendChild(el)
         self.nodeStack.append(el)
         return
@@ -247,11 +252,11 @@ class DomBuilder():
 
     def EndElementHandler(self, name) -> None:
         lg.info("EndElement: '%s'", name)
-        if (not self.nodeStack):
+        if not self.nodeStack:
             raise IndexError(
                 f"EndElementHandler: closing '{name}' but empty nodeStack.")
 
-        if (self.nodeStack[-1].nodeName != name):
+        if self.nodeStack[-1].nodeName != name:
             raise ValueError(
                 "EndElementHandler: closing '%s' but open element is: %s" %
                 (name, self.nodeStack[-1].nodeName))
@@ -268,10 +273,10 @@ class DomBuilder():
 
     def CharacterDataHandler(self, data) -> None:
         lg.info("CharacterData: got '%s'", data.strip())
-        if (not re.match(r"\S", data)):  # whitespace-only
-            if (not self.wsn): return
+        if not re.match(r"\S", data):  # whitespace-only
+            if not self.wsn: return
         else:
-            if (not self.nodeStack):
+            if not self.nodeStack:
                 raise("Found data outside any element: '%s'." % (data))
         tn = self.domDoc.createTextNode(data)
         self.nodeStack[-1].appendChild(tn)
@@ -296,7 +301,7 @@ class DomBuilder():
         return
 
     def Unknown_declHandler(self, data) -> None:
-        lg.info("Unknown_decl: got '%s'", data)
+        lg.warning("Unknown_decl: got '%s'", data)
         # raise ValueError("Unknown markup declaration: '%s'" % (data))
         newDcl = self.domDoc.createComment(data)
         self.nodeStack[-1].appendChild(newDcl)
@@ -307,8 +312,18 @@ class DomBuilder():
     #
     def XmlDeclHandler(self,
         version:str="", encoding:str="", standalone:str="") -> None:
-        assert version in [ "1.0", "1.1" ]
-        assert encoding in [ None, "", "utf-8" ]
+        if version in [ "1.0", "1.1" ]:
+            self.version = version
+        else:
+            raise ValueError(f"Unexpected xml version '{version}'.")
+        if encoding in [ "utf-8", "utf8" ]:
+            self.encoding = "utf-8"
+        elif encoding:
+            raise ValueError(f"Unexpected encoding '{encoding}'.")
+        if standalone in [ "yes", "no" ]:
+            self.standalone = standalone
+        elif standalone:
+            raise ValueError(f"Unexpected standalone '{standalone}'.")
 
     def StartDoctypeDeclHandler(self, name:str,
         literal=None, publicId:str=None, systemId:str=None) -> None:

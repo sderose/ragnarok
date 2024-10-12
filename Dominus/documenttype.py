@@ -4,7 +4,7 @@
 #
 import re
 from enum import Enum
-from datetime import datetime  #, date, time
+from datetime import datetime, date, time
 from collections import defaultdict
 from typing import List, Set, Iterable
 
@@ -442,7 +442,7 @@ class DocumentType(Node):
         """
         par = self.parentNode
         rsib = self.nextSibling
-        if (rsib):
+        if rsib:
             rsib.before(stuff)
         else:
             for thing in stuff:
@@ -477,9 +477,9 @@ class DocumentType(Node):
         self.nameSetDefs = {}
 
         for ch in self.childNodes:
-            if   (isinstance(ch, ElementDef)):   self.elementDefs[ch.name] = ch
-            elif (isinstance(ch, AttributeDef)): self.attributeDefs[ch.name] = ch
-            elif (isinstance(ch, EntityDef)):
+            if isinstance(ch, ElementDef): self.elementDefs[ch.name] = ch
+            elif isinstance(ch, AttributeDef): self.attributeDefs[ch.name] = ch
+            elif isinstance(ch, EntityDef):
                 self.entityDefs[ch.etype][ch.name] = ch
             else:
                 assert False, "Unknown declaration type %s." % (type(ch))
@@ -495,9 +495,9 @@ class DocumentType(Node):
 
     # Attribute
     def getAttributeDef(self, ename:NmToken, aname:NmToken):
-        if (ename not in self.elementDefs): return None
+        if ename not in self.elementDefs: return None
         edef = self.elementDefs[ename]
-        if (aname not in edef.attributeDefs): return None
+        if aname not in edef.attributeDefs: return None
         return edef.attributeDefs[aname]
 
     def defineAttribute(self, ename:NmToken, aname:NmToken,
@@ -548,19 +548,19 @@ class DocumentType(Node):
             publicId = self.publicId,
             systemId = self.systemId
         )
-        if (deep): newNode.elementDefs = self.elementDefs.deepcopy()
+        if deep: newNode.elementDefs = self.elementDefs.deepcopy()
         else: newNode.elementDefs = self.elementDefs.copy()
         return newNode
 
     def isEqualNode(self, n2) -> bool:  # Doctype
-        if (self.nodeType != n2.nodeType): return False
-        if (self.doctypeString != n2.doctypeString): return False
+        if self.nodeType != n2.nodeType: return False
+        if self.doctypeString != n2.doctypeString: return False
         #if (self.nodeName != n2.nodeName or
         #    self.publicId != n2.publicId or
         #    self.systemId != n2.systemId): return False
         docel1 = self.ownerDocument.documentElement
         docel2 = n2.ownerDocument.documentElement
-        if (not docel1.isEqualNode(docel2)): return False
+        if not docel1.isEqualNode(docel2): return False
         return True
 
     ####### EXTENSIONS
@@ -601,110 +601,7 @@ class DocumentType(Node):
         buf += "]>\n"
         return buf
 
-
-###########################################################################
-# Parsing and grammar
-#
-# Change all the spaces to \s*, doubles to \s+
-#
-class DTDParse:
-    name = r"[\w][-.\w]*"
-    names = f"{name}(  {name})*"
-    qlit = r"\"[^\"]*\"|\'[^\']*\'"
-    rep = r"""([*+?]|\{\d*,\d*\})"""
-    ctref = r"""%\w+;"""
-    baseInt   = r"""(0x[\da-f]+|\d+)"""
-    modelToken = f"{name}[*?+]?"
-
-    plist = f"""  {modelToken}(  [|,  {modelToken}  """  # Only works if next thing is different
-    source = f"""PUBLIC  (?P<pub>{qlit})  (?P<sys>{qlit})|SYSTEM  (?P<sys>{qlit})|(?P<lit>{qlit})"""
-    subset = r"""\[ [^]* ]"""
-    atyp = "|".join(list(AttrType.__members__.keys()))
-    adft = "|".join(list(AttrDefault.__members__.keys())) + f"({qlit})?"
-    ndata = f"""NDATA  ({name})"""
-    modelToken = f"""(#PCDATA)?|{name}{rep}?|{ctref}{rep}?"""
-    model = f"""{plist}|EMPTY|ANY|#PCDATA"""
-
-    docTypeExpr = f"""<!DOCTYPE  ({name})  ({source})  """
-    elemExpr  = f"""<!ELEMENT  ({name})  ({model})  (\\+\\({names}\\)?  (-\\({names}\\)?  >"""
-    attrExpr  = f"""<!ATTLIST  ({name})  (  ({name})  ({atyp})  ({adft})  )+  >"""
-    entExpr   = f"""<!ENTITY  (%)?  ({name})  ({source})  ({ndata}))?  >"""
-    notExpr   = f"""<!NOTATION  ({name})  ({source})  >"""
-    #
-    charExpr  = r"""<!CHAR  ({name})  ({baseInt})(  ,  ({name})  ({baseInt}))*  >"""
-    litExpr   = r"""<!LITERAL  ({name})  ({qLit})  >"""
-    ctypeExpr = r"""<!CTYPE  ({name})  ({names})  >"""  # seqtype?
-    baseExpr  = r"""<!BASE(  {qLit})*  >"""
-
-    def __init__(self):
-        self.nodeName = ""
-        self.publicId = ""
-        self.systemId = ""
-
-    def parseDOCTYPE(self, s:str):
-        """Parse the DOCTYPE declaration:
-            <!DOCTYPE rootName PUBLIC "" "" [...]>
-        """
-        mat = re.match(DTDParse.docTypeExpr, s)
-        if not mat: raise SyntaxError
-
-        self.nodeName = mat.group(1)
-        self.publicId = mat.group("lit")[1:-1]
-        self.systemId = mat.group("sys")[1:-1]
-        # if [
-        #     self.parseInternalSubset()
-        #     "]"
-        # ">"
-
-    def parseInternalSubset(self, s:str):
-        for mat in re.finditer(r"<!(\W+)\s+(.*?)\s*>|<!--([^-]|-[^-])*-->", s):
-            which = mat.group(1)
-            if which not in DTDParse.dclNames:
-                raise SyntaxError(f"Unrecognized declaration '{which}'.")
-            mat = re.match(DTDParse.dclNames[which][1], s)
-            if (not mat):
-                raise SyntaxError(f"Cannot parse {which} dcl: {s}")
-            DTDParse.dclNames[which](s, mat)
-
-    def parseELEMENT(self, s:str, mat):
-        pass
-
-    def parseATTLIST(self, s:str, mat):
-        pass
-
-    def parseENTITY(self, s:str, mat):
-        pass
-
-    def parseNOTATION(self, s:str, mat):
-        pass
-
-    #
-
-    def parseCHAR(self, s:str, mat):
-        pass
-
-    def parseLITERAL(self, s:str, mat):
-        pass
-
-    def parseCTYPE(self, s:str, mat):
-        pass
-
-    def parseBASE(self, s:str, mat):
-        pass
-
-    dclNames = {
-        "DOCTYPE":      ( parseDOCTYPE,  None ),
-        "ELEMENT":      ( parseELEMENT,  elemExpr ),
-        "ATTLIST":      ( parseATTLIST,  attrExpr ),
-        "ENTITY":       ( parseENTITY,   entExpr ),
-        "NOTATION":     ( parseNOTATION, notExpr ),
-        #
-        "CHAR":         ( parseCHAR,     charExpr ),
-        "LITERAL":      ( parseLITERAL,  litExpr ),
-        "CTYPE":        ( parseCTYPE,    ctypeExpr ),
-        "BASE":         ( parseBASE,     baseExpr ),
-    }
-
     # end class DocumentType
 
 DocType = DocumentType
+

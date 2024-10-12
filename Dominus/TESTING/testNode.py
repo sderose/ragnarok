@@ -6,7 +6,7 @@ import logging
 #from xml.dom.minidom import getDOMImplementation
 #from basedom import getDOMImplementation
 
-from makeTestDoc import makeTestDoc0, DAT, DBG
+from makeTestDoc import makeTestDoc0, DAT  #, DBG
 
 lg = logging.getLogger("testNode")
 #logging.basicConfig(level=logging.INFO)

@@ -29,7 +29,7 @@ TODO:
 def isXmlNames(s:str) -> bool:
     tokens = re.split(r"\s+", s.strip())
     for token in tokens:
-        if (not XStr.isXmlName(token)): return False
+        if not XStr.isXmlName(token): return False
     return True
 
 def isURI(s:str) -> bool:
@@ -70,8 +70,8 @@ class AttrDefault:
         # Gotta map type-name to actual type...
         self.atype = str
         self.subtype = None
-        if (typeName):
-            if (typeName in XMLTypes):
+        if typeName:
+            if typeName in XMLTypes:
                 self.subtype = typeName
             else:
                 try:
@@ -82,7 +82,7 @@ class AttrDefault:
                     sys.exit()
 
         self.adft = None
-        if (dftVal):
+        if dftVal:
             try:
                 self.adft = self.atype(dftVal)
             except ValueError:
@@ -99,44 +99,44 @@ class AllDefaults:
     def add(self, src:Union[AttrDefault, str]):
         """Construct and save the defaulter object for elem?@attr.
         """
-        if (isinstance(src, str)):
+        if isinstance(src, str):
             src = AttrDefault(src)
-        if (src.element not in self.byElement):
+        if src.element not in self.byElement:
             self.byElement[src.element] = {}
         self.byElement[src.element][src.aname] =src
 
     def find(self, ename:str, aname:str) -> AttrDefault:
-        if (ename in self.byElement): dftList = self.byElement
-        elif ("" in self.byElement): dftList = self.byElement
+        if ename in self.byElement: dftList = self.byElement
+        elif "" in self.byElement: dftList = self.byElement
         else: return None
-        if (aname in dftList): return dftList[aname]
+        if aname in dftList: return dftList[aname]
         return None
 
     def applyDefaults(self, ename:str, attlist:Dict) -> Dict:
-        if (ename in self.byElement):
+        if ename in self.byElement:
             dftsForElement = self.byElement[ename]
-        elif ("" in self.byElement):
+        elif "" in self.byElement:
             dftsForElement = self.byElement[""]
         else:
             return attlist
 
         for dftObj in dftsForElement:
-            if (dftObj.aname in attlist): continue
+            if dftObj.aname in attlist: continue
             attlist[dftObj.aname] = dftObj.dftVal
         return attlist
 
     def castAttrs(self, ename:str, attlist:Dict) -> Dict:
         for k, v in attlist.items():
             dftObj = self.find(ename, k)
-            if (dftObj and dftObj.atype):
+            if dftObj and dftObj.atype:
                 attlist[k] = dftObj.atype(v)
 
     def getType(self, ename:str, aname:str) -> Any:
         dftObj = self.find(ename, aname)
-        if (dftObj): return dftObj.atype
+        if dftObj: return dftObj.atype
         return None
 
     def getDft(self, ename:str, aname:str) -> Any:
         dftObj = self.find(ename, aname)
-        if (dftObj): return dftObj.adft
+        if dftObj: return dftObj.adft
         return None

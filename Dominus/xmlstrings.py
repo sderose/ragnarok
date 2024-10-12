@@ -328,11 +328,12 @@ class XmlStrings:
     _nameCharAddlReList = (_nameStartCharReList +
         rangesToReList(_nameCharAddlRanges))
 
-    _xmlName  = r"^[%s][%s]*$" % (
+    # Following don't enforce matching *whole* input -- methods later can add $.
+    _xmlName  = r"^([%s][%s]*)" % (
         _nameStartCharReList, _nameCharAddlReList+_nameStartCharReList)
-    _xmlQName = r"^(%s(:%s)?$" % (_xmlName, _xmlName)
-    _xmlPName = r"^(%s)(:%s)$" % (_xmlName, _xmlName)
-    _xmlNmtoken = r"^[%s]+$" % (_nameCharAddlReList)
+    _xmlQName = r"^(%s(:%s)?" % (_xmlName, _xmlName)
+    _xmlPName = r"^(%s)(:%s)" % (_xmlName, _xmlName)
+    _xmlNmtoken = r"^([%s]+)" % (_nameCharAddlReList)
 
     @staticmethod
     def allNameStartChars() -> str:
@@ -365,7 +366,7 @@ class XmlStrings:
     def isXmlName(s:str) -> bool:
         """Return True for a NON-namespace-prefixed (aka) local name.
         """
-        return bool(re.match(XmlStrings._xmlName, s))
+        return bool(re.match(XmlStrings._xmlName+"$", s))
     isXmlLName = isXmlName
 
     @staticmethod
@@ -545,13 +546,13 @@ class XmlStrings:
         return tag
 
     @staticmethod
-    def dictToAttrs(dct, sortAttributes: bool=None, normValues: bool=False) -> str:
+    def dictToAttrs(dct, sortAttributes:bool=False, normValues:bool=False) -> str:
         """Turn a dict into a serialized attribute list (possibly sorted
         and/or space-normalized). Escape as needed.
         """
         sep = " "
         anames = dct.keys()
-        if (sortAttributes): anames.sort()
+        if (sortAttributes): anames = sorted(list(anames))
         attrString = ""
         for a in (anames):
             v = dct[a]

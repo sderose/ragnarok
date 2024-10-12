@@ -10,11 +10,8 @@ import unittest
 from collections import defaultdict
 from typing import List
 
-from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
-
 #pylint: disable=W0401,W0611,W0621
-from domexceptions import *
-#from domexceptions import HierarchyRequestError
+from domexceptions import HierarchyRequestError
 #from domexceptions import NotFoundError
 
 from domenums import NodeType
@@ -23,6 +20,8 @@ from xmlstrings import XmlStrings as XStr
 from basedom import DOMImplementation
 from basedom import PlainNode, Node, Document, Element
 from basedom import Attr, NamedNodeMap, NodeList
+
+from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
 
 descr = """
 To Do:
@@ -58,7 +57,7 @@ class K(DAT):
     udk1_name = "myUDKey"
     udk1_value = "999"
 
-    outer = f"""<para id="foo">From xml string</para>"""
+    outer = """<para id="foo">From xml string</para>"""
 
 
 ###############################################################################
@@ -104,6 +103,7 @@ class TestExceptions(unittest.TestCase):
         self.assertIsInstance(theClass(), Exception)
 
     def tests(self):
+        from domexceptions import *
         self.isEx(DOMException)
         self.isEx(RangeError)
         self.isEx(IndexSizeError)
@@ -649,7 +649,7 @@ class testElement(unittest.TestCase):
         self.assertEqual(len(el5.childNodes), 1)
         self.assertTrue(el5.childNodes[0].isTextNode)
         self.assertEqual(el5.childNodes[0].data, "hello")
-        self.assertEqual(el5.startTag, el5.startTag)
+        self.assertEqual(el5.startTag, el5StartTag)
         self.assertEqual(el5.endTag, el5EndTag)
 
     @unittest.skip
@@ -660,7 +660,7 @@ class testElement(unittest.TestCase):
         #anode = Attr(an, av)
 
         #el0 = self.n.docEl.childNodes[0]
-        #el5 = self.n.docEl.childNodes[5]
+        el5 = self.n.docEl.childNodes[5]
         el8 = self.n.docEl.childNodes[8]
         zzz = self.n.doc.createTextNode("xyzzy")
         el8.appendChild(zzz)

@@ -8,21 +8,11 @@ import unittest
 #from collections import defaultdict
 #from typing import List
 
-from makeTestDoc import DBG  #makeTestDoc0, makeTestDoc2, DAT,
-from testEachMethod import K, makeTestDocEachMethod
-
-#pylint: disable=W0401,W0611,W0621
-#from domexceptions import *
 #from domexceptions import HierarchyRequestError
 #from domexceptions import NotFoundError
 
-from domenums import NodeType
-from xmlstrings import XmlStrings as XStr
-
-from basedom import DOMImplementation
-from basedom import PlainNode, Node, Document, Element
-from basedom import Attr, NamedNodeMap, NodeList
-
+from makeTestDoc import DBG  #makeTestDoc0, makeTestDoc2, DAT,
+from testEachMethod import K, makeTestDocEachMethod
 
 
 ###############################################################################

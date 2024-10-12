@@ -36,14 +36,14 @@ class TestDOMNode(unittest.TestCase):
 
         self.n.docEl.appendChild(self.n.mixedNode)
 
-    def test_emptyNode(self):
-        #DBG.dumpNode(self.n.emptyNode, "Empty node:")
-        self.assertFalse(self.n.emptyNode.hasChildNodes())
+    def test_child3(self):
+        #DBG.dumpNode(self.n.child3, "Empty node:")
+        self.assertFalse(self.n.child3.hasChildNodes())
         #sys.stderr.write("%s" % (dir(Element)))
 
-        self.assertIsNone(self.n.emptyNode.firstChild)
-        self.assertIsNone(self.n.emptyNode.lastChild)
-        self.assertEqual(len(self.n.emptyNode.childNodes), 0)
+        self.assertIsNone(self.n.child3.firstChild)
+        self.assertIsNone(self.n.child3.lastChild)
+        self.assertEqual(len(self.n.child3.childNodes), 0)
 
     # This fails with minidom, saying the node isn't there. Eh?
     def test_node_removal(self):
@@ -81,23 +81,23 @@ class TestDOMNode(unittest.TestCase):
     def test_node_type(self):
         self.assertEqual(self.n.docEl.nodeType, Node.ELEMENT_NODE)
         self.assertEqual(self.n.textNode1.nodeType, Node.TEXT_NODE)
-        self.assertEqual(self.n.emptyNode.nodeType, Node.ELEMENT_NODE)
+        self.assertEqual(self.n.child3.nodeType, Node.ELEMENT_NODE)
 
     def test_node_name(self):
         self.assertEqual(self.n.docEl.nodeName, DAT.root_name)
         self.assertEqual(self.n.child1.nodeName, DAT.child1_name)
         self.assertEqual(self.n.textNode1.nodeName, '#text')
-        self.assertEqual(self.n.emptyNode.nodeName, DAT.empty_node_name)
+        self.assertEqual(self.n.child3.nodeName, DAT.child3_name)
 
     def test_node_value(self):
         self.assertIsNone(self.n.docEl.nodeValue)
         self.assertEqual(self.n.textNode1.nodeValue, DAT.some_text)
-        self.assertIsNone(self.n.emptyNode.nodeValue)
+        self.assertIsNone(self.n.child3.nodeValue)
 
     def test_parent_node(self):
         self.assertEqual(self.n.child1.parentNode, self.n.docEl)
         self.assertEqual(self.n.grandchild.parentNode, self.n.child2)
-        self.assertEqual(self.n.emptyNode.parentNode, self.n.docEl)
+        self.assertEqual(self.n.child3.parentNode, self.n.docEl)
 
     ### Mixed content stuff
     #
@@ -115,21 +115,21 @@ class TestDOMNode(unittest.TestCase):
         self.addMixedContent()
         self.assertEqual(self.n.docEl.firstChild, self.n.child1)
         self.assertEqual(self.n.child2.firstChild, self.n.grandchild)
-        self.assertIsNone(self.n.emptyNode.firstChild)
+        self.assertIsNone(self.n.child3.firstChild)
         self.assertEqual(self.n.mixedNode.firstChild.nodeValue, DAT.text_before)
 
     def test_child_nodes(self):
         self.addMixedContent()
         self.assertEqual(len(self.n.docEl.childNodes), 4)
         self.assertEqual(len(self.n.child2.childNodes), 1)
-        self.assertEqual(len(self.n.emptyNode.childNodes), 0)
+        self.assertEqual(len(self.n.child3.childNodes), 0)
         self.assertEqual(len(self.n.mixedNode.childNodes), 3)
 
     def test_last_child(self):
         self.addMixedContent()
         self.assertEqual(self.n.docEl.lastChild, self.n.mixedNode)
         self.assertEqual(self.n.child1.lastChild, self.n.textNode1)
-        self.assertIsNone(self.n.emptyNode.lastChild)
+        self.assertIsNone(self.n.child3.lastChild)
         self.assertEqual(self.n.mixedNode.lastChild.nodeValue, DAT.text_after)
     #
     ###

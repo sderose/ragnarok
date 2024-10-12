@@ -139,26 +139,26 @@ class CharacterEntities:
     def __init__(self, includeHTML:bool=True):
         self.codepoint2name = {}
         self.name2codepoint = {}
-        if (includeHTML): self.addHTML()
+        if includeHTML: self.addHTML()
 
     def add(self, name:str, cp:int, force:bool=False) -> bool:
         assert isinstance(name, str) and isinstance(cp, int)
-        if (not XStr.isXmlName(name)):
+        if not XStr.isXmlName(name):
             raise KeyError("Char name is not an XML NAME: '%s'." % (name))
-        if (cp < 1 or cp > sys.maxunicode):
+        if cp < 1 or cp > sys.maxunicode:
             raise ValueError("Code point for '%s' is out of range: %06x." % (name, cp))
 
         # codepoint2name can only have one entry per codepoint
-        if (force or cp not in self.codepoint2name):
+        if force or cp not in self.codepoint2name:
             self.codepoint2name[cp] = name
         else:
             lg.warning("codepoint %04x already covered ('%s' vs. new '%s').",
                 cp, self.codepoint2name[cp], name)
 
         # But name2codepoint allows multiple names to map to the same codepoint
-        if (force or name not in self.name2codepoint):
+        if force or name not in self.name2codepoint:
             self.name2codepoint[name] = cp
-        elif (cp == self.name2codepoint[name]):
+        elif cp == self.name2codepoint[name]:
             pass
         else:
             raise KeyError("Name '%s' already defined, points to %04x not new %04x."
@@ -169,12 +169,12 @@ class CharacterEntities:
         """Remember there can be multiple names for the same code point.
         So if we delete one of them, codepoint2name may need to change to another.
         """
-        if (name in self.name2codepoint):
+        if name in self.name2codepoint:
             del self.name2codepoint[name]
-        if (cp in self.codepoint2name and self.codepoint2name[cp] == name):
+        if cp in self.codepoint2name and self.codepoint2name[cp] == name:
             # Check if there's at least some other name to fall back to.
             for candCp, candName in self.codepoint2name.items():
-                if (candCp == cp):
+                if candCp == cp:
                     self.codepoint2name[cp] = candName
                     return
             del self.codepoint2name[cp]
@@ -196,9 +196,9 @@ class CharacterEntities:
         nAdded = 0
         for recnum, rec in enumerate(ifh.readlines()):
             rec = rec.strip()
-            if (rec.startswith("#") or rec==""): continue
+            if rec.startswith("#") or rec=="": continue
             mat = re.match(r"^([\w.-]+)\W+(0?x?[a-f\d]+)$", rec)
-            if (mat is None):
+            if mat is None:
                 raise ValueError("Cannot parse record %d: %s" % (recnum, rec))
             cp = int(mat.group(2), 0)
             self.add(mat.group(1), cp)
@@ -215,14 +215,14 @@ class CharacterEntities:
         nAdded = 0
         for recnum, rec in enumerate(ifh.readlines()):
             rec = rec.strip()
-            if (rec.match("<!--([^-]|-[^-])*-->") or rec==""): continue
+            if rec.match("<!--([^-]|-[^-])*-->") or rec=="": continue
             mat = re.match(r"""^<!ENTITY\s+(\w+)\s+("[^"]"|'[^']+')\s*>$""", rec)
-            if (mat is None):
+            if mat is None:
                 raise ValueError("Cannot parse ENTITY dcl at record %d: %s" % (recnum, rec))
             cpString = mat.group(2)[1:-1].strip()
-            if (cpString[0] == "&"):
+            if cpString[0] == "&":
                 cpString = XStr.unescapeXml(cpString)
-            if (len(cpString) != 1):
+            if len(cpString) != 1:
                 raise ValueError("Couldn't resolve to char in ENTITY dcl "
                     "at record %d: %s" % (recnum, rec))
             self.add(mat.group(1), ord(cpString))
@@ -236,7 +236,7 @@ class CharacterEntities:
         nAdded = 0
         names = sorted(list(self.name2codepoint.keys()))
         for name in names:
-            if (not includeHTML and name in HTMLc2n): continue
+            if not includeHTML and name in HTMLc2n: continue
             ofh.write("%s%s%04x\n" % (name, sep, self.name2codepoint[name]))
             nAdded += 1
         ofh.close()

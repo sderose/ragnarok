@@ -22,6 +22,7 @@ fr = FormatRec()
 nameStartChars = XStr.allNameStartChars()
 nameChars = nameStartChars + XStr.allNameChars()
 
+firstSetup = True
 
 ###############################################################################
 #
@@ -102,27 +103,37 @@ class DBG:
 class DAT:
     """Element names and other consts used in the sample document.
     """
+    sampleXmlPath = "docForTestEachMethod_testDI.xml"
     ns_uri = "https://example.com/namespaces/foo"
 
     root_name = 'html'
     child1_name = 'child1'
     child2_name = 'child2'
-    empty_node_name = 'empty'
+    child3_name = 'child3'
     grandchild_name = 'grandchild'
     p_name = "para"
+    inline_name = 'i'
 
     at_name = 'an_attr.name'
     at_value = 'this is an attribute value'
+    at_name2 = "class"
+    at_value2 = "class1 class2"
+    at_name3 = 'id'
+    at_value3 = 'html_id_17'
 
     text_before = 'Text before '
-    inline_name = 'i'
     text_inside = '(text inside)'
     text_after = ' and after'
     some_text = 'Some text content.'
     more_text = ' More text'
 
+    target_name = "pi-target"
+
+    # Sigma is a case where .lower() and .casefold() differ.
     final_sigma = "\u03C2"
     lc_sigma = "\u03C3"
+
+    xml = "<div n='1'><p>hello, <i>big</i> tester.</p><br /></div>"
 
 class DAT_HTML(DAT):
     ns_uri = "https://w3.org/namespaces/xhtml4"
@@ -130,11 +141,9 @@ class DAT_HTML(DAT):
     root_name = 'html'
     child1_name = 'head'
     child2_name = 'body'
-    empty_node_name = 'br'
+    child3_name = 'br'
     grandchild_name = 'div'
-
-    at_name = 'class'
-    at_value = 'class1 class2'
+    p_name = "p"
 
 class DAT_DocBook(DAT):
     ns_uri = "https://docbook.org/namespaces/article"
@@ -142,13 +151,11 @@ class DAT_DocBook(DAT):
     root_name = 'article'
     child1_name = 'sec'
     child2_name = 'sec'
-    empty_node_name = 'br'
+    child3_name = 'br'
     grandchild_name = 'para'
+    p_name = "para"
 
-    at_name = 'id'
-    at_value = 'docbook_id_17'
-
-    inline_name = 'em'
+    inline_name = 'emph'
 
 
 ###############################################################################
@@ -163,6 +170,7 @@ class makeTestDoc0:
     TODO: Move all the self.nodes into a dict?
     """
     def __init__(self, dc:type=DAT, show:bool=False):
+        global firstSetup
         self.alreadyShowedSetup = True
 
         # Define some names to use across various subclasses, even though
@@ -179,7 +187,7 @@ class makeTestDoc0:
             "child2":      None,
             "grandchild":  None,
             "textNode1":   None,
-            "emptyNode":   None,
+            "child3":   None,
             "mixedNode":   None,
 
             "attrNode":    None,
@@ -209,13 +217,13 @@ class makeTestDoc0:
         assert (self.n.docEl.nodeName == self.dc.root_name)
         assert len(self.n.docEl.childNodes) == 0
 
-        if show: lg.warning(
-            "makeTestDoc0 produced: %s", self.n.doc.outerXML)
+        if show and firstSetup: lg.warning(
+            "makeTestDoc0 produced: %s", self.n.doc.toprettyxml())
+        firstSetup = False
 
     def once(self, *args):
         if (self.alreadyShowedSetup): return
         lg.warning(*args, "\n")
-
 
     @staticmethod
     def addFullTree(node:Node, n:int=10, depth:int=3,
@@ -297,6 +305,11 @@ class makeTestDoc0:
 ###############################################################################
 #
 class makeTestDoc2(makeTestDoc0):
+    """Create a document with 3 child nodes:
+        child1: the first with an attribute and text node
+        child2: the second with a child
+        child3: the third empty
+    """
     def __init__(self, dc=DAT, show:bool=False):
         super().__init__(dc)
         assert isinstance(self.n.impl, DOMImplementation)
@@ -313,11 +326,10 @@ class makeTestDoc2(makeTestDoc0):
     def createRestOfDocument(self):
         """Store stuff we want to refer back to, in self.docItems.
         """
-
-        # Add some more nodes
-
         self.n.child1 = self.n.doc.createElement(self.dc.child1_name)
         self.n.child1.setAttribute(self.dc.at_name, self.dc.at_value)
+        self.n.child1.setAttribute(self.dc.at_name2, self.dc.at_value2)
+        self.n.child1.setAttribute(self.dc.at_name3, self.dc.at_value3)
         self.n.docEl.appendChild(self.n.child1)
 
         self.n.child2 = self.n.doc.createElement(self.dc.child2_name)
@@ -332,8 +344,8 @@ class makeTestDoc2(makeTestDoc0):
         self.n.child1.appendChild(self.n.textNode1)
 
         # Add empty node
-        self.n.emptyNode = self.n.doc.createElement(self.dc.empty_node_name)
-        self.n.docEl.appendChild(self.n.emptyNode)
+        self.n.child3 = self.n.doc.createElement(self.dc.child3_name)
+        self.n.docEl.appendChild(self.n.child3)
 
         if (not self.alreadyShowedSetup):
             self.dumpNode(self.n.docEl, "Setup produced:")
