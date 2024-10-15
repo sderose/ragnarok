@@ -363,6 +363,16 @@ class XmlStrings:
     ###########################################################################
     #
     @staticmethod
+    def isXmlChars(s:str) -> bool:
+        """Just determine if all the individual chars are allowed.
+        """
+        for c in s:
+            n = ord(c)
+            if (n > 0x1FFFF or n > sys.maxunicode): return False
+            if (n < 0x20 and c not in [ "\t", "\r", "\n" ]): return False
+        return True
+
+    @staticmethod
     def isXmlName(s:str) -> bool:
         """Return True for a NON-namespace-prefixed (aka) local name.
         """

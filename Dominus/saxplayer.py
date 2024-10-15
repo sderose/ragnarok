@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# saxplayer: Common stuff for SAX and SAX-like interfaces
+# saxplayer: Common stuff for SAX-like interfaces
 #
 from enum import Enum
 
@@ -24,15 +24,13 @@ class SaxEvents(Enum):
     # a start-tag event.
     #
     ATTRIBUTE    = 20
+    ENTREF       = 21
 
-    ENTITYDCL    = 13
-    ELEMENTDCL   = 14
-    ATTLISTDCL   = 15
-    NOTATIONDCL  = 16
+    XMLDCL       = 100
+    ELEMENTDCL   = 101
+    ATTLISTDCL   = 102
+    ENTITYDCL    = 103
+    PENTITYDCL   = 104
+    SDATADCL     = 106
+    NOTATIONDCL  = 105
 
-### Provide at least:
-# A callback thing like normal SAX
-# for eventType, name, data in parseStuff()
-# a feed-based interface?
-# a direct DOM builder (cf dombuilder)
-# a direct JSONX builder?

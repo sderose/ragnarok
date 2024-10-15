@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 #
-# EntityManager.py
+# EntityManager
 # multiXml written 2011-03-11 by Steven J. DeRose.
 # Broken out from multiXML.py, 2013-02-25.
 #
 #pylint: disable=W1201
 #
 import os
-import sys
+#import sys
 import codecs
 import re
 from enum import Enum
 import logging
-from typing import Union, List
+from typing import Union, List, Dict
 
 #import html
 #from html.entities import codepoint2name
 
 from xmlstrings import XmlStrings as XStr
+from saxplayer import SaxEvents
 
 lg = logging.getLogger("EntityManager")
+logging.basicConfig(level=logging.INFO)
 
 __metadata__ = {
     "title"        : "EntityManager",
@@ -84,8 +86,9 @@ Returns the number of open entities.
 
 =To do=
 
-* Get it running.
+* Finish.
 
+* Add readers for attr, starttag, endtag, text, gen ent
 
 =Rights=
 
@@ -100,15 +103,6 @@ or [https://github.com/sderose].
 
 =Options
 """
-
-def allXmlChars(s:str) -> bool:
-    """Just determine if all the individual chars are allowed.
-    """
-    for c in s:
-        n = ord(c)
-        if (n > 0x1FFFF or n > sys.maxunicode): return False
-        if (n < 0x20 and c not in [ "\t", "\r", "\n" ]): return False
-    return True
 
 class LocType(Enum):
     LITERAL = 1
@@ -145,7 +139,8 @@ class EntityDef:
         notationName:str=None
         ):
         assert isinstance(space, SpaceType)
-        assert XStr.isXmlName(name)
+        if not XStr.isXmlName(name):
+            raise SyntaxError(f"Name '{name}' for entity is not valid.")
         assert isinstance(parseType, ParseType)
         if notationName: assert XStr.isXmlName(notationName)
 
@@ -162,23 +157,24 @@ class EntityDef:
         self.data = data
         self.notationName = notationName
 
-        if (self.locType == LocType.LITERAL):
+        if self.locType == LocType.LITERAL:
+            assert space != SpaceType.NOTATION
             self.path = None
         else:
             self.path = self.findLocalPath()
 
     def findLocalPath(self) -> str:
-        """Catalog, $ENTITY_PATH, etc.
-        TODO: how to access pathlist or catalog?
+        """Catalog, path var, etc.
         """
-        if (not self.systemId):
+        evName = "ENTITYPATH"
+        if not self.systemId:
             raise IOError("No system ID for %s." % (self.name))
-        if (os.path.isfile(self.systemId)): return self.systemId
-        if ("ENTITY_PATH" in os.environ):
-            epaths = os.environ["ENTITY_PATH"].split(";")
+        if os.path.isfile(self.systemId): return self.systemId
+        if evName in os.environ:
+            epaths = os.environ[evName].split(":")
             for epath in epaths:
                 cand = os.path.join(epath, self.systemId)
-                if (os.path.isfile(cand)): return cand
+                if os.path.isfile(cand): return cand
         raise IOError("No file found for %s (systemId %s)." % (self.name, self.systemId))
 
 
@@ -189,11 +185,12 @@ class EntityFrame:
     TODO: How best to signal EOF on the current entity?
 
     Readers in here will not go past frame EOF, or expand any entities.
-    So that's for things like name tokens, reserved words, single delimiters,
-    qlits, comments,... If they fail to match, they should return None and
-    not move the input cursor.
+    So it's for things like name tokens, reserved words, single delimiters,
+    qlits, comments,... If they fail to match, they return None and
+    do not move the input cursor.
     """
     def __init__(self, eDef:EntityDef, encoding:str="utf-8"):
+        assert isinstance(eDef, EntityDef)
         self.eDef = eDef
         self.encoding = encoding
         self.ifh = None
@@ -201,14 +198,14 @@ class EntityFrame:
         self.bufPos = 0
         self.lineNum = 0
         self.offset = 0
-        if (self.eDef.literal):
-            self.buf = self.eDef.literal  # TODO Copy?
-        elif (self.eDef.path):
+        if self.eDef.data:
+            self.buf = self.eDef.data  # TODO Copy?
+        elif self.eDef.path:
             self.ifh = codecs.open(self.eDef.path, "rb", self.eDef.encoding)
             self.buf = self.ifh.read()
 
     def close(self):
-        if (self.ifh): self.ifh.close()
+        if self.ifh: self.ifh.close()
         self.buf = None
 
     @property
@@ -248,7 +245,7 @@ class EntityFrame:
         """We do not top off across entity boundaries here.
         Read more data (is there is any), to get at least n available.
         If EOF happens before n, buf ends up short.
-        If EOF happens and there's nothing in buf, that's really EOF.
+        If EOF happens and there's nothing in buf, that's really EOF on the entity.
         """
         if not self.ifh:
             if self.bufPos >= len(self.buf):
@@ -259,6 +256,7 @@ class EntityFrame:
         self.bufPos = 0
         if len(self.buf) < n:
             newChars = self.ifh.read(n)
+            #lg.info("\n  Topped off with: ###%s###", newChars)
             self.lineNum += newChars.count('\n')
             self.offset += len(newChars)
             self.buf += newChars
@@ -268,6 +266,10 @@ class EntityFrame:
         return True
 
     def skipSpaces(self, allowComments:bool=True):
+        """XML eliminated in-space --...-- comments.
+        Since this is in EntityFrame, it doesn't handle parameter entities
+        (they change the EntityFrame, so are hanled one level up).
+        """
         while True:
             if self.bufLeft < 1:
                 self.topOff()
@@ -275,20 +277,34 @@ class EntityFrame:
             if self.buf[self.bufPos] in " \t\r\n":
                 self.bufPos += 1
             elif allowComments and self.peek(2) == "--":
-                self.consume(2)
-                self.readToString("--")
+                self.readSepComment()
             else:
                 return True
 
-    def readConst(self, const:str, ss:bool=True):
+    def readSepComment(self, ss:bool=True):
+        """Read a comment that's just the --...-- part.
+        """
         if ss: self.skipSpaces()
+        # Or readToString("--")
+        mat = re.match(r"--([^-]|-[^-])+--", self.buf[self.bufPos:])
+        if not mat: return None
+        self.bufPos += len(mat.group(1))
+        return mat.group(1)
+
+    def readConst(self, const:str, ss:bool=True, thenSp:bool=False):
+        # TODO Case-ignoring option?
+        if ss: self.skipSpaces()
+        if self.bufLeft < len(const)+1: self.topOff()
         if not self.buf[self.bufPos:].startswith(const): return None
+        if thenSp and not self.buf[self.bufPos+len(const)].isspace(): return None
         self.bufPos += len(const)
         return const
 
     def readName(self, ss:bool=True) -> str:
-        """TODO: What if we're at a % ref?
-        TODO: Add options to allow/require initial "#"
+        """
+        TODO Add options to allow/require initial "#"
+        TODO Add option to require \\s, \\b, or \\W after? Meh.
+        This doesn't recognize parameter entity refs. Must it?
         """
         if ss: self.skipSpaces()
         mat = re.match(XStr._xmlName, self.buf[self.bufPos:])
@@ -296,28 +312,21 @@ class EntityFrame:
         self.bufPos += len(mat.group(1))
         return mat.group(1)
 
-    def readSepComment(self, ss:bool=True):
-        """Read a comment that's just the --...-- part.
-        """
-        if ss: self.skipSpaces()
-        mat = re.match(r"--([^-]|-[^-])+--", self.buf[self.bufPos:])
-        if not mat: return None
-        self.bufPos += len(mat.group(1))
-        return mat.group(1)
-
     def readQLit(self, ss:bool=True, keepPunc:bool=False) -> str:
+        # Support curly quotes?
         # allowParams:bool=True,  # TODO ???
         if ss: self.skipSpaces()
-        mat = re.match(r"'[^']*'|\"[^\"]*\"", self.buf[self.bufPos:])
+        mat = re.match(r"('[^']*'|\"[^\"]*\")", self.buf[self.bufPos:])
         if (mat is None): return None
-        self.bufPos += len(mat.group(1))
+        self.bufPos += len(mat.group())
         return mat.group(1) if keepPunc else mat.group(1)[1:-1]
 
-    def readQLitOrName(self, ss:bool=True) -> str:
+    def readQLitOrName(self, ss:bool=True, keepPunc:bool=False) -> str:
+        # TODO Distinguish which it found.
         if ss: self.skipSpaces()
-        rc = self.readQLit(ss)
+        rc = self.readQLit(ss, keepPunc)
         if rc is not None: return rc
-        rc = self.readName()
+        rc = self.readName(ss)
         if rc is not None: return rc
         return None
 
@@ -326,9 +335,12 @@ class EntityFrame:
         """Check if the regex matches immediately. If so, return the match object
         (so captures can be distinguished) and consume the matched text.
         If not, return None and consume nothing.
+        TODO Won't match across buffer topOffs or entities.
         """
         if ss: self.skipSpaces()
-        mat = re.match(regex, self.buf[self.bufPos:], flags=re.I if ignoreCase else 0)
+        self.topOff()
+        mat = re.match(regex, self.buf[self.bufPos:],
+            flags=re.I if ignoreCase else 0)
         if (not mat): return None
         self.bufPos += len(mat.group())
         return(mat)
@@ -361,14 +373,13 @@ class EntityFrame:
 
 ###############################################################################
 #
-class StackReader(EntityFrame):
+class StackReader:
     """Keep dictionaries of entities and notations, and a stack of
     open ones being read. Support very basic read operations (leave the
     fancy stuff for a subclass to add).
     """
-    def __init__(self, rootPath:str, encoding:str="utf-8"):
-        super().__init__(rootPath, encoding)
-        self.entPath    = []    # dirs to look in
+    def __init__(self, rootPath:str=None, encoding:str="utf-8", entPath:List=None):
+        self.entPath    = entPath    # dirs to look in
         self.generalDefs = {}
         self.parameterDefs = {}
         self.notationDefs = {}
@@ -381,21 +392,37 @@ class StackReader(EntityFrame):
             SpaceType.SDATA: self.sdataDefs
         }
 
+        self.rootDef = None
+        self.rootFrame = None
         self.entStack = []
         self.totLines = 0       # overall lines processed
         self.totChars = 0       # overall chars processed
 
         self.sgml = False
-
-        if rootPath:
-            if not os.path.isfile(rootPath):
-                raise IOError(f"File not found: {rootPath}.")
-            self.rootEDef = EntityDef(space=SpaceType.GENERAL,
-                name="#root", systemId=rootPath, encoding=encoding)
-            self.entStack.append(self.rootEDef)
+        self.sawSubsetOpen = False
 
         self.MAXEXPANSION = 1 << 20
         self.MAXSUBS = 1000
+
+        self.handlers = {}  # keyed off saxplayer.SaxEvents
+
+        if rootPath:
+            self.setupDocEntity(rootPath, encoding)
+            self.parseTop()
+
+    def SE(self, msg:str):
+        """Report a syntax error.
+        """
+        raise SyntaxError(msg + " at \n$$$" + self.bufSample + "$$$")
+
+    def setupDocEntity(self, rootPath:str, encoding:str="utf-8"):
+        assert len(self.entStack) == 0
+        if not os.path.isfile(rootPath):
+            raise IOError(f"File not found: {rootPath}.")
+        self.rootDef = EntityDef(space=SpaceType.GENERAL,
+            name="_root", systemId=rootPath, encoding=encoding)
+        self.rootFrame = EntityFrame(self.rootDef, encoding=encoding)
+        self.entStack.append(self.rootFrame)
 
     def addEntity(self, eDef:EntityDef) -> None:
         tgt = self.spaces[eDef.space]
@@ -422,15 +449,15 @@ class StackReader(EntityFrame):
             totpasses += 1
             s, n = re.subn(r"%([-_:.\w]+);", self.getParameterText, s)
             totsubs += n
-            if (totsubs > self.MAXSUBS): raise SyntaxError(
-                "Too many parameter entity substitutions, depth %d, count %d."
+            if (totsubs > self.MAXSUBS):
+                self.SE("Too many parameter entity substitutions, depth %d, count %d."
                     % (totpasses, totsubs))
         return s
 
     def getParameterText(self, mat):
         peName = mat.group(1)
-        if self.isOpen(SpaceType.PARAMETER, peName): raise SyntaxError(
-            "Parameter entity {peName} is already open.")
+        if self.isOpen(SpaceType.PARAMETER, peName):
+            self.SE("Parameter entity {peName} is already open.")
         try:
             peDef = self.parameterDefs[peName]
         except KeyError as e:
@@ -450,9 +477,10 @@ class StackReader(EntityFrame):
         eDef = self.findEntity(space, ename)
         if not eDef: raise KeyError(
             f"Unknown entity '{ename}'.")
-        if self.isOpen(space, ename): raise SyntaxError(
-            "Entity {peName} is already open.")
+        if self.isOpen(space, ename):
+            self.SE("Entity {peName} is already open.")
         ef = EntityFrame(eDef)
+        lg.info("Opening entity {ename}.")
         self.entStack.append(ef)
         return ef
 
@@ -491,23 +519,44 @@ class StackReader(EntityFrame):
 
     ### Reading
 
-    # The basic peek and consume just have the current frame do it,
-    # except that they call our stack-aware topOff first.
-    #
-    def peek(self, n:int=1) -> str:
-        """Return the next n characters (or fewer if EOF is coming),
-        without actually consuming them.
-        """
-        if self.bufLeft < n: self.topOff()
+    @property
+    def buf(self):
+        return self.curFrame.buf
+    @property
+    def bufPos(self) -> int:
+        return self.curFrame.bufPos
+    @bufPos.setter
+    def bufPos(self, n:int) -> None:
+        self.curFrame.bufPos = n
+    @property
+    def bufLeft(self) -> int:
+        return self.curFrame.bufLeft
+    @property
+    def bufSample(self) -> str:
+        preLen = min(80, self.bufPos)
+        postLen = min(80, self.bufLeft)
+        return (
+            self.buf[self.bufPos-preLen:self.bufPos] +
+            "$$$" +  #"\uFE0E" +  # WHITE FROWNING FACE+
+            self.buf[self.bufPos:self.bufPos+postLen])
+
+    def readConst(self, const:str, ss:bool=True, thenSp:bool=False):
+        return self.curFrame.readConst(const, ss, thenSp)
+    def readName(self, ss:bool=True):
+        return self.curFrame.readName(ss)
+    def readQLit(self, ss:bool=True, keepPunc:bool=False):
+        return self.curFrame.readQLit(ss, keepPunc)
+    def readRegex(self, regex:Union[str, re.Pattern], ss:bool=True, ignoreCase:bool=True):
+        return self.curFrame.readRegex(regex, ss, ignoreCase)
+    def readToString(self, s:str, consumeEnder:bool=True):
+        return self.curFrame.readToString(s, consumeEnder)
+    def readSepComment(self, ss:bool=True):
+        return self.curFrame.readSepComment(ss)
+
+    def peek(self, n:int=1):
         return self.curFrame.peek(n)
-
     def consume(self, n:int=1) -> str:
-        """Same as peek except the characters really ARE consumed.
-        But only if there are at least n available.
-        """
-        if self.bufLeft < n: self.topOff(n)
         return self.curFrame.consume(n)
-
     def pushBack(self, s:str) -> None:
         return self.curFrame.pushBack(s)
 
@@ -517,65 +566,76 @@ class StackReader(EntityFrame):
             self.curFrame.close()
             self.close()
 
-    def skipSpaces(self, allowComments:bool=True, allowParams:bool=True):
+    def skipSpaces(self, allowComments:bool=True, allowParams:bool=False):
         #crossEntityEnds:bool=False):  # TODO Implement stack!
         """Basically skip spaces, but at option, also:
             * skip a comment
             * expand if we hit a parameter entity reference.
         """
         nFound = 0
-        while (self.bufPos < len(self.buf)):
+        while True:
+            if not self.bufLeft:
+                if self.topOff() == EOF: self.close()
+                if not self.entStack: break
             c = self.buf[self.bufPos]
             if c.isspace():
                 self.bufPos += 1
                 nFound += 1
-            elif (allowComments and c == "-"):
-                com = self.readSepComment()
-                if (com): self.bufPos += len(com)
+            elif allowComments and c == "-":
+                com = self.readSepComment()  # TODO Save or return?
+                if com: self.bufPos += len(com)
                 nFound += len(com)
-            elif (allowParams and c == "%"):
+            elif allowParams and c == "%":
                 self.allowPE()
             else:
-                return
+                break
+        return
 
     def allowPE(self):
         """Used by skipSpaces and others when it's ok to have a parameter
         entity reference.
         """
         # skipspaces???? don't go circular
-        if (self.peek() != "%"): return False
+        if self.peek() != "%": return False
         self.bufPos += 1
         pename = self.readName()
-        if (not pename): raise SyntaxError(
-            f"Incomplete parameter entity reference name at '{pename}'.")
-        if (not self.consume() == ";"): raise SyntaxError(
-            f"Unterminated parameter entity reference to '{pename}'.")
-        if (pename not in self.parameterDefs): raise SyntaxError(
-            f"Unknown parameter entity '{pename}'.")
+        if not pename:
+            self.SE(f"Incomplete parameter entity reference name '{pename}').")
+        if not self.consume() == ";":
+            self.SE(f"Unterminated parameter entity reference to '{pename}'.")
+        self.bufPos += 1
+        if pename not in self.parameterDefs:
+            self.SE(f"Unknown parameter entity '{pename}'.")
         self.open(space=SpaceType.PARAMETER, ename=pename)
         self.entStack[-1].skipSpaces()
         return
 
     def readNameGroup(self, ss:bool=False) -> List:
-        """How
+        """Allows and mix of [&|,] or space between names.
+        t/his is slightly too permissive.
         """
         ngo = self.readConst("(", ss)
         if ngo is None: return None
         names = []
         while (True):
-            name = self.readName(ss=True)
-            if name is None: raise SyntaxError(
-                "Expected a name is name group.")
+            self.skipSpaces(allowParams=True)
+            name = self.readName()
+            if name is None:
+                self.SE("Expected a name in name group.")
             names.append(name)
             self.skipSpaces()
-            c = self.consume()
-            if (c == ")"): break
-            if c not in "|&,": raise SyntaxError(
-                f"Unexpected operator '{c}'.")
+            c = self.peek()
+            if c == ")": break
+            if c in "|&,": continue
         return names
 
     def readNameOrNameGroup(self, ss:bool=False) -> List:
-        if ss: self.skipSpaces()
+        """Such as: <!ELEMENT...
+            div
+            (h1 | h2 | h3)
+            (%soup;)
+        """
+        if ss: self.skipSpaces(allowParams=True)
         c = self.peek(1)
         if c == "(":
             names = self.readNameGroup(ss=True)
@@ -585,9 +645,66 @@ class StackReader(EntityFrame):
         return names
 
 
-###############################################################################
-#
-class Parser(StackReader):
+    def parseTop(self):
+        #import pudb; pudb.set_trace()
+        self.doCB(SaxEvents.START)
+        # TODO Swap all 'ss' to default to True, this is the exception
+        if e := self.readConst("<?xml", ss=False, thenSp=True):
+            e = self.readToString("?>", consumeEnder=True)
+            if e is None:
+                self.SE("Unexpected EOF in XML DCL.")
+            self.doCB(SaxEvents.XMLDCL, e)
+        if e := self.readConst("<!DOCTYPE", ss=True, thenSp=True):
+            docTypeName = self.readName(ss=True)
+            if docTypeName is None:
+                self.SE("Expected document type name in DOCTYPE.")
+            self.skipSpaces()
+            publicId, systemId = self.readLocation()
+            self.skipSpaces()
+            if self.peek(1) == "[":
+                self.sawSubsetOpen = True
+                self.consume(1)
+            self.doCB(SaxEvents.DOCTYPE, docTypeName, publicId, systemId)
+
+        while True:
+            self.skipSpaces(allowParams=True)
+            p = self.peek(1)
+            #lg.info("AT %s", p)
+            if p is None:
+                self.SE("Unexpected EOF in DOCTYPE.")
+            elif p == "]":
+                self.consume()
+                if self.readConst(">", ss=True):
+                    self.consume()
+                    self.doCB("DOCTYPEFIN")
+                    return
+                self.SE("Expected '>' to end DOCTYPE.")
+            elif p == "<":
+                if e := self.readComment():
+                    self.doCB(SaxEvents.COMMENT, e)
+                elif e := self.readElementDcl():
+                    self.doCB(SaxEvents.ELEMENTDCL, e)
+                elif e := self.readAttListDcl():
+                    # TODO by attr?
+                    self.doCB(SaxEvents.ATTLISTDCL, e)
+                elif e := self.readEntityDcl():
+                    self.doCB(SaxEvents.ENTITYDCL, e)
+                elif e := self.readNotationDcl():
+                    self.doCB(SaxEvents.NOTATIONDCL, e)
+                elif e := self.readPI():
+                    self.doCB(SaxEvents.PROC, e)
+                else:
+                    self.SE("Unexpected content is DOCTYPE after '<'.")
+            else:
+                self.SE(f"Expected ']' or '<' in DOCTYPE, not '{p}'.")
+        self.doCB(SaxEvents.FINAL)
+
+    def doCB(self, typ:SaxEvents, *args):
+        print(typ, *args)
+        if typ not in self.handlers:
+            pass
+        else:
+            self.handlers[typ](self, args)
 
     ### Readers for top-level DTD constructs
     #
@@ -597,7 +714,7 @@ class Parser(StackReader):
         piTarget = self.readName()
         piData = self.readToString("?>", consumeEnder=True)
         if piData is None:
-            raise SyntaxError("Unterminated PI")
+            self.SE("Unterminated PI.")
         return piTarget, piData
 
     def readComment(self) -> str:                       # COMMENT
@@ -605,70 +722,113 @@ class Parser(StackReader):
         if como is None: return None
         comData = self.readToString("-->", consumeEnder=True)
         if comData is None:
-            raise SyntaxError("Unterminated Comment")
+            self.SE("Unterminated Comment.")
         return comData
 
     def readElementDcl(self):                           # ELEMENT DCL
-        if self.readConst("<!ELEMENT", ss=True) is None: return None
+        if self.readConst("<!ELEMENT", thenSp=True) is None: return None
         omitStart = omitEnd = False
         names = self.readNameOrNameGroup(ss=True)
-        if names is None: raise SyntaxError(
-            "Expected element name or group.")
+        if names is None:
+            self.SE("Expected element name or group at {self.bufSample}.")
         if self.sgml:
             omitStart = omitEnd = False
             mat = self.readRegex(r"\s+([-O])\s+([-0])")
             if mat:
                 omitStart = mat.group(1) == "O"
                 omitEnd = mat.group(2) == "O"
-        mat = self.readModel()
-        return (names, omitStart, omitEnd, mat.group())
+        model = self.readModel()
+        if model is None: self.SE("Expected model or declared content for {names}.")
+        if not self.readConst(">"): self.SE("Expected '>' for ELEMENT dcl.")
+        return (names, omitStart, omitEnd, model)
 
-    def readNotationDcl(self):                          # NOTATION DCL
-        if self.readConst("<!NOTATION") is None: return None
+    def readNotationDcl(self) -> (str, str, str):       # NOTATION DCL
+        if self.readConst("<!NOTATION", thenSp=True) is None: return None
         name = self.readName(ss=True)
+        publicId, systemId = self.readLocation()
+        if publicId is None:
+            self.SE(f"Expected PUBLIC or SYSTEM identifier at {self.bufSample}.")
+        if not self.readConst(">"): self.SE("Expected '>' for NOTATION dcl.")
+        return (name, publicId, systemId)
+
+    def readLocation(self) -> (str, str):
         publicId = systemId = ""
-        if self.readConst("PUBLIC", ss=True):  # TODO Sw all to readName?
+        if self.readConst("PUBLIC", ss=True):
             publicId = self.readQLit(ss=True)
             systemId = self.readQLit(ss=True)
         elif self.readConst("SYSTEM"):
             systemId = self.readQLit(ss=True)
         else:
-            raise SyntaxError("Expected PUBLIC or SYSTEM identifier.")
-        return (name, publicId, systemId)
+            return None, None
+        return (publicId, systemId)
 
-    def readModel(self):
-        mat = self.readRegex(r"ANY|EMPTY|CDATA|RCDATA|#PCDATA)", ss=True)
-        if (mat): return mat.group()
+    def readModel(self) -> Union[List[str], str]:
+        # Perhaps add a readKeyWord(keys:Union(List, Dict, Enum))?
+        # TODO Refactor into NameTuple(typ, rep, List)?
+        mat = self.readRegex(r"(ANY|EMPTY|CDATA|RCDATA|#PCDATA)\b", ss=True)
+        if mat: return mat.group()
         model = self.readModelGroup(ss=True)
-        rep = self.readRegex(r"[*?+]", ss=True)
-        rep = rep.group() if rep else ""
-        return model + rep
+        if model is None: return None
+        if rep := self.readRegex(r"[*?+]", ss=True): model.append(rep.group())
+        return model
 
-    def readModelGroup(self, ss:bool=True):
+    def readModelGroup(self, ss:bool=True) -> str:
         """Extract and return a balanced paren group like a content model.
         Handily, you can't have parens as escaped data in there.
+        Does not check that each group is uniform on [,|&].
+        TODO PE refs?
         """
         if ss: self.skipSpaces()
-        if (self.peek() != "("): return None
-        self.consume()
+        if not self.readConst("("): return None
+        tokens = [ "(" ]
         depth = 1
         endsAt = None
+        curToken = ""
         for i in range(self.bufPos, len(self.buf)):
-            c = self.buf[i]
-            if (c == "("): depth += 1
-            elif (c == ")"): depth -= 1
-            if (depth == 0):
-                endsAt = i
-                break
-        if (not endsAt): return None
-        mod = self.buf[self.bufPos:endsAt+1]
-        self.curFrame.bufPos = endsAt + 1
-        return mod
+            c = self.consume()
+            if XStr.isXmlName(curToken+c):
+                curToken += c
+                continue
+            if curToken:  # Anything BUT more of the token.
+                tokens.append(curToken)
+                curToken = ""
+            if c.isspace():
+                continue
+            elif c == "#":
+                if not (kwd := self.readConst("PCDATA", ss=False)):
+                    self.SE(f"'#' but not #PCDATA' in model.")
+                if curToken:
+                    self.SE(f"Misplaced '#PCDATA' in model.")
+                tokens.append("#PCDATA")
+            elif c == "(":
+                if XStr.isXmlName(tokens[-1]):
+                    self.SE("Misplaced ')' in model.")
+                tokens.append(c); depth += 1
+            elif c == ")":
+                if tokens[-1] in "|,&" or tokens[-1] == "#PCDATA":
+                    self.SE("Misplaced ')' in model.")
+                tokens.append(c); depth -= 1
+                if depth == 0: endsAt = i; break
+            elif c in "|,&":
+                if (tokens[-1] not in  ")+?*" and tokens[-1] != "#PCDATA"
+                    and not XStr.isXmlName(tokens[-1])):
+                    self.SE(f"Misplaced op '{c}' in model.")
+                tokens.append(c)
+            elif c in "+?*":
+                if tokens[-1] != ")" and not XStr.isXmlName(tokens[-1]):
+                    self.SE(f"Misplaced repetition op '{c}' in model.")
+                tokens.append(c)
+            else:
+                self.SE(f"Unexpected character '{c}' in model.")
+        if not endsAt: return None
+        return tokens
 
     attrTypes = {
         "NMTOKEN":1, "NMTOKENS":1, "NUMTOKEN":1, "NUMTOKENS":1,
         "IDREF":1, "IDREFS":1, "ID":1,
         "CDATA":1, "ENTITY":1, "ENTITIES":1, "NOTATION":1, }
+
+    # DocumentType.AttrType for XSD additions
 
     attrDefaults = {
         "#IMPLIED":1, "#REQUIRED":1, "#FIXED":1, "#CURRENT":1, "#CONREF":1, }
@@ -680,43 +840,45 @@ class Parser(StackReader):
                             thing   (b|c|d)     "D"
                             spam    ENTITY      FIXED "chap1">
         """
-        if (self.readConst("<!ATTLIST") is None): return None
+        if self.readConst("<!ATTLIST", thenSp=True) is None: return None
         self.skipSpaces()
-        if (self.peek() == "("):
-            elNames = self.readNameGroup()
+        if self.peek() == "(":
+            eNames = self.readNameGroup()
         else:
-            elNames = [ self.readName() ]
+            eNames = [ self.readName() ]
 
         atts = {}
         while (True):
             attDftKwd = dftVal = None
+            if self.readConst(">", ss=True): break
             attName = self.readName(ss=True)
-            if attName is None: raise SyntaxError(
-                "Expected attribute name.")
-
-            attType = self.readName(ss=True)
-            if attType is None: raise SyntaxError(
-                "Expected attribute type.")
-            if attType not in self.attrTypes: raise SyntaxError(
-                f"Unknown attribute type {attType}.")
+            if attName is None:
+                self.SE(f"Expected attribute name in ATTLIST for {eNames}.")
 
             self.skipSpaces()
-            self.allowPE()
+            if self.peek() == "(":
+                enumItems = self.readModelGroup(ss=True)  # TODO: No nesting....
+            elif not (attType := self.readName(ss=True)):
+                self.SE("Expected attribute type or enum-group.")
+            elif attType not in self.attrTypes:
+                # TODO Option for XSD builtins, too?
+                self.SE(f"Unknown type {attType} for attribute {attName}.")
+
+            self.skipSpaces(allowParams=True)
             c = self.peek()
             if c == "#":
                 attDftKwd = self.consume()
                 attDftKwd += self.readName() or ""
-                if attDftKwd not in self.attrDefaults: raise SyntaxError(
-                    f"Unknown attribute default {attDftKwd}.")
+                if attDftKwd not in self.attrDefaults:
+                    self.SE(f"Unknown attribute default {attDftKwd} for attribute {attName}.")
                 if attDftKwd == "#FIXED":
                     dftVal = self.readQLit(ss=True)
             elif c in '"\'':
                 dftVal = self.readQLit()
-
             atts[attName] = ( attName, attType, attDftKwd, dftVal)
-            self.skipSpaces()
-            if self.peek() != ">": raise SyntaxError
-            return elNames, atts
+
+        self.skipSpaces()
+        return eNames, atts
 
     def readEntityDcl(self):                            # ENTITY DCL
         """Examples:
@@ -725,36 +887,74 @@ class Parser(StackReader):
             <!ENTITY chap1 SYSTEM "/tmp/chap1.xml">
             <!ENTITY if1 SYSTEM "/tmp/fig1.jpg" NDATA jpeg>
         """
-        if self.readConst("<!ENTITY") is None:
-            return None
+        if self.readConst("<!ENTITY", thenSp=True) is None: return None
         self.skipSpaces()
         isParam = (self.readConst("%") is not None)
         name = self.readName(ss=True)
         publicId = systemId = lit = ""
-        key = self.readName(ss=True)
-        if key == "PUBLIC":
-            publicId = self.readQLit(ss=True)
-            systemId = self.readQLit(ss=True)
-        elif key == "SYSTEM":
-            systemId = self.readQLit(ss=True)
-        else:
+        publicId, systemId = self.readLocation()
+        if (publicId is None):
             lit = self.readQLit(ss=True)
 
         notn = None
         if self.readConst("NDATA", ss=True):
             notn = self.readName(ss=True)
-            if notn is None: raise SyntaxError(
-                "Expected notation name after NDATA.")
+            if notn is None: self.SE("Expected notation name after NDATA.")
 
         self.skipSpaces()
-        if not self.readConst(">"): raise SyntaxError(
-            "Expected '>' to close declaration.")
+        if not self.readConst(">"): self.SE("Expected '>' for ENTITY dcl.")
         return (name, isParam, publicId, systemId, lit, notn)
+
+
+    ###########################################################################
+    #
+    def readStartTag(self, ss:bool=True) -> (str, Dict, bool):
+        attrs = {}
+        if not self.readConst("<", ss): return None, None, None
+        if not (aname := self.readName(ss)):
+            self.SE("Expected name in end-tag.")
+        while (True):
+            aname, avalue = self.readAttr(ss=True)
+            if aname is None: break
+            attrs[aname] = avalue
+        empty = False
+        if self.readConst("/>", ss): empty = True
+        elif self.readConst(">", ss): empty = False
+        else: self.SE("Unclosed start-tag for '{aname}'.")
+        self.doCB(SaxEvents.START, aname, attrs)
+        if empty: self.doCB(SaxEvents.END, aname)
+        return aname, attrs, empty
+
+    def readAttr(self, ss:bool=True, keepPunc:bool=False) -> (str, str):
+        if not (aname := self.readName(ss)): return None, None
+        if not self.readConst("=", ss):
+            self.SE("Expected '=' after attribute name.")
+        if not (avalue := self.readQLit(ss, keepPunc)): return None, None
+        return aname, avalue
+
+    def readEndTag(self, ss:bool=True) -> str:
+        if not self.readConst("</", ss): return None
+        if not (aname := self.readName(ss)):
+            self.SE("Expected name in end-tag.")
+        if not self.readConst(">", ss):
+            self.SE("Unclosed end-tag for '{aname}'.")
+        self.doCB(SaxEvents.END, aname)
+        return aname
+
+    def readCDATA(self, ss:bool=True) -> str:
+        if not self.readConst("<![CDATA[", ss): return None
+        data = self.readToString("]]>")
+        if not data: self.SE("Unclosed CDATA section.")
+        self.doCB(SaxEvents.CDATASTART)
+        self.doCB(SaxEvents.CHAR, data)
+        self.doCB(SaxEvents.CDATAEND)
+        return data
 
 
 ###############################################################################
 #
+#ifh = codecs.open("sample.dtd", "rb", encoding="utf-8")
+#rawData = ifh.read()
+pdt = StackReader("sample.dtd", encoding="utf-8")
 
-ifh = codecs.open("../sample.dtd", "rb", encoding="utf-8")
-rawData = ifh.read()
-pdt = ParseDocType(rawData)
+print("Done.")
