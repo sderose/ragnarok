@@ -13,11 +13,11 @@ from xmlstrings import XmlStrings as XStr
 from basedom import getDOMImplementation, DOMImplementation, Document, Node, Element
 
 #from gendoc import genDoc
-from alogging import FormatRec
+#from alogging import FormatRec
 
 
 lg = logging.getLogger("makeTestDoc")
-fr = FormatRec()
+#fr = FormatRec()
 
 nameStartChars = XStr.allNameStartChars()
 nameChars = nameStartChars + XStr.allNameChars()
@@ -35,13 +35,12 @@ class DBG:
 
     @staticmethod
     def dumpNode(node:Node, msg:str=""):
-        lg.warning("\n####### %s (nodeName %s)",msg, node.nodeName)
+        lg.warning("\n#######" + msg)
         node.writexml(sys.stderr, indent='    ', addindent='  ', newl='\n')
 
     @staticmethod
     def dumpNodeData(node:Node, msg:str=""):
-        lg.warning("\n####### %s (nodeName %s, addr %x)",
-            msg, node.nodeName, id(node))
+        lg.warning("\n####### " + msg)
         if node.parentNode is None:
             pname = lname = rname = "None"
             cnum = cof = -1
@@ -90,7 +89,7 @@ class DBG:
 
     @staticmethod
     def dumpNodeAsJsonX(node:Node, msg:str=""):
-        lg.warning("\n######## %s", msg)
+        lg.warning("\n####### " + msg)
         try:
             getattr(Node, "toJsonX")
             lg.warning("\n####### %s: %s\n", msg, node.toJsonX(indent='  '))
@@ -107,9 +106,9 @@ class DAT:
     ns_uri = "https://example.com/namespaces/foo"
 
     root_name = 'html'
+    child0_name = 'child0'
     child1_name = 'child1'
     child2_name = 'child2'
-    child3_name = 'child3'
     grandchild_name = 'grandchild'
     p_name = "para"
     inline_name = 'i'
@@ -139,9 +138,9 @@ class DAT_HTML(DAT):
     ns_uri = "https://w3.org/namespaces/xhtml4"
 
     root_name = 'html'
-    child1_name = 'head'
-    child2_name = 'body'
-    child3_name = 'br'
+    child0_name = 'head'
+    child1_name = 'body'
+    child2_name = 'br'
     grandchild_name = 'div'
     p_name = "p"
 
@@ -149,9 +148,9 @@ class DAT_DocBook(DAT):
     ns_uri = "https://docbook.org/namespaces/article"
 
     root_name = 'article'
+    child0_name = 'sec'
     child1_name = 'sec'
-    child2_name = 'sec'
-    child3_name = 'br'
+    child2_name = 'br'
     grandchild_name = 'para'
     p_name = "para"
 
@@ -183,11 +182,11 @@ class makeTestDoc0:
             "doc":         None,
             "docEl":       None,
 
+            "child0":      None,
             "child1":      None,
             "child2":      None,
             "grandchild":  None,
             "textNode1":   None,
-            "child3":   None,
             "mixedNode":   None,
 
             "attrNode":    None,
@@ -306,16 +305,16 @@ class makeTestDoc0:
 #
 class makeTestDoc2(makeTestDoc0):
     """Create a document with 3 child nodes:
-        child1: the first with an attribute and text node
-        child2: the second with a child
-        child3: the third empty
+        child0: the first with an attribute and text node
+        child1: the second with a child
+        child2: the third empty
     """
     def __init__(self, dc=DAT, show:bool=False):
         super().__init__(dc)
         assert isinstance(self.n.impl, DOMImplementation)
         assert isinstance(self.n.doc, Document)
         assert isinstance(self.n.docEl, Element)
-        assert self.n.child1 is None
+        assert self.n.child0 is None
 
         self.createRestOfDocument()
 
@@ -326,26 +325,26 @@ class makeTestDoc2(makeTestDoc0):
     def createRestOfDocument(self):
         """Store stuff we want to refer back to, in self.docItems.
         """
-        self.n.child1 = self.n.doc.createElement(self.dc.child1_name)
-        self.n.child1.setAttribute(self.dc.at_name, self.dc.at_value)
-        self.n.child1.setAttribute(self.dc.at_name2, self.dc.at_value2)
-        self.n.child1.setAttribute(self.dc.at_name3, self.dc.at_value3)
-        self.n.docEl.appendChild(self.n.child1)
+        self.n.child0 = self.n.doc.createElement(self.dc.child0_name)
+        self.n.child0.setAttribute(self.dc.at_name, self.dc.at_value)
+        self.n.child0.setAttribute(self.dc.at_name2, self.dc.at_value2)
+        self.n.child0.setAttribute(self.dc.at_name3, self.dc.at_value3)
+        self.n.docEl.appendChild(self.n.child0)
 
-        self.n.child2 = self.n.doc.createElement(self.dc.child2_name)
-        self.n.docEl.appendChild(self.n.child2)
+        self.n.child1 = self.n.doc.createElement(self.dc.child1_name)
+        self.n.docEl.appendChild(self.n.child1)
         assert len(self.n.docEl.childNodes) == 2
-        assert self.n.docEl.childNodes[1] == self.n.child2
+        assert self.n.docEl.childNodes[1] == self.n.child1
 
         self.n.grandchild = self.n.doc.createElement(self.dc.grandchild_name)
-        self.n.child2.appendChild(self.n.grandchild)
+        self.n.child1.appendChild(self.n.grandchild)
 
         self.n.textNode1 = self.n.doc.createTextNode(self.dc.some_text)
-        self.n.child1.appendChild(self.n.textNode1)
+        self.n.child0.appendChild(self.n.textNode1)
 
         # Add empty node
-        self.n.child3 = self.n.doc.createElement(self.dc.child3_name)
-        self.n.docEl.appendChild(self.n.child3)
+        self.n.child2 = self.n.doc.createElement(self.dc.child2_name)
+        self.n.docEl.appendChild(self.n.child2)
 
         if (not self.alreadyShowedSetup):
             self.dumpNode(self.n.docEl, "Setup produced:")

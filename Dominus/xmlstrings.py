@@ -5,9 +5,7 @@
 # 2024-08: Separated from rest of DOMExtensions.
 #
 import re
-from datetime import datetime
 from typing import Union, Match, Dict, List
-from typing import NewType
 
 from html.entities import codepoint2name, name2codepoint
 
@@ -108,13 +106,13 @@ each defining a range of characters that are XML name start characters.
 * _nameCharAddlRanges: Like _nameStartCharRanges, but including only
 the *additional* ranges allowed as XML name characters.
 
-* _nameStartCharReList: A single string expressing the same ranges
+* _nameStartCharSpec: A single string expressing the same ranges
 as _nameStartCharRanges, in the form to go inside [] in a regex.
 
-* _nameCharAddlReList: A single string expressing the same ranges
+* _addlSpec: A single string expressing the same ranges
 as _nameStartCharRanges, in the form to go inside [] in a regex.
 
-* _xmlSpaceChars: A string containing only the XML space characters,
+* xmlSpaceChars: A string containing only the XML space characters,
 namely SPACE, TAB, LF, and CR. This does not include other Unicode space chars.
 
 In addition, `allNameStartChars()` and `allNameCharAddls()`
@@ -124,9 +122,9 @@ much less compact than the regex-style range notation).
 
 ==Useful regexes==
 
-* _xmlSpaceExpr: A regex that matches one or more XML space characters.
+* xmlSpaceExpr: A regex that matches one or more XML space characters.
 
-* _xmlSpaceOnlyRegex: A regex that matches a string if it
+* xmlSpaceOnlyRegex: A regex that matches a string if it
 consists entirely of XML space characters (this can also be approximated by
 testing is str.strip() is empty/falsish).
 
@@ -149,6 +147,8 @@ QName does not allow for "##any", "#text", or other reserved names.
 =Related commands=
 
 `basedom.py` -- a pure Python DOM++ implementation that uses this.
+
+`documenttype.py` -- some overlap on supported datatypes.
 
 `domextensions.py` -- prior home of this package.
 
@@ -209,80 +209,20 @@ For the most recent version, see [http://www.derose.net/steve/utilities] or
 =Options=
 """
 
-def rangesToReList(ranges:List) -> str:
+def rangesToSpec(ranges:List) -> str:
     """Convert a list of codepoint pairs (start, end) to the form to put
     inside [] in a regex. Doesn't insert the brackets themselves.
+    TODO: Tweak to support rest of Unicode past BMP.
     """
     buf = ""
     for r in ranges:
-        if ( r[0] > r[1] or r[0] <= 0 or r[1] > 0xFFFF):
+        if ( r[0] > r[1] or r[0] < 0 or r[1] > 0xFFFF):
             raise ValueError("Bad range, %04x to %04x." % (r[0], r[1]))
-        buf += "\\u%04x-\\u%04x" % (r[0], r[1])
+        if (r[0] == r[1]): buf += "\\u%04x" % (r[0])
+        else: buf += "\\u%04x-\\u%04x" % (r[0], r[1])
     return buf
 
 
-###############################################################################
-# Define common XML and XSD type as subtypes of Python str.
-# This mainly informs linters (and humans) about them, for type-hinting etc.
-# But you could attach run-time checking.
-#
-base64Binary        = NewType('base64Binary', bytes)
-hexBinary           = NewType('hexBinary', bytes)
-
-### Truth values
-boolean             = NewType('boolean', bool)
-
-### Various integers
-byte                = NewType('byte', int)
-short               = NewType('short', int)
-#int                 = NewType('int', int)
-integer             = NewType('integer', int)
-long                = NewType('long', int)
-nonPositiveInteger  = NewType('nonPositiveInteger', int)
-negativeInteger     = NewType('negativeInteger', int)
-nonNegativeInteger  = NewType('nonNegativeInteger', int)
-positiveInteger     = NewType('positiveInteger', int)
-unsignedByte        = NewType('unsignedByte', int)
-unsignedShort       = NewType('unsignedShort', int)
-unsignedInt         = NewType('unsignedInt', int)
-unsignedLong        = NewType('unsignedLong', int)
-
-### Real numbers
-#decimal            = NewType('decimal', float)
-double              = NewType('double', float)
-#float               = NewType('float', float)
-
-### Dates and times (unfinished)  TODO: Check vs. XML Schema Datatypes
-gDay                = NewType('gDay', datetime)
-gMonth              = NewType('gMonth', datetime)
-gMonthDay           = NewType('gMonthDay', datetime)
-gYear               = NewType('gYear', datetime)
-gYearMonth          = NewType('gYearMonth', datetime)
-date                = NewType('date', datetime)
-dateTime            = NewType('dateTime', datetime)
-time                = NewType('time', datetime)
-duration            = NewType('duration', datetime)
-
-### Strings
-language            = NewType('language', str)
-normalizedString    = NewType('normalizedString', str)
-string              = NewType('string', str)
-token               = NewType('token', str)
-anyURI              = NewType('anyURI', str)
-
-### XML constructs (note caps)
-XmlName             = NewType('XmlName', str)
-XmlQName            = NewType('XmlQName', str)
-XmlNmtoken          = NewType('XmlNmtoken', str)
-
-ID                  = NewType('ID', str)
-IDREF               = NewType('IDREF', str)
-IDREFS              = NewType('IDREFS', str)
-Name                = NewType('Name', str)
-NCName              = NewType('NCName', str)
-NMTOKEN             = NewType('NMTOKEN', str)
-NMTOKENS            = NewType('NMTOKENS', str)
-QName               = NewType('QName', str)
 
 
 ###############################################################################
@@ -291,9 +231,9 @@ class XmlStrings:
     """This class contains static methods and variables for basic XML
     operations such as testing syntax forms, escaping strings, etc.
     """
-    _xmlSpaceChars = " \t\r\n"
-    _xmlSpaceExpr = r"[" + _xmlSpaceChars + r"]+"
-    _xmlSpaceOnlyRegex = re.compile("^[%s]*$" % (_xmlSpaceChars))
+    xmlSpaceChars = " \t\r\n"
+    xmlSpaceExpr = r"[" + xmlSpaceChars + r"]+"
+    xmlSpaceOnlyRegex = re.compile("^[%s]*$" % (xmlSpaceChars))
 
     # This excludes colon (":"), since we want to distinguish QNames.
     _nameStartCharRanges = [
@@ -316,7 +256,7 @@ class XmlStrings:
     ]
 
     _nameCharAddlRanges = [
-        ( ord("-"), ord("-") ), # Watch out backslashing, put first
+        ( ord("-"), ord("-") ), # Watch out for regex
         ( ord("."), ord(".") ),
         ( ord("0"), ord("9") ),
         ( 0x00B7, 0x00B7 ),     # MIDDLE DOT (e.g. for Catalan)
@@ -324,16 +264,25 @@ class XmlStrings:
         ( 0x203F, 0x2040 ),     # Undertie and Char tie
     ]
 
-    _nameStartCharReList = rangesToReList(_nameStartCharRanges)
-    _nameCharAddlReList = (_nameStartCharReList +
-        rangesToReList(_nameCharAddlRanges))
+    _nonXmlRanges = [
+        ( 0x0000, 0x0008 ),
+        ( 0x000B, 0x000B ),
+        ( 0x000E, 0x001F ),
+        ( 0xD800, 0xDFFF ),
+    ]
 
-    # Following don't enforce matching *whole* input -- methods later can add $.
-    _xmlName  = r"^([%s][%s]*)" % (
-        _nameStartCharReList, _nameCharAddlReList+_nameStartCharReList)
-    _xmlQName = r"^(%s(:%s)?" % (_xmlName, _xmlName)
-    _xmlPName = r"^(%s)(:%s)" % (_xmlName, _xmlName)
-    _xmlNmtoken = r"^([%s]+)" % (_nameCharAddlReList)
+    _nameStartCharSpec = rangesToSpec(_nameStartCharRanges)
+    _addlSpec = rangesToSpec(_nameCharAddlRanges)
+    _nameCharSpec = _nameStartCharSpec + _addlSpec
+    _nonXmlSpec = rangesToSpec(_nonXmlRanges)
+
+    # These do not include ^...$, e.g. so can match against start of a buffer.
+    xmlNmtoken = r"[%s]+" % (_nameCharSpec)
+    xmlNCName  = r"[%s][%s]*" % (_nameStartCharSpec, _nameCharSpec)
+
+    xmlQName = r"%s(:%s)?" % (xmlNCName, xmlNCName)
+    xmlQQName = r"%s(:%s)*" % (xmlNCName, xmlNCName)
+    xmlPName = r"%s:%s" % (xmlNCName, xmlNCName)
 
     @staticmethod
     def allNameStartChars() -> str:
@@ -364,50 +313,39 @@ class XmlStrings:
     #
     @staticmethod
     def isXmlChars(s:str) -> bool:
-        """Just determine if all the individual chars are allowed.
+        """At least one char, and all the individual chars are allowed.
         """
-        for c in s:
-            n = ord(c)
-            if (n > 0x1FFFF or n > sys.maxunicode): return False
-            if (n < 0x20 and c not in [ "\t", "\r", "\n" ]): return False
-        return True
+        return s and not re.search(r"[%s]" % (XmlStrings._nonXmlSpec), s)
 
     @staticmethod
     def isXmlName(s:str) -> bool:
         """Return True for a NON-namespace-prefixed (aka) local name.
         """
-        return bool(re.match(XmlStrings._xmlName+"$", s))
+        return bool(re.match(f"^{XmlStrings.xmlNCName}$", s))
     isXmlLName = isXmlName
 
     @staticmethod
     def isXmlQName(s:str) -> bool:
         """Return True for a namespace-prefixed OR unprefixed name.
         """
-        parts = s.partition(":")
-        if (parts[2] and not XmlStrings.isXmlName(parts[2])): return False
-        return XmlStrings.isXmlName(parts[0])
-        #if (re.match(XmlStrings._xmlQName, s)): return True
-        #return False
+        return bool(re.match(f"^{XmlStrings.xmlQName}$", s))
 
     @staticmethod
     def isXmlPName(s:str) -> bool:
         """Return True only for a namespace-prefixed name.
         """
-        parts = s.partition(":")
-        return XmlStrings.isXmlName(parts[0]) and XmlStrings.isXmlName(parts[2])
-        #if (re.match(XmlStrings._xmlPName, s)): return True
-        #return False
+        return bool(re.match(f"^{XmlStrings.xmlPName}$", s))
 
     @staticmethod
     def isXmlNmtoken(s:str) -> bool:
-        return bool(re.match(XmlStrings._xmlNmtoken, s))
+        return bool(re.match(f"^{XmlStrings.xmlNmtoken}$", s))
 
     @staticmethod
     def isXmlNumber(s:str) -> bool:
         """Check whether the token is a number. This turns off re.Unicode,
         lest we get all the non-Arabic digits (category [Nd]).
         """
-        return bool(re.match(r"\d+$", s, flags=re.ASCII))
+        return bool(re.match(r"^\d+$", s, flags=re.ASCII))
 
     @staticmethod
     def escapeAttribute(s:str, quoteChar:str='"') -> str:
@@ -464,12 +402,13 @@ class XmlStrings:
 
     @staticmethod
     def escapeASCII(s:str, width:int=4, base:int=16, htmlNames:bool=True) -> str:
-        """Turn all non-ASCII characters into character references,
-        and then do a regular escapeText().
+        """Delete truly prohibited chars, turn all non-ASCII characters
+        into character references, then do a regular escapeText().
         @param width: zero-pad numbers to at least this many digits.
         @param base: 10 for decimal, 16 for hexadecimal.
         @param htmlNames: If True, use HTML 4 named entities when applicable.
         """
+        assert base in [ 10, 16 ]
         def escASCIIFunction(mat:Match) -> str:
             """Turn all non-ASCII chars to character refs.
             """
@@ -491,7 +430,7 @@ class XmlStrings:
         """Remove the C0 control characters not allowed in XML.
         Unassigned Unicode characters higher up are left unchanged.
         """
-        return re.sub("[\x00-\x08\x0b\x0c\x0e-\x1f]", "", str(s))
+        return re.sub(r"[%s]+" % (XmlStrings._nonXmlSpec), "", s)
 
     @staticmethod
     def unescapeXml(s:str) -> str:
@@ -499,12 +438,13 @@ class XmlStrings:
         to the literal characters.
         """
         assert isinstance(s, str)
-        return re.sub(r'&(#[xX]?)?(\w+);', XmlStrings.unescapeXmlFunction, s)
+        return re.sub(r'&(#[xX]?)?(\w+);', XmlStrings.unescapeXmlFunction, str(s))
 
     @staticmethod
     def unescapeXmlFunction(mat:Match) -> str:
         """Convert HTML entities and numeric character references to literal chars.
         group 1 is #, #x, or nothing; group 2 is the rest.
+        TODO Add option for alt dict
         """
         if (mat.group(1) is None):
             if (mat.group(2) in name2codepoint):
@@ -520,18 +460,28 @@ class XmlStrings:
         """By default, this only normalizes *XML* whitespace,
         per the XML spec, section 2.3, grammar rule 3.
 
-        NOTE: Many methods of removing whitespace in Python do not suffice
+        NOTE: Some methods of removing whitespace do not suffice
         for Unicode. See https://stackoverflow.com/questions/1832893/
 
-        U+200B ZERO WIDTH SPACE is left untouched below.
-        TODO Sync with basedom.WSDefs
+        U+200B ZERO WIDTH SPACE, U+FEFF ZERO WIDTH NO-BREAK SPACE are not in \\s.
+        But U+00A0 NO-BREAK SPACE is.
+        TODO Provide all basedom.WSDefs options.
         """
         if (allUnicode):
             s = re.sub(r"\s+", " ", s, flags=re.UNICODE)
         else:
-            s = re.sub(XmlStrings._xmlSpaceExpr, " ", s)
+            s = re.sub(XmlStrings.xmlSpaceExpr, " ", s)
         s = s.strip(" ")
         return s
+
+    collapseSpace = normalizeSpace
+
+    @staticmethod
+    def replaceSpace(s:str, allUnicode:bool=False) -> str:
+        """Per xmlschema-2, section 4.3.6
+        """
+        if (allUnicode): return re.sub(r"\s", " ", s, flags=re.UNICODE)
+        return re.sub(r"[\t\r\n]", " ", s)
 
     @staticmethod
     def stripSpace(s:str, allUnicode:bool=False) -> str:
@@ -540,7 +490,7 @@ class XmlStrings:
         if (allUnicode):
             s = re.sub(r'^\s+|\s+$', "", s, flags=re.UNICODE)
         else:
-            s = s.strip(XmlStrings._xmlSpaceChars)
+            s = s.strip(XmlStrings.xmlSpaceChars)
         return s
 
     @staticmethod
@@ -551,18 +501,18 @@ class XmlStrings:
             if (isinstance(attrs, str)):
                 tag += " " + attrs.strip()
             else:
-                tag += XmlStrings.dictToAttrs(attrs, sortAttributes=sort)
+                tag += XmlStrings.dictToAttrs(attrs, sort=sort)
         tag += "/>" if empty else ">"
         return tag
 
     @staticmethod
-    def dictToAttrs(dct, sortAttributes:bool=False, normValues:bool=False) -> str:
+    def dictToAttrs(dct, sort:bool=False, normValues:bool=False) -> str:
         """Turn a dict into a serialized attribute list (possibly sorted
         and/or space-normalized). Escape as needed.
         """
         sep = " "
         anames = dct.keys()
-        if (sortAttributes): anames = sorted(list(anames))
+        if (sort): anames = sorted(list(anames))
         attrString = ""
         for a in (anames):
             v = dct[a]

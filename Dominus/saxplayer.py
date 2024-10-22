@@ -26,6 +26,8 @@ class SaxEvents(Enum):
     ATTRIBUTE    = 20
     ENTREF       = 21
 
+    # DTD events
+    #
     XMLDCL       = 100
     ELEMENTDCL   = 101
     ATTLISTDCL   = 102
@@ -34,3 +36,9 @@ class SaxEvents(Enum):
     SDATADCL     = 106
     NOTATIONDCL  = 105
 
+    # Potential overlap events
+    START_MULTI  = 201
+    END_MULTI    = 202
+    SUSPEND      = 203
+    RESUME       = 204
+    END_OLIST    = 205

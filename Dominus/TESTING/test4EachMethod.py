@@ -11,7 +11,8 @@ from collections import defaultdict
 from typing import List
 
 #pylint: disable=W0401,W0611,W0621
-from domexceptions import HierarchyRequestError
+from domexceptions import *
+#from domexceptions import HierarchyRequestError
 #from domexceptions import NotFoundError
 
 from domenums import NodeType
@@ -103,7 +104,6 @@ class TestExceptions(unittest.TestCase):
         self.assertIsInstance(theClass(), Exception)
 
     def tests(self):
-        from domexceptions import *
         self.isEx(DOMException)
         self.isEx(RangeError)
         self.isEx(IndexSizeError)
@@ -392,7 +392,7 @@ class testNode(unittest.TestCase):
             el.prependChild(n)
         self.assertEqual(len(el), priorLen+10)
 
-        self.assertFalse(node.hasChildNodes())
+        self.assertFalse(node.hasChildNodes)
         #node.insertBefore(newNode, ch)
         #node.removeChild(oldChild)
         #node.replaceChild(newChild, oldChild)
@@ -645,7 +645,7 @@ class testElement(unittest.TestCase):
         el5StartTag = el5.startTag
         el5EndTag = el5.endTag
         el5.innerXML = "hello"
-        DBG.dumpNode(el5, msg=f"after innerXML set: {el5.outerXML}")
+        #DBG.dumpNode(el5, msg=f"after innerXML set: {el5.outerXML}")
         self.assertEqual(len(el5.childNodes), 1)
         self.assertTrue(el5.childNodes[0].isTextNode)
         self.assertEqual(el5.childNodes[0].data, "hello")
@@ -908,9 +908,9 @@ class testAttr(unittest.TestCase):
         self.assertTrue(anode1.isEqualNode(anode2))
         anode3 = anode2.cloneNode()
         eqBit = anode1.isEqualNode(anode3)
-        if (not eqBit):
-            DBG.dumpNode(anode1, msg="anode 1 v. 3:")
-            DBG.dumpNode(anode3)
+        #if (not eqBit):
+            #DBG.dumpNode(anode1, msg="anode 1 v. 3:")
+            #DBG.dumpNode(anode3)
         self.assertTrue(eqBit)
 
         #self.assertTrue(attrExpr, attr1.outerXML)
@@ -991,7 +991,7 @@ class testGenerators(unittest.TestCase):
         for k in nexpected:
             nfound = nodeTypeCounts[k] if k in nodeTypeCounts else 0
             if (nfound != nexpected[k]):
-                DBG.msg(f"Expect {nexpected[k]} of '{k}'. but found {nfound}.")
+                #DBG.msg(f"Expect {nexpected[k]} of '{k}'. but found {nfound}.")
                 self.assertEqual(nfound, nexpected[k])
         self.assertTrue(set(nodeTypeCounts.keys()), set(nexpected.keys()))
 

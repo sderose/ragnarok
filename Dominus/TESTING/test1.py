@@ -41,22 +41,22 @@ class TestDOMNode(unittest.TestCase):
 
     def test_sibling_nodes(self):
         lg.info("Starting test_sibling_nodes")
+        child0 = self.n.doc.createElement(DAT.child0_name)
         child1 = self.n.doc.createElement(DAT.child1_name)
-        child2 = self.n.doc.createElement(DAT.child2_name)
+        self.n.docEl.appendChild(child0)
         self.n.docEl.appendChild(child1)
-        self.n.docEl.appendChild(child2)
 
+        #DBG.dumpNodeData(child0, msg="child0")
         #DBG.dumpNodeData(child1, msg="child1")
-        #DBG.dumpNodeData(child2, msg="child2")
-        self.assertEqual(child1.previousSibling, None)
-        self.assertIs(child1.nextSibling, child2)
-        self.assertIs(child2.previousSibling, child1)
-        self.assertEqual(child2.nextSibling, None)
+        self.assertEqual(child0.previousSibling, None)
+        self.assertIs(child0.nextSibling, child1)
+        self.assertIs(child1.previousSibling, child0)
+        self.assertEqual(child1.nextSibling, None)
 
-        self.assertTrue(child1.isFirstChild)
-        self.assertFalse(child1.isLastChild)
-        self.assertFalse(child2.isFirstChild)
-        self.assertTrue(child2.isLastChild)
+        self.assertTrue(child0.isFirstChild)
+        self.assertFalse(child0.isLastChild)
+        self.assertFalse(child1.isFirstChild)
+        self.assertTrue(child1.isLastChild)
 
         self.assertIs(self.n.docEl.childNodes[0], self.n.docEl.firstChild)
         self.assertIs(self.n.docEl.childNodes[1], self.n.docEl.lastChild)
@@ -71,15 +71,15 @@ class TestDOMNode(unittest.TestCase):
 
     def test_extensions(self):
         lg.info("Starting test_extensions")
+        child0 = self.n.doc.createElement(DAT.child0_name)
         child1 = self.n.doc.createElement(DAT.child1_name)
-        child2 = self.n.doc.createElement(DAT.child2_name)
+        self.n.docEl.appendChild(child0)
         self.n.docEl.appendChild(child1)
-        self.n.docEl.appendChild(child2)
 
-        #self.assertIs(child1.previous, self.n.doc)
-        self.assertIs(child1.next, child2)
-        self.assertIs(child2.previous, child1)
-        self.assertIs(child2.next, None)
+        #self.assertIs(child0.previous, self.n.doc)
+        self.assertIs(child0.next, child1)
+        self.assertIs(child1.previous, child0)
+        self.assertIs(child1.next, None)
 
     def test_via_checkNode(self):
         lg.info("Starting test_via_checkNode")

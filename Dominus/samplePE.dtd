@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html [
+   <!-- of course comments are ok in here -->
+   <!-- including
+   multi-line
+   comments with pseudo <tags> and <?PIs?> <? huh < in > them.
+   -->
    <!ELEMENT html   (head, body)>
    <!ELEMENT head   (title)>
    <!ELEMENT body   (div|p)*>
+
+   <!ENTITY % lists     "ul | ol | dl">
+   <!ENTITY % heads     "h1 | h2 | h3 | h4 | h5">
+   <!ENTITY % inlines   "i | b | tt | u | sup | sub | abbr">
 
    <!ELEMENT div        (#PCDATA | p | ul | ol | dl | h1 | h2 | h3 | h4 | h5)*>
    <!ELEMENT p          (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
@@ -10,10 +19,22 @@
    <!ELEMENT ol         (li*)>
    <!ELEMENT li         (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
 
-   <!ELEMENT dl         (dt, dd)* >
+   <!ELEMENT dl         (dt, dd)*>
+    <!-- dt dd
+   <!ELEMENT (%heads;)  (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
+   <!ELEMENT (%inlines) (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
+    -->
+
+   <!NOTATION png   SYSTEM "pblort">
+   <!NOTATION jpg   PUBLIC "-//jblort" "jblort">
+
+   <!ENTITY spam "eggs">
+   <!ENTITY % scene23 "zork">
+   <!ENTITY scene24   SYSTEM "zork.xml">
+   <!ENTITY scene25   SYSTEM "zork.png" NDATA png>
 
    <!ATTLIST p
-       lang      CDATA    'en'
+       xml:lang  CDATA    'en'
        class     NMTOKENS #IMPLIED
        id        ID       #IMPLIED
        alt       CDATA    #IMPLIED
@@ -22,16 +43,10 @@
        ents      ENTITIES #IMPLIED
        nt        NMTOKEN  #IMPLIED
 
+       ntn       NOTATION (png|jpg) #REQUIRED
        egg       (foo)         "foo"
        eggs      (ban|bar|baz) "bar"
 
        monty     CDATA    #FIXED "python&#65;&lt;"
        >
-   <!NOTATION png   SYSTEM "pblort">
-   <!NOTATION jpg   PUBLIC "-//jblort" "jblort">
-
-   <!ENTITY spam      "eggs">
-   <!ENTITY scene24   SYSTEM "zork.xml">
-   <!ENTITY scene25   SYSTEM "zork.png" NDATA png>
-
 ]>

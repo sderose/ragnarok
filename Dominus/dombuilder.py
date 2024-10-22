@@ -13,7 +13,7 @@ from typing import IO, Union
 import logging
 
 from xml.parsers import expat
-from domenums import RWords
+from domenums import RWord
 
 lg = logging.getLogger("dombuilder")
 #logging.basicConfig(level=logging.INFO)
@@ -121,7 +121,7 @@ class DomBuilder():
         self.domDocType = None
         self.theParser = None
 
-        self.characterSet = 'utf-8'
+        self.encoding = 'utf-8'
         self.version = "1.1"
         self.standalone = None
 
@@ -208,7 +208,7 @@ class DomBuilder():
         if self.domDoc is None:
             lg.info("Creating Document via {self.theDocumentClass.__name__}.")
             self.domDoc = self.theDocumentClass()
-            self.domDoc.characterSet = self.characterSet
+            self.domDoc.encoding = self.encoding
             self.domDoc.version = self.version
             self.domDoc.standalone = self.standalone
         else:
@@ -220,7 +220,7 @@ class DomBuilder():
         el = self.domDoc.createElement(name)
         #el.startLoc = self.theParser.CurrentByteIndex
         if attributes:
-            nsp = RWords.NS_PREFIX+":"
+            nsp = RWord.NS_PREFIX+":"
             for n, v in attributes.items():
                 if n.startswith(nsp):
                     if el.declaredNS is None: el.declaredNS = {}
@@ -322,8 +322,11 @@ class DomBuilder():
             raise ValueError(f"Unexpected encoding '{encoding}'.")
         if standalone in [ "yes", "no" ]:
             self.standalone = standalone
-        elif standalone:
+        elif standalone in [ -1, None, "" ]:  # expat seems to like -1
+            pass
+        else:
             raise ValueError(f"Unexpected standalone '{standalone}'.")
+        # TODO Store them
 
     def StartDoctypeDeclHandler(self, name:str,
         literal=None, publicId:str=None, systemId:str=None) -> None:

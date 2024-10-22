@@ -1,17 +1,8 @@
-==issues==
+==issues with contains==
 
 * __contains__ vs. contains
 
 * removeNode vs. removeSelf vs. del
-
-* What should eq/ne/lt/le/ge/gt do?
-For Elements document order seems far
-more useful; but what of text, attrs, maybe other CharacterData, where
-normal string compare might be better? Order on Attrs is weird -- all attrs
-of same node would compare equal. Maybe hide these for CharacterData?
-
-* Should NodeList allow dups or not, or have an option? Are
-Frag and NodeList the same?
 
 * empty lists are falsish -- but it seems like empty nodes/elements shouldn't be.
 
@@ -38,15 +29,9 @@ just a child. That method is also available, and does what DOM days. However,
 to avoid confusion the author recommends you use the synonymous
 "node1.hasDescendant(node2)" instead.
 
-* is [] with arguments beyond those of just list, more useful or confusing?
 
-* How best to interface multiple/extended selectors?
+==Semantic questions==
 
-* How best to make case, whitespace, etc. switchable?
-
-* How should ns matching in the face of None and "" work?
-
-* Semantic questions
 ** Should Node be constructable?
 ** Should cloneNode copy userData and/or ownerDocument?
 ** Should removeAttribute___ unlink from ownerDoc/ownerEl?
@@ -60,7 +45,21 @@ to avoid confusion the author recommends you use the synonymous
     def __exit__(self, et, ev, tb):
         self.unlink()
 
-* Whether/how to support EntityRefs.
+
+==Selectors==
+
+* is [] with arguments beyond those of just list, more useful or confusing?
+
+* How best to interface multiple/extended selectors?
+
+
+==Namespaces==
+
+* How should ns matching in the face of None and "" work?
+
+
+==Whether/how to support EntityRefs==
+
 They can be useful b/c:
 ** Transclusion could unify them (esp. external/system entities) with linking;
 then they should be able to show up in many places.
@@ -82,59 +81,79 @@ first and/or last such.
 For now, I'm ignoring EntRef nodes entirely, and things like innerXML,
 outerXML, and insertAdjacentXML normalize.
 
-* should `cloneNode()` copy `userData`?
+* auto entities, unicode-name ents
+
+
+==Classes==
 
 * SituatedList/CompositionList?
+
+* Perhaps derive from UserList instead of list?
+
+* Should plainnode include the list dunders?
+
+* The validator
+
+
+==Methods==
+
+* Should toprettyxml() etc. offer options to wrap text/comments?
+
+* should `cloneNode()` copy `userData`?
 
 * charset vs. inputencoding
 
 * relation of removeChild to unlink. Is there a way to tell when it *really*
 gets lost?
 
-* Perhaps derive from UserList instead of list?
+* Should things test for bad names?
+    has/get/set/removeAttribute
+    create Element / Attr / Document / PI target
+    ID methods???
+
+* Should the whatwg CharacterData ...data calls return the result?
+Range errors? Negatives?
+
+* Sync forEachSaxEvent with lxml.sax.saxify
+
+* How best to make case, whitespace, etc. switchable?
+
+* Should useNodePath() count from the node it's invoked on? Or maybe it should
+only be on Document anyway?
+
+* What should eq/ne/lt/le/ge/gt do?
+For Elements document order seems far
+more useful; but what of text, attrs, maybe other CharacterData, where
+normal string compare might be better? Order on Attrs is weird -- all attrs
+of same node would compare equal. Maybe hide these for CharacterData?
+
+Or should Attr compare data? They don't have position....
+
+
+==Exceptions==
 
 * Should inner/outerXml
 raise HierarchyRequestError, TypeError, or NotSupportedError?
-
-* Should tostring() etc. offer options to wrap text/comments?
-
-* Should plainnode include the list dunders?
 
 * Python NotImplementedError vs. DOM NotSupportedError.
 
 * Should (e.g.) child-related calls on CharacterData raise
 HierarchyRequestError (as now and in minidom),
 or NotImplementedError vs. DOM NotSupportedError
-or InvalidModificationError or TypeError or InvalidNodeTypeError.
+or InvalidModificationError or TypeError or InvalidNodeTypeError?
 
-Current Exception census:
-  34  raise HierarchyRequestError
-  24  raise NotSupportedError
-   9  raise InvalidCharacterError
-   8  raise ValueError
-   8  raise IndexError
-   7  raise TypeError
-   5  raise NotFoundError
-   2  raise KeyError
-   1  raise an
-   1  raise OperationError
-   1  raise NamespaceError
-   1  raise DataError
-   1  raise AttributeError
+* mixin/inclusions -- dcl like incl exceptions?
 
-* Should useNodePath count from the node it's invoked on? Or maybe it should
-only be on Document anyway?
+* build in xinclude (switchable of course)
 
-* Should things test for bad names?
-    has/get/set/removeAttribute
-    create Element / Attr / Document / PI target
-    ID methods???
+* sync doctype to tree.docinfo.internalDTD
 
-* Acronym case, attr vs attribute
+* Direct DC support?
 
-* Should the whatwg CharacterData ...data calls return the result?
-How to they count offset/len? Range errors? Negatives?
+* global attributes?
 
-* Sync forEachSaxEvent with lxml.sax.saxify
 
-*
+==See also==
+
+IBM’s Websphere Development Studio Client (WDSC) has a utility that converts
+DTDs to XSDs.

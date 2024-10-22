@@ -70,7 +70,7 @@ class NodeType(Enum):
         except ValueError:
             return "[UNKNOWN_NODETYPE]"
 
-class RWords(str, Enum):
+class RWord(str, Enum):
     """Reserved words for XML (and additional contexts?)
     Including superclass str lets us use them in string contexts.
 
@@ -80,6 +80,7 @@ class RWords(str, Enum):
         -- Jane Austen, Emma, chapter VI
     """
     NS_PREFIX   = "xmlns"
+    ID_QNAME    = "xml:id"
 
     NN_TEXT     = "#text"
     NN_PI       = "#pi"
@@ -151,7 +152,7 @@ class CaseTx(Enum):
 
 ###############################################################################
 #
-class WSDefs(Enum):
+class WSDef(Enum):
     """Ways to define blank space.
 
     "And the people did whatever seemed right in their own eyes."
@@ -198,48 +199,48 @@ class WSDefs(Enum):
     )
 
     @staticmethod
-    def spaces(which:'WSDefs'=""):
-        which = toEnum(WSDefs, which)
-        if which == WSDefs.XML: return " \t\n\r"
-        if which == WSDefs.WHATWG: return " \t\n\r\f"
-        if which == WSDefs.JAVASCRIPT:
-            return WSDefs.c0All + "\xA0" + WSDefs.unicodeZs + WSDefs.unicodeOther
-        if which == WSDefs.CPP: return WSDefs.c0All
-        if which == WSDefs.UNICODE_ZS:
-            return WSDefs.unicodeZs
-        if which == WSDefs.UNICODE_ALL:
-            return WSDefs.unicodeZs + WSDefs.unicodeOther
-        if which == WSDefs.PY_ISSPACE:
-            return WSDefs.c0All + WSDefs.unicodeZs + WSDefs.unicodeOther
-        #if which == WSDefs.PY_RE:
-        #    return WSDefs.c0All + WSDefs.unicodeZs + WSDefs.unicodeOther + WSDefs.UnicodeCf
+    def spaces(which:'WSDef'=""):
+        which = toEnum(WSDef, which)
+        if which == WSDef.XML: return " \t\n\r"
+        if which == WSDef.WHATWG: return " \t\n\r\f"
+        if which == WSDef.JAVASCRIPT:
+            return WSDef.c0All + "\xA0" + WSDef.unicodeZs + WSDef.unicodeOther
+        if which == WSDef.CPP: return WSDef.c0All
+        if which == WSDef.UNICODE_ZS:
+            return WSDef.unicodeZs
+        if which == WSDef.UNICODE_ALL:
+            return WSDef.unicodeZs + WSDef.unicodeOther
+        if which == WSDef.PY_ISSPACE:
+            return WSDef.c0All + WSDef.unicodeZs + WSDef.unicodeOther
+        #if which == WSDef.PY_RE:
+        #    return WSDef.c0All + WSDef.unicodeZs + WSDef.unicodeOther + WSDef.UnicodeCf
         # And, oddly, unassigned code points, which I'm ignoring.
         return " \t\n\r\f"
 
     @staticmethod
-    def isspace(s:str, which:'WSDefs'="") -> bool:
+    def isspace(s:str, which:'WSDef'="") -> bool:
         """Like Python is___(), True if non-empty and all chars in category.
         """
-        which = toEnum(WSDefs, which)
-        nonSpaceExpr = f"[^{WSDefs.spaces(which)}]"
+        which = toEnum(WSDef, which)
+        nonSpaceExpr = f"[^{WSDef.spaces(which)}]"
         return s!="" and not re.search(nonSpaceExpr, s)
 
     @staticmethod
-    def containsspace(s:str, which:'WSDefs'="") -> bool:
+    def containsspace(s:str, which:'WSDef'="") -> bool:
         """True if has at least one char of category.
         """
-        which = toEnum(WSDefs, which)
-        spaceExpr = f"[^{WSDefs.spaces(which)}]"
+        which = toEnum(WSDef, which)
+        spaceExpr = f"[^{WSDef.spaces(which)}]"
         return re.search(spaceExpr, s)
 
     @staticmethod
-    def normspace(s:str, which:'WSDefs'="", tgtChar:str=" ") -> bool:
+    def normspace(s:str, which:'WSDef'="", tgtChar:str=" ") -> bool:
         """Reduce internal spaces/runs to a single tgtChar, and drop
         leading and trailing spaces.
         """
-        which = toEnum(WSDefs, which)
+        which = toEnum(WSDef, which)
         assert len(tgtChar) == 1
-        spaceExpr = f"[^{WSDefs.spaces(which)}]"
+        spaceExpr = f"[^{WSDef.spaces(which)}]"
         return re.sub(spaceExpr, tgtChar, s).strip(tgtChar)
 
 

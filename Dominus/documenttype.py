@@ -4,260 +4,658 @@
 #
 import re
 from enum import Enum
-from datetime import datetime, date, time
-from collections import defaultdict
-from typing import List, Set, Iterable
+from datetime import datetime, date, time, timedelta
+from collections import defaultdict, namedtuple
+
+from typing import List, Set, Any, Union
+from typing import NewType
 
 from xmlstrings import XmlStrings as XStr
 from domenums import NodeType  #, UNormTx, CaseTx
 from basedom import Node
 
-NmToken = str
+NmToken = str  # TODO Switch to NewType
 
 descr = """
-This library provides a basic interface to XML schema information, plus extensions.
-An instance should be loadable from XSD, RelaxNG, or DTD, and provide a
-common API for any of them. That's a tall order, so I'm just starting
-with DTD++. That should at least help with
-converting DTDs to the others, which is commonly desired.
+This library provides a basic interface to XML schema information.
+An instance should be loadable from XSD, RelaxNG, or DTD, and provide a common
+API for any of them. That's hard, so I'm starting with DTD++ and parts of XSD.
 
 The hardest bits will likely be (a) preserving DTD classes implemented via
 parameter entities, and (b) making that compatible with XSD complex types.
 
 I may also integrate the shorthand declarations I rough out in XSD_compact
 and elsewhere.
-
-
-==Extensions==
-
-DTDs are extended in these ways:
-
-* New declaration types, essentially subtypes of ENTITY.
-These apply the notion of descriptive markup more consistently to DTDs.
-DTDs organize entities mainly by their source (literal vs. system locations),
-and where they can be referenced (parameter vs. general). DTDs do usefully provide
-a way to declarat the notation (data format) of system entities like images.
-SGML has a few other special cases, like starttag entities, that I don't see
-as very important.
-
-I think a more useful organization for schema designers distinguishes more
-concepts such as sets of element or attribute names (closely related to XSD
-complex types) vs. special-character entities (which should be easy to extend)
-vs. XInclude objects (as distinct from others).
-
-** Extend ENTITY to allow multiple SYSTEM identifier literals, to be
-tried from left to right.
-    <!ENTITY chap2 SYSTEM "/home/ents/chap2.xml" "/xml/common/ents/chap2.xml">
-
-** Add distinct CHAR declarations for special-character entities.
-They are like ENTITY declarations, but can define multiple characters,
-each to have a single Unicode codepoint value:
-    <!CHAR bull 0x2022>
-    <!CHAR nbsp 160, msp 0x2003>
-
-** Add LITERAL declaration, just like ENTITY except only qlit value.
-     <!LITERAL foo "hello">
-
-** Add CTYPE declarations to correspond to XSD complex types. They
-can be referenced within content models via %xxx;. Think of them as
-custom reserved words; they cannot be named "PCDATA" etc). They are retained
-when the model is parsed.
-    <!CTYPE fontish "i b u tt">
-
-*** Possibly add set operations on them?
-    <!CTYPE inlines (#fontish) - (tt) + (em string sup sub)>
-
-
-* SYSTEM identifier enhancemnts. There has always been a difficulty with
-resolving PUBLIC and SYSTEM identifiers. Neither PUBLIC ids nor URNs were
-well understood or accepted. Most SGML and XML software added variations
-of "catalogs", which could map identifiers to real filesystem paths.
-Passing documents back and forth is often a pain because you have to replace
-those path mappings for your local filesystem.
-
-There seem to be some obvious, more familiar solutions:
-** The time-honored *nix PATH mechanism (and its many kin like
-CDPATH, PYTHONPATH, CLASSPATH, etc.). Reserve an environment variable
-such as XMLPATH, in which XML parsers should look to resolve system IDs.
-
-** Let SYSTEM identifiers take any number of quoted literals, not just one,
-and try them in order.
-
-** Let system identifiers interpolate environment variables.
-
-**Add a BASE declaration(s), which let you factor out commonalities.
-I've always found it odd the HTML only gives one BASE, rather than supporting
-multiple named ones; but either way is better than none:
-
-    <!BASE "c:\\stuff" "/Users/jsmith/XML/entities"...>
-
-
-* Elements
-
-** Add {m,n} suffix where [*+?] go.
-
-** Recognize %... to refer to CTYPE items within content models
-
-** For consistency, allow "*" as a synonym for "ANY":
-    <!ELEMENT stuff *>
-
-** For consistency, allow "()" as a synonym for "EMPTY":
-    <!ELEMENT hr ()>
-
-
-* Attributes
-
-* Add "*" as a reserved name in ATTLIST, to declare global attributes.
-    <!ATTLIST * id #IMPLIED
-
-* Allow multiple SYSTEM identifiers, used from left to right.
-
-* Allow fragment identifiers on SYSTEM identifiers?
-
-* attribute types: all XSD built-in types, plus .
-
-
-
-===Attributes
-    * Add all xsd built-in types
-    * Generalize repeatability -- just suffix type with *?+ or {}
-    * Add COID -- must be >1, on same eltype, unique within eltype
-    * Add SCOPEID -- unique within ancestor of type
-    * Add STACKID -- value is accumulated by attr type
-
-===Content models
-    * content model tokens with {}
-    * incl/excl exceptions (but no whitespace effects!)
-
-===Entities etc.===
-    * Multiple qlits for SYSTEM ID
-    * <!ENTITY name SET (x y z)>
-    * <!ENTITY name PREFIX ...>
-    * <!NOTATION name IXML ...
-
-
-==See also==
-IBM’s Websphere Development Studio Client (WDSC) has a utility that converts DTDs to XSDs. While in WDSC right click on the DTD and select Generate→ XML Schema.
-
-
-==To do==
-    * Finish
-    * Figure out catalog/path interface
-    * How to store state of in-progress element validation? API?
-    * XSD facets
-    * Namespaced IDs?
-    * Attr casting -- offer setCasterCallback?
-    * Easy way to support attr types/defaults in doc?
-      Why not just ATTLIST?
-      types = r"CDATA|ID|IDREF|IDREFS|ENTITY|ENTITIES|NMTOKEN|NMTOKENS"
-      dfts = r"#REQUIRED|#IMPLIED|#FIXED"  # Plus maybe more
-      qLit =  r"('[^']*'|"[^"]*")"
-      f"<!ATTLIST (\\w+) (\\w+) ({type}|NOTATION|\\([^\\)]+\\)) ({dft}) ({qLit})>"
 """
 
 
 ###############################################################################
 #
-class BaseType(Enum):
-    """Map each XSD type to an underlying Python/generic type.
-    How best to treat *semantic* attr types like IDs, ENTITIES, etc?
-        (not to mention conref, current, etc.)
+class XsdType(dict):
+    def __getitem__(self, key):
+        # TODO fetch up the inheritance chain?
+        return super().get(key, None)
+
+MinMax = namedtuple('MinMax',
+    ['minInclusive', 'minExclusive', 'maxExclusive', 'maxInclusive'])
+
+ALPHA = "[a-zA-Z]"
+ALNUM = "[a-zA-Z0-9]"
+HEX = "[0-9a-fA-F]"
+DIGIT = r"\d"
+EXPNAN = r"([eE][-+]?\d+)?|INF|NaN"
+
+# These are the signed, positive maxima (rest calculated from them)
+MAXLONG = 9223372036854775807
+MAXINT = 2147483647
+MAXSHORT = 32767
+MAXBYTE = 127
+
+TZONE = r"(Z|(\+|-)((0\d|1[0-3]):[0-5]\d|14:00))?"
+GYEAR = r"-?([1-9]\d{3,}|0\d{3})"
+GMONTH = r"-?([1-9]\d{3,}|0\d{3})"
+GDAY = r"\(0\[1-9\]\|\[12\]\\d\|3\[01\]\)"
+TIME = (r"\(\(\[01\]\\d\|2\[0-3\]\):\[0-5\]\\d:\[0-5\]\\d\(\\\.\\d\+\)\?\|" +
+    r"\(24:00:00\(\\\.0\+\)\?\)\)")
+
+NMTOKEN = XStr.xmlNmtoken
+NCNAME = "^%s$" % (XStr.xmlNCName)
+QNAME = "^%s$" % (XStr.xmlQName)
+QQNAME = "^%s$" % (XStr.xmlQQName)
+
+
+###########################################################################
+# See [https://www.w3.org/TR/xml/]
+# iscastable; iscanonical; ispybaseof;
+# topybase; to canonical;
+# lists/unions?
+# inheritable fetch?
+#
+AttrTypes = {
+    "string": XsdType({
+        "pybase": str,
+        "base": None,
+        "pattern": r".*",
+        "length": None,
+        "minLength": None,
+        "maxLength": None,
+        "whiteSpace": "preserve"
+    }),
+    "normalizedString": XsdType({
+        "pybase": str,
+        "base": "string",
+        "whiteSpace": "replace"
+    }),
+    "token": XsdType({
+        "pybase": str,
+        "base": "normalizedString",
+        "whiteSpace": "collapse"
+    }),
+    "language": XsdType({
+        "pybase": str,
+        "base": "token",
+        "pattern": r"[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*" # TODO
+    }),
+    "NMTOKEN": XsdType({
+        "pybase": str,
+        "base": "token",
+        "pattern": NMTOKEN,
+    }),
+    "NMTOKENS": XsdType({
+        "pybase": str,
+        "list": True,
+        "base": "NMTOKEN",
+        "pattern": r"%s(\s+%s)*" % (NMTOKEN, NMTOKEN),
+    }),
+    "Name": XsdType({
+        "pybase": str,
+        "base": "token",
+        "pattern": QQNAME,
+    }),
+    "NCName": XsdType({
+        "pybase": str,
+        "base": "Name",
+        "pattern": NCNAME,
+    }),
+    "ID": XsdType({
+        "pybase": str,
+        "base": "NCName",
+        "pattern": NCNAME,
+    }),
+    "IDREF": XsdType({
+        "pybase": str,
+        "base": "NCName",
+    }),
+    "IDREFS": XsdType({
+        "pybase": str,
+        "base": "IDREF",
+        "list": True,
+        "pattern": r"%s(\s+%s)*" % (QNAME, QNAME),
+    }),
+    "ENTITY": XsdType({
+        "pybase": str,
+        "base": "NCName",
+        "pattern": NCNAME,
+    }),
+    "ENTITIES": XsdType({
+        "pybase": str,
+        "base": "ENTITY",
+        "list": True,
+        "pattern": r"%s(\s+%s)*" % (NCNAME, NCNAME),
+    }),
+    "QName": XsdType({
+        "pybase": str,
+        "base": "string",
+        "pattern": QNAME,
+        "whiteSpace": "collapse",
+    }),
+    "NOTATION": XsdType({
+        "pybase": str,
+        "base": "string",
+        "pattern": QNAME,
+        "whiteSpace": "collapse",
+    }),
+
+    ###########################################################################
+    "decimal": XsdType({
+        "pybase": int,
+        "base": None,
+        "pattern": r"(\+|-)?((\d+(\.\d*)?)|(\.\d+))",
+        "totalDigits": None,
+        "fractionDigits": None,
+        "whiteSpace": "collapse",
+    }),
+    "integer": XsdType({
+        "pybase": int,
+        "base": "decimal",
+        "pattern": r"[\-+]?\d+",
+        "fractionDigits": 0,
+    }),
+    "nonPositiveInteger": XsdType({
+        "pybase": int,
+        "base": "integer",
+        "pattern": r"(-\d+)|0",
+        "range": MinMax(None, None, None, 0),
+    }),
+    "negativeInteger": XsdType({
+        "pybase": int,
+        "base": "nonPositiveInteger",
+        "pattern": r"-\d+",
+        "range": MinMax(None, None, None, -1),
+    }),
+    "nonNegativeInteger": XsdType({
+        "pybase": int,
+        "base": "integer",
+        "pattern": r"(\+)?\d+",
+        "range": MinMax(0, None, None, None),
+    }),
+    "positiveInteger": XsdType({
+        "pybase": int,
+        "base": "nonNegativeInteger",
+        "pattern": r"(\+)?\d*[1-9]\d*",
+        "range": MinMax(1, None, None, None),
+    }),
+    "long": XsdType({
+        "pybase": int,
+        "base": "integer",
+        "range": MinMax(-MAXLONG-1, None, None, MAXLONG),
+    }),
+    "int": XsdType({
+        "pybase": int,
+        "base": "long",
+        "range": MinMax(-MAXINT-1, None, None, MAXINT),
+    }),
+    "short": XsdType({
+        "pybase": int,
+        "base": "int",
+        "range": MinMax(-MAXSHORT-1, None, None, MAXSHORT),
+    }),
+    "byte": XsdType({
+        "pybase": int,
+        "base": "short",
+        "range": MinMax(-MAXBYTE-1, None, None, MAXBYTE),
+    }),
+    "unsignedLong": XsdType({
+        "pybase": int,
+        "base": "nonNegativeInteger",
+        "range": MinMax(0, None, None, MAXLONG<<1 + 1),
+    }),
+    "unsignedInt": XsdType({
+        "pybase": int,
+        "base": "unsignedLong",
+        "range": MinMax(0, None, None, MAXINT<<1 + 1),
+    }),
+    "unsignedShort": XsdType({
+        "pybase": int,
+        "base": "unsignedInt",
+        "range": MinMax(0, None, None, MAXSHORT<<1 + 1),
+    }),
+    "unsignedByte": XsdType({
+        "pybase": int,
+        "base": "unsignedShort",
+        "range": MinMax(0, None, None, MAXBYTE<<1 + 1),
+    }),
+
+    ###########################################################################
+    "boolean": XsdType({
+        "pybase": bool,
+        "base": None,
+        "pattern": r"true|false|1|0",
+        "whiteSpace": "collapse",
+    }),
+
+    ###########################################################################
+    "float": XsdType({
+        "pybase": float,
+        "base": "decimal",
+        "pattern": r"(\+|-)?(\d+(\.\d*)?|\.\d+)" + EXPNAN,
+        "whiteSpace": "collapse",
+    }),
+    "double": XsdType({
+        "pybase": float,
+        "base": "decimal",
+        "pattern": r"(\+|-)?(\d+(\.\d*)?|\.\d+)" + EXPNAN,
+        "whiteSpace": "collapse",
+    }),
+
+    ###########################################################################
+    "duration": XsdType({
+        "pybase": timedelta,
+        "base": None,
+        "pattern": r"-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?",
+        "whiteSpace": "collapse",
+    }),
+
+    ###########################################################################
+    "dateTime": XsdType({
+        "pybase": datetime,
+        "base": None,
+        "pattern": GYEAR + r"-" + GMONTH + r"-" + GDAY + r"T" + TIME + TZONE,
+        "whiteSpace": "collapse",
+    }),
+    "time": XsdType({
+        "pybase": time,
+        "base": None,
+        "pattern": TIME + TZONE,
+        "whiteSpace": "collapse",
+    }),
+    "date": XsdType({
+        "pybase": date,
+        "base": None,
+        "pattern": GYEAR + r"-" + GMONTH + r"-" + GDAY + TZONE,
+        "whiteSpace": "collapse",
+    }),
+    "gYearMonth": XsdType({
+        "pybase": date,
+        "base": None,
+        "pattern": GYEAR + r"-" + GMONTH + TZONE,
+        "whiteSpace": "collapse",
+    }),
+    "gYear": XsdType({
+        "pybase": date,
+        "base": None,
+        "pattern": GYEAR + TZONE,
+        "whiteSpace": "collapse",
+    }),
+    "gMonthDay": XsdType({
+        "base": None,
+        "pattern": r"--" + GMONTH + r"-" + GDAY + TZONE,
+        "whiteSpace": "collapse",
+    }),
+    "gDay": XsdType({
+        "base": None,
+        "pattern": r"---" + GDAY + TZONE,
+        "whiteSpace": "collapse",
+    }),
+    "gMonth": XsdType({
+        "base": None,
+        "pattern": r"--" + GMONTH + TZONE,
+        "whiteSpace": "collapse",
+    }),
+
+    ###########################################################################
+    "hexBinary": XsdType({
+        "pybase": bytes,
+        "base": "string",
+        "pattern": r"([0-9a-fA-F]{2})*",
+        "whiteSpace": "collapse",
+    }),
+
+    ###########################################################################
+    "base64Binary": XsdType({
+        "pybase": bytes,
+        "base": "string",
+        "pattern": (
+            r"((([A-Za-z0-9+/] ?){4})*(([A-Za-z0-9+/] ?){3}" +
+            r"[A-Za-z0-9+/]|([A-Za-z0-9+/] ?){2}" +
+            r"[AEIMQUYcgkosw048] ?=|[A-Za-z0-9+/] ?[AQgw] ?= ?=))?"),
+        "whiteSpace": "collapse",
+    }),
+
+    ###########################################################################
+    "anyURI": XsdType({
+        "pybase": str,
+        "base": "string",
+        "pattern": r".*",  # Too lenient
+        "whiteSpace": "collapse",
+    }),
+}  # AttrTypes
+
+
+def fitsDatatype(val:Any, typ:Union[str, type]) -> bool:
+    """Who counts? Must it *be* of the type, or just fit?
+    By both Python and XSD lights, probably just fit...
+    What about None?
+    TODO Check whether *already* (normalized, cast, etc), or castable?
+    TODO Generators for canonical form.
+    TODO Case?
     """
-    BIT = bool
-    NUM = float
-    INT = int
-    STR = str
-    BIN = bytes
-    TIM = datetime
+    if isinstance(typ, type):
+        try:
+            tval = typ(val)
+            return True
+        except ValueError:
+            return False
 
-floatExpr = r"([-+]?\d+(\.\d+)([eE][-+]?\d+)?)|INF|-INF|NaN"
-dateExpr = r"\d\d\d\d:\d\d:\d\d"
-timeExpr = r"\d\d:\d\d:\d\d(\.\d+)?"
-datetimeExpr = dateExpr + "T" + timeExpr
-uintExpr = r"\d+"
-intExpr = r"[-+]?d+"
-negintExpr = r"(-\d+)"
-posintExpr = r"\+?\d+"
-XmlNameExpr = r"[.\w][-.\w]*"
-UriExpr = r"(([a-zA-Z0-9-$_.+!*,();/?:@=&])|(%\x\x))+"
+    try:
+        typeSpec = AttrTypes[typ]
+    except KeyError as e:
+        raise TypeError(f"Unrecognized type {typ} for value {val}.") from e
 
-XmlNameExprS = r"%s(\s+%s)*" % (XmlNameExpr, XmlNameExpr)
+    if "list"  in typeSpec:
+        return True  # TODO Finish!
 
-isX = XStr.isXmlName
+    sval = str(val)
+    if "whiteSpace" in typeSpec:
+        if typeSpec["whiteSpace"] == "collapse": sval = XStr.collapseSpace(sval)
+        elif typeSpec["whiteSpace"] == "replace": sval = XStr.replaceSpace(sval)
+    if "pybase" in typeSpec:
+        try:
+            _castVal = typeSpec["pybase"](sval)
+        except ValueError:
+            return False, "pybase"
+    if "minLength" in typeSpec:
+        if len(sval) < typeSpec["minLength"]: return False, "minLength"
+    if "maxLength" in typeSpec:
+        if len(sval) > typeSpec["minLength"]: return False, "maxLength"
+    if "pattern" in typeSpec:
+        if not re.match(typeSpec["pattern"], sval): return False, "pattern"
+    if "range" in typeSpec:
+        mm = typeSpec["range"]
+        if mm[0] is not None and tval < mm[0]: return False, "minInclusive"
+        if mm[1] is not None and tval <= mm[1]: return False, "minExclusive"
+        if mm[2] is not None and tval >= mm[2]: return False, "maxExclusive"
+        if mm[3] is not None and tval > mm[3]: return False, "maxInclusive"
+    if "enumeration" in typeSpec and typeSpec["enumeration"]:
+        if sval not in typeSpec["enumeration"]: return False, "enumeration"
+    #"totalDigits": None,
+    #"fractionDigits": None,
 
-B = BaseType
 
-class AttrType(Enum):
-    """See [https://www.w3.org/TR/xml/]
+###############################################################################
+# NewType mainly informs linters (and humans), for type-hinting etc.
+# TODO Keep?
+
+### Bits
+base64Binary        = NewType('base64Binary', bytes)
+hexBinary           = NewType('hexBinary', bytes)
+
+### Truth values
+boolean             = NewType('boolean', bool)
+
+### Various integers
+byte                = NewType('byte', int)
+short               = NewType('short', int)
+#int                 = NewType('int', int)
+integer             = NewType('integer', int)
+long                = NewType('long', int)
+nonPositiveInteger  = NewType('nonPositiveInteger', int)
+negativeInteger     = NewType('negativeInteger', int)
+nonNegativeInteger  = NewType('nonNegativeInteger', int)
+positiveInteger     = NewType('positiveInteger', int)
+unsignedByte        = NewType('unsignedByte', int)
+unsignedShort       = NewType('unsignedShort', int)
+unsignedInt         = NewType('unsignedInt', int)
+unsignedLong        = NewType('unsignedLong', int)
+
+### Real numbers
+#decimal            = NewType('decimal', float)
+double              = NewType('double', float)
+#float               = NewType('float', float)
+
+### Dates and times (unfinished)
+gDay                = NewType('gDay', int)
+gMonth              = NewType('gMonth', int)
+gMonthDay           = NewType('gMonthDay', str)
+gYear               = NewType('gYear', date)
+gYearMonth          = NewType('gYearMonth', date)
+date                = NewType('date', date)
+dateTime            = NewType('dateTime', datetime)
+time                = NewType('time', time)
+duration            = NewType('duration', timedelta)
+
+### Strings
+language            = NewType('language', str)
+normalizedString    = NewType('normalizedString', str)
+string              = NewType('string', str)
+token               = NewType('token', str)
+anyURI              = NewType('anyURI', str)
+
+### XML constructs (note caps)
+XmlName             = NewType('XmlName', str)
+XmlQName            = NewType('XmlQName', str)
+XmlNmtoken          = NewType('XmlNmtoken', str)
+
+ID                  = NewType('ID', str)
+IDREF               = NewType('IDREF', str)
+IDREFS              = NewType('IDREFS', str)  # [str]
+Name                = NewType('Name', str)
+NCName              = NewType('NCName', str)
+NMTOKEN             = NewType('NMTOKEN', str)
+NMTOKENS            = NewType('NMTOKENS', str)  # [str]
+QName               = NewType('QName', str)
+ENTITY              = NewType('ENTITY', str)
+ENTITIES            = NewType('ENTITIES', str)  # [str]
+
+
+###############################################################################
+# TODO Sync w/ lxml or similar.
+#
+class ContentType(Enum):
+    """Predicated of each element type
     """
-    # XSD NAME          base   regex
-    boolean =          (B.BIT, r"true|1|false|0" )
+    EMPTY   = 0     # EMPTY
+    PCDATA  = 1     # #PCDATA allowed
+    ELEMENT = 2     # Element(s) allowed
+    ANY     = 3     # Mixed content (includes ANY)
 
-    # Floats
-    decimal =          (B.NUM, r"[-+]?\d+(\.\d+)" )
-    double =           (B.NUM, floatExpr )
-    float =            (B.NUM, floatExpr )
+    # Extras
+    CDATA   = 8
 
-    # Ints
-    byte =             (B.INT, intExpr )
-    int =              (B.INT, intExpr )
-    integer =          (B.INT, intExpr )
-    long =             (B.INT, intExpr )
-    short =            (B.INT, intExpr )
-    nonPositiveInteger=(B.INT, negintExpr+"|0+" )
-    negativeInteger =  (B.INT, negintExpr )
-    nonNegativeInteger=(B.INT, posintExpr+"|0+" )
-    positiveInteger =  (B.INT, posintExpr )
-    unsignedByte =     (B.INT, posintExpr )
-    unsignedInt =      (B.INT, posintExpr )
-    unsignedLong =     (B.INT, posintExpr )
-    unsignedShort =    (B.INT, posintExpr )
+    def tostring(self):
+        if self == ContentType.EMPTY: return "EMPTY"
+        if self == ContentType.PCDATA: return "(#PCDATA)"
+        if self == ContentType.ELEMENT:
+            raise ValueError("No export for dcl content 'ELEMENT' extension.")
+        return "ANY"
 
-    # Date/time stuff (TODO: Support partials?)
-    date =             (B.TIM, date,  dateExpr )
-    dateTime =         (B.TIM, datetime, datetimeExpr )
-    gDay =             (B.TIM, uintExpr )
-    gMonth =           (B.TIM, uintExpr )
-    gMonthDay =        (B.TIM, uintExpr )
-    gYear =            (B.TIM, uintExpr )
-    gYearMonth =       (B.TIM, uintExpr )
-    time =             (B.TIM, time,  timeExpr )
-    duration =         (B.TIM, None ),  # TODO Add
-
-    # Strings
-    language =         (B.STR, r"\w+" )
-    normalizedString = (B.STR, r"[^\r\n\t]*" )
-    string =           (B.STR, r".*" )
-    token =            (B.STR, r"[^\s]( ?[^\s]+)*" )
-    anyURI =           (B.STR, UriExpr )
-    ID =               (B.STR, XmlNameExpr )
-    IDREF =            (B.STR, XmlNameExpr )
-    XMLNAME =          (B.STR, XmlNameExpr )
-    NMTOKEN =          (B.STR, XmlNameExpr )  # TODO Loosen
-
-    # Plurals
-    IDREFS =           (B.STR, XmlNameExprS )
-    NMTOKENS =         (B.STR, XmlNameExprS )
-
-    # Binaries
-    base64Binary =     (B.BIN, r"[+/=a-zA-Z0-9]+" )
-    hexBinary =        (B.BIN, r"([\da-fA-F][\da-fA-F])+" )
-
-    ### Additions beyond XSD built-ins
-    CDATA =             (B.STR, r".*" )
-    ENTITY =            (B.STR, XmlNameExpr)
-    NOTATION =          (B.STR, XmlNameExpr)
-    ENUM =              (B.STR, XmlNameExpr)  # How to set up?
-    ENTITIES =          (B.STR, XmlNameExprS)
-
-    QXMLNAME =         (B.STR, r"%s:%s" % (XmlNameExpr, XmlNameExpr) )
-    NCXMLNAME =        (B.STR, XmlNameExpr )
+class SeqType(Enum):
+    """Predicated of each ()-group in a model.
+    """
+    CHOICE = "|"      # (x | y | z)
+    ALL = "&"         # (x & y & z)   # SGML only
+    SEQUENCE = ","    # (x, y, z)
 
 
+class RepType:
+    def __init__(self, minOccurs:int=1, maxOccurs:int=1):
+        assert int(minOccurs) and int(maxOccurs)
+        self.minOccurs = int(minOccurs)
+        self.maxOccurs = int(maxOccurs)
+
+    def tostring(self) -> str:
+        if (self.minOccurs == 0):
+            if (self.maxOccurs == 1): return "?"
+            if (self.maxOccurs == -1): return "*"
+        elif (self.minOccurs == 1):
+            if (self.maxOccurs == 1): return ""
+            if (self.maxOccurs == -1): return "+"
+        return "{%d,%d}" % (self.minOccurs, self.maxOccurs)
+
+class ModelItem:
+    """One item (and element name with a rep, or just #PCDATA).
+    """
+    def __init__(self, name:NmToken, rep:RepType=None):
+        self.name = name
+        self.rep = rep
+
+    def tostring(self) -> str:
+        return self.name + (self.rep.tostring() if self.rep else "")
+
+class ModelGroup:
+    """Any parenthesized group, with ModelItem members, plus connector and rep.
+    Maybe keep the original string (if any), or a list of PEs in it?
+    """
+    def __init__(self, items:List=None, seq:SeqType=None, rep:RepType=None):
+        self.items = items
+        self.seq = seq
+        self.rep =  rep
+
+    def getNames(self):
+        """Extract the set of all names used anywhere in a model.
+        """
+        names = set()
+        for item in self.items:
+            if isinstance(item, ModelItem):
+                names = names.union([item.name])
+            elif isinstance(item, ModelGroup):
+                names = names.union(item.getNames())
+        return names
+
+    def tostring(self):
+        """TODO Maybe re-introduce PEs or complex types?
+        """
+        buf = ""
+        txt = False
+        for item in self.items:
+            if isinstance(item, ModelItem):
+                if item.name == "#PCDATA": txt = True
+                else: names = names.union([item.name])
+            elif isinstance(item, ModelGroup):
+                names = names.union(item.getNames())
+        connector = str(self.seq)
+        buf = "(%s%s)%s" % (
+            ("#PCDATA" + connector) if txt else "",
+            connector.join(self.items),
+            self.rep.tostring())
+        return buf
+
+class Model(ModelGroup):
+    """The top model, which can be a declared content keyword OR a ModelGroup.
+    This also converts a token sequence to the model ASN.
+    """
+    def __init__(self, contentType:ContentType=None, tokens:List[str]=None):
+        super(). __init__()
+        self.contentType = contentType
+        if not tokens: return
+        self.items = []
+        self.seq = None
+        self.rep =  None
+        pstack = [ self ]
+        for i in range(len(tokens)):
+            t = tokens[i]
+            if t == "(":
+                newGroup = ModelGroup()
+                pstack[-1].items.append(newGroup)
+                pstack.append(newGroup)
+            elif t == ")":
+                if i+1 < len(tokens) and isinstance(tokens[i+1], RepType):
+                    pstack[-1].rep = tokens[i+1]
+                    i += 1
+            elif t in "|&,":
+                if pstack[-1].seq != t:
+                    if pstack[-1].seq is None: pstack[-1].seq = t
+                    else: raise SyntaxError("Inconsistent connectors.")
+            elif XStr.isXmlName(t):
+                newItem = ModelItem(t)
+                pstack[-1].items.append(newItem)
+                if i+1 < len(tokens) and isinstance(tokens[i+1], RepType):
+                    newItem.rep = tokens[i+1]
+                    i += 1
+            else:
+                raise SyntaxError(f"Unexpected model token '{t}'.")
+        if (len(pstack) != 1):
+            raise SyntaxError("Unbalanced () in model.")
+
+    def tostring(self):
+        if self.contentType: return self.contentType.tostring()
+        else: return super().tostring()
+
+class ElementDef:
+    def __init__(self, name:NmToken, model:Model):
+        self.name = name
+        self.model = model
+        self.attributeDefs = None
+        self.allowText:bool = True
+        self.allowAnywhere:Set = None
+        self.allowNowhere:Set = None
+        self.readOrder = 0
+
+    def tostring(self) -> str:
+        buf = "<!ELEMEMT %-12s %s>\n" % (self.name, self.model.tostring())
+        # TODO Add attlist?
+        return buf
+
+class ComplexType:
+    def __init__(self, name:str, model:Model):
+        self.name = name
+        self.model = model
+
+
+###############################################################################
+# TODO Move attr stuff to separate file
+#
 class AttrDefault(Enum):
     REQUIRED = "#REQUIRED"
     IMPLIED = "#IMPLIED"
     FIXED = "#FIXED"
+
+class AttributeDef:
+    def __init__(self, name:NmToken, aname:NmToken, atype:str, adefault:Any):
+        self.name = name
+        self.aname = aname
+        self.atype = atype
+        self.adefault = adefault
+        self.caseTx = None
+        self.multi = False
+        self.enumList = None
+
+    def enumSpec(self):
+        if self.enumList: return " (%s)" % (" | ".join(self.enumList))
+        return None
+
+class AttlistDef(dict):
+    def __init__(self, name:str):  # Or list of enames?
+        self.name = name
+        self.attrs = {}
+
+    def __setitem__(self, aname:NmToken, atype:str, adefault:Any=None) -> AttributeDef:
+        if aname in self.attrs:
+            raise KeyError("Attribute {aname} already defined for {self.ename}.")
+        if atype not in AttrTypes and not isinstance(atype, type):
+            raise TypeError("Unrecognized type for attribute {aname} for {self.ename}.")
+        if adefault is not None:
+            pass  # TODO
+        adef = AttributeDef(self.name, aname, atype, adefault)
+        self.attrs[aname] = adef
+        return adef
+
+    def tostring(self) -> str:
+        buf = f"<!ATTLIST {self.name} "
+        for aname, aobj in self.items():
+            buf += "    %12s %12s %s\n" % (aname, aobj.enumSpec(), aobj.adefault)
+        buf += ">\n"
+        return buf
 
 
 ###############################################################################
@@ -266,139 +664,86 @@ class EntityType(Enum):
     GENERAL = 1
     PARAMETER = 2
     NOTATION = 4  # Treat as special entity, or not?
-    NAMESET = 8
-    CHAR = 16
 
-class EntitySource(Enum):
-    INTERNAL = 1  # Quoted literal
-    EXTERNAL = 2  # PUBLIC, SYSTEM ID(s), etc.
+    # Names for possible extensions
+    SDATA = 8
+    NAMESET = 16
 
 class EntityParseType(Enum):  # Includes extras...
-    PCDATA  = 0
+    NDATA   = 0
     CDATA   = 1
     RCDATA  = 2
-    NDATA   = 4
-    # SGML also has STARTTAG ENDTAG...
+    PCDATA  = 3
 
+    # Names for possible extensions
+    XINCLUDE = 100
+    SUBDOC   = 101
+    STARTTAG = 102
+    ENDTAG   = 103
+    PI       = 104
 
-###############################################################################
-# Stub classes for schema constructs (DTD-ish for the moment).
-#
-class DataLoc:
-    def __init__(self, literal:str=None, publicId:str=None, systemId:str=None):
-        pass
-
-class Def:
-    def __init__(self, name):
-        self.name = name
-
-
-###############################################################################
-#
-class ElementDef(Def):
-    def __init__(self, name:str, aliasFor:str, model):
-        super(ElementDef, self).__init__(name)
-        self.aliasFor = aliasFor
-        self.model = model
-        self.attributeDefs = None
-        self.allowText:bool = True
-        self.allowAnywhere:Set = None
-        self.allowNowhere:Set = None
-
-    def toprettyxml(self):
-        return "<!ELEMEMT %-12s %s>\n" % (self.name, self.model)
-
-class ModelType(Enum):
-    EMPTY = 0
-    ANY = 1
-    TEXTONLY = 2
-    CHOICE = 3
-    ALL = 4
-    SEQUENCE = 5
-    GROUP = 6
-    ATTRGROUP = 7
-
-
-class ComplexType:
-    def __init__(self, typename:str, model:str):
-        self.typename = typename
-        self.modelType = ModelType.SEQUENCE
-        self.model = model
-        self.minOccurs = 1
-        self.maxOccurs = 1
-
-
-class AttributeDef(Def):
-    def __init__(self, ename:str, aname:str, attrType:AttrType, default:str):
-        super(AttributeDef, self).__init__(aname)
-        self.ename = ename
-        self.aname = aname
-        self.attrType = attrType
-        self.caseTx = None
-        self.wsNorm = None
-        self.multi = False
-        self.enumList = None
-        self.default = default
-
-    def toprettyxml(self):
-        dclVal = self.enumList if self.enumList else self.attrType
-        return "<!ATTLIST %-12s %12s %12s %s>\n" % (
-            self.ename, self.aname, dclVal, self.default)
-
-
-class EntityDef(Def):
-    """Any of several subtypes.
+class DataSource:
+    """PUBLIC and/or SYSTEM identifier or (for ENTITY but not NOTATION) QLit.
     """
-    def __init__(self, name:str, etype:EntityType,
-        literal:str=None, publicId:str=None, systemId:str=None,
-        parseType:EntityParseType=EntityParseType.PCDATA,
-        notation:str=None,
-        members:Iterable=None
-        ):
-        super(EntityDef, self).__init__(name)
-        self.etype = etype
+    def __init__(self,
+        literal:str=None,
+        publicId:str=None,
+        systemId:Union[str, List]=None):
         self.literal = literal
         self.publicId = publicId
+        if not isinstance(systemId, List): systemId = [ systemId ]
         self.systemId = systemId
-        self.localPath = None
+
+    def tostring(self) -> str:
+        if (self.literal):
+            return '"%s"' % (XStr.escapeAttribute(self.literal))
+        if self.publicId:
+            src = 'PUBLIC "%s"' % (XStr.escapeAttribute(self.literal))
+        else:
+            src = 'SYSTEM'
+        if (not self.systemId):
+            src += ' ""'
+        else:
+            for s in self.systemId:
+                src += ' "%s"' % (XStr.escapeAttribute(s.literal))
+        return src
+
+class EntityDef:
+    """Any of several subtypes.
+    """
+    def __init__(self, name:NmToken,
+        etype:EntityType,
+        dataSource:DataSource,
+        parseType:EntityParseType=EntityParseType.PCDATA,
+        notation:NmToken=None
+        ):
+        self.name = name
+        self.etype = etype
+        self.dataSource = dataSource
         self.parseType = parseType
         self.notation = notation
-        self.members = members
+        self.localPath = None
 
-    def toprettyxml(self):
-        if self.publicId:
-            src = f'PUBLIC "{self.publicId}" "{self.systemId}"'
-        elif self.systemId:
-            src = f'SYSTEM "{self.systemId}"'
-        else:
-            src = f'"{self.literal}"'
-
+    def tostring(self) -> str:
+        # TODO Support keywords -- SDATA, CTYPE,....
+        src = self.dataSource.tostring()
         pct = "% " if self.etype == EntityType.PARAMETER else ""
-        return "<!ENTITY %s%-12s %s>\n" % (
-            pct, self.name, src)
+        return "<!ENTITY %s%s %s>\n" % (pct, self.name, src)
 
-
-###############################################################################
-#
-class Notation(Def):
+class Notation:
     """This is for data notation/format applicable to entities. They are normally
     embedded by declaring an external file or object as an ENTITY, and then
     mentioning that entity name (not actually referencing the entity) as
     the value of an attribute that was declared as being of type ENTITY.
     """
-    def __init__(self, name:str, systemId:str=None, publicId:str=None):
-        super().__init__(name=name)
-        self.nodeType = Node.NOTATION_NODE
-        self.systemId = systemId
-        self.publicId = publicId
+    def __init__(self, name:NmToken, dataSource:DataSource):
+        if (dataSource.literal is not None):
+            raise SyntaxError("NOTATION {nname} has QLit, not PUBLIC or SYSTEM.")
+        self.name = name
+        self.dataSource = dataSource
 
-    def toprettyxml(self):
-        if self.publicId:
-            src = f'PUBLIC "{self.publicId}" "{self.systemId}"'
-        elif self.systemId:
-            src = f'SYSTEM "{self.systemId}"'
-
-        return "<!NOTATION %-12s %s>\n" % (self.name, src)
+    def tostring(self) -> str:
+        return "<!NOTATION %-12s %s>\n" % (self.name, self.dataSource.tostring())
 
 
 ###############################################################################
@@ -413,6 +758,7 @@ class DocumentType(Node):
         self.nodeType = NodeType.DOCUMENT_TYPE_NODE
 
         self.name = self.nodeName = qualifiedName  # Should come from the DOCTYPE
+        # TODO Switch to DataSource
         self.publicId = publicId
         self.systemId = systemId
         #self.userData = None
@@ -514,8 +860,9 @@ class DocumentType(Node):
         parseType:EntityParseType=EntityParseType.PCDATA, notation:NmToken=None):
         assert name not in self.entityDefs
         assert isinstance(parseType, EntityParseType)
-        self.entityDefs[name] = EntityDef(name,
-            EntityType.GENERAL, literal, publicId, systemId, parseType, notation)
+        ds = DataSource(literal, publicId, systemId)
+        self.entityDefs[name] = EntityDef(name, EntityType.GENERAL,
+            dataSource=ds, parseType=parseType, notation=notation)
 
     def getPEntityDef(self, name:NmToken):
         return self.pentityDefs[name] if name in self.pentityDefs else None
@@ -534,10 +881,6 @@ class DocumentType(Node):
         assert name not in self.notationDefs
         self.notationDefs[name] = EntityDef(name,
             EntityType.NOTATION, literal, publicId, systemId)
-
-    def defineNameSet(self, name:NmToken, members:Iterable):
-        self.nameSetDefs[name] = EntityDef(
-            name, EntityType.NAMESET, members=members)
 
     # Basic operations
     #
@@ -566,16 +909,13 @@ class DocumentType(Node):
     ####### EXTENSIONS
 
     @property
-    def outerXML(self) -> str:  # DocumentType
-        """TODO: Generate entity and notation dcls?
+    def outerXML(self) -> str:
+        """TODO: Preserve input order
         """
         return self.toprettyxml()
 
-    def tostring(self) -> str:  # DocumentType
-        return self.toprettyxml
-
-    def toprettyxml(self) -> str:   # DocumentType
-        buf = ('<!DOCTYPE %s  PUBLIC "%s" "%s" [\n') % (
+    def tostring(self) -> str:
+        buf = ('<!DOCTYPE %s PUBLIC "%s" "%s" [\n') % (
             self.nodeName, self.publicId, self.systemId)
 
         for pent in sorted(self.pentityDefs):
@@ -604,4 +944,3 @@ class DocumentType(Node):
     # end class DocumentType
 
 DocType = DocumentType
-

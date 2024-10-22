@@ -12,7 +12,7 @@ import unittest
 #from domexceptions import NotFoundError
 
 from makeTestDoc import DBG  #makeTestDoc0, makeTestDoc2, DAT,
-from testEachMethod import K, makeTestDocEachMethod
+from test4EachMethod import K, makeTestDocEachMethod
 
 
 ###############################################################################
