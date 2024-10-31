@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 #
 import re
-from typing import Any
+from typing import Any, List
+from basedomtypes import NMTOKEN_t
 
 class CssSelectors:
     """
@@ -53,11 +54,11 @@ class CssSelectors:
     """Drafted by Claude 3.5.
     These methods can be added to a Node class.
     """
-    def __init__(self, selector):
+    def __init__(self, selector:str):
         self.selector = selector
         self.parsed_selector = self.parse_selector(selector)
 
-    def parse_selector(self, selector):
+    def parse_selector(self, selector:str) -> List:
         """Just divide at the top level, to a list of parts and
         operators. Manage escaping and nested [].
         Top-level operators:
@@ -99,10 +100,10 @@ class CssSelectors:
             parts.append(current.strip())
         return parts
 
-    def match(self, node):
+    def match(self, node:'Node') -> List:
         return self._match_parts(node, self.parsed_selector)
 
-    def _match_parts(self, node, parts):
+    def _match_parts(self, node:'Node', parts) -> List:
         if not parts:
             return [node]
 
@@ -118,14 +119,14 @@ class CssSelectors:
         else:
             return self._match_descendant(node, part, remaining)
 
-    def _match_child(self, node, parts):
+    def _match_child(self, node:'Node', parts) -> List:
         matches = []
         for child in node.childNodes:
             if child.nodeType == child.ELEMENT_NODE:
                 matches.extend(self._match_parts(child, parts))
         return matches
 
-    def _match_adjacent_sibling(self, node, parts):
+    def _match_adjacent_sibling(self, node:'Node', parts) -> List:
         matches = []
         sibling = node.nextSibling
         while sibling and sibling.nodeType != sibling.ELEMENT_NODE:
@@ -134,7 +135,7 @@ class CssSelectors:
             matches.extend(self._match_parts(sibling, parts))
         return matches
 
-    def _match_general_sibling(self, node, parts):
+    def _match_general_sibling(self, node:'Node', parts) -> List:
         matches = []
         sibling = node.nextSibling
         while sibling:
@@ -143,7 +144,7 @@ class CssSelectors:
             sibling = sibling.nextSibling
         return matches
 
-    def _match_descendant(self, node, part, remaining):
+    def _match_descendant(self, node:'Node', part, remaining) -> List:
         matches = []
         if self._match_element(node, part):
             if not remaining:
@@ -155,7 +156,7 @@ class CssSelectors:
                 matches.extend(self._match_descendant(child, part, remaining))
         return matches
 
-    def _match_element(self, node, selector):
+    def _match_element(self, node:'Node', selector:str) -> bool:
         if selector == '*':
             return True
         if selector.startswith('#'):
@@ -180,7 +181,7 @@ class CssSelectors:
         else:
             return node.tagName == selector
 
-    def testAttr(self, node, aname:str, op:str, tgtValue:str, caseFlag:str) -> bool:
+    def testAttr(self, node:'Node', aname:NMTOKEN_t, op:str, tgtValue:str, caseFlag:str) -> bool:
         """Test whether a node's attribute satisfies the [] condition.
         """
         if not op and not tgtValue:
@@ -205,8 +206,9 @@ class CssSelectors:
         else:
             raise ValueError("Unexpected operator '%s'." % (op))
 
-    def testPseudo(self, node, pseudo:str, n:Any) -> bool:
-        """This does not include ones relating to form or UI status;
+    def testPseudo(self, node:'Node', pseudo:str, n:Any) -> bool:
+        """Implement a bunch of the :xxx modifiers.
+        This does not include ones relating to form or UI status;
         just things about structure per se.
         Maybe add: dir (bidi)
         Presumably the CSS "nth" items count from 1.
@@ -247,7 +249,7 @@ class CssSelectors:
         else:
             raise KeyError("Pseudo-CSS word '%s' not supported." % (pseudo))
 
-    def select(self, root):
+    def select(self, root:'Node') -> List:
         return self._match_parts(root, self.parsed_selector)
 
     @staticmethod

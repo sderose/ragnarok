@@ -448,7 +448,7 @@ class testNodeType_Predicates(unittest.TestCase):
     def tests(self):
         el = self.n.docEl.childNodes[5]
         for ch in self.n.docEl.childNodes:
-            if (ch.nodeType == NodeType.UNSPECIFIED_NODE):
+            if (ch.nodeType == NodeType.NONE):
                 self.allPreds(ch, [ ])
             elif (ch.nodeType == NodeType.ELEMENT_NODE):
                 self.allPreds(ch, [ el.isElement ])

@@ -133,3 +133,95 @@ like <b~i> and </b~i>.
 identical to TagML), like <p>...<-p>...<+p>...</p>, and/or direct support for
 Trojan-style milestones. The DOM++ implementation will daisy-chain the
 items (tbd).
+
+
+==Conventions==
+
+===Layout===
+
+* Everybody gets a shebang line.
+
+* 1 blank lines ahead of defs (skipped for groups of one-liners).
+2 blank lines and a line of "#" before classes or other major divisions.
+
+* If-conditions and return values not parenthesized; for and while usually are.
+
+* If there a bunch of inits together, I line up the values for readability.
+Yeah, I know I'm weird on that.
+
+
+===Names===
+
+Files are all lower case, classes are camelcase with initial cap.
+For example, class XmlStrings is found in xmlstrings.py.
+
+* Names with acronyms camelcase them (such as "XmlStrings" and "Id"), unless there's
+a preexisting one to follow (such as innerHTML going to innerXML, not innerXml).
+
+* Names I find too long (such as "createProcessingInstruction" normally
+have a synonym (such as "createPI").
+
+* Attr vs. Attribute
+
+* P...I.... vs. Proc vs. PI
+
+* Variables for character lists, syntactic constructs, etc.
+(such as namechars, spacechars, etc.,
+
+** Plain lists of characters as strings end in "_list".
+
+** Arrays of (start,end) pairs used to make regexes for things like Xml name
+start characters end in "_rangelist" (these are all in xmlstrings).
+
+**
+** Variables holding regexes end in "_re".
+
+Types created by NewType to help with type-hinting (these generally correspond
+to XSD built-in datatypes) end in "_t".
+
+
+===Types===
+
+* Typehints everywhere.
+
+* XSD types are defined as NewTypes (in typesForHints.py). They are named
+by the (casely-correct) XSD names, plus "_t" to be clear they're types.
+Regexes to match them (ending in "_re"), constraints, etc. are defined in documentType.py.
+
+
+===Classes and subclasses===
+
+* Methods that are defined in multiple classes (for example, serializers),
+and often labelled on the "def" line with a comment giving the class. I find
+this helpful for readability.
+
+* Methods that are not part of DOM proper, are tagged by a comment on their
+"def" lines, saying where they're from.
+
+    def isElement(self) -> bool:  # HERE
+    def innerXML(self) -> str:  # HTML (even though the name there is innerHTML)
+    def Text(text:str) -> TextNode:  # WHATWG
+    def checkNode(self):  # DBG
+    def tail(self) -> str:  # ET
+    def writexml(self): # MINIDOM
+
+This is not done everywhere yet, and I'm debating how best to flag methods
+that are in (say) DOM but here added to other classes, methods that add new
+parameters, and infrastructure (like Enums, XStrings, etc). I have not
+generally labelled methods that are normal Python ones, such as built-in
+list or dict operations that Node and NamedNodeMap (respectively) get.
+
+
+===Methods vs. Properties vs. Instance variables===
+
+* Properties that don't need arguments are that way, unless a prior spec
+defines them otherwise. If there's a variation with arguments, it's the
+same but with "_" added on the front.
+
+
+===Enumerated options===
+
+* Keyword options are generally an Enum (defined in domenums.py except for
+some done locally where used). Methods that take them accept
+either an instance of the enum, or the equivalent string.
+

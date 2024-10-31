@@ -2,8 +2,10 @@
 #
 from enum import Enum
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict
 import regex
+
+from basedomtypes import NMTOKEN_t
 
 class MNodeType(Enum):
     NONE = 0
@@ -21,10 +23,10 @@ class MGroup:
     items: List = []
 
 class ModelStuff:
-    def __init__(self, doctype):
-        pass
+    def __init__(self, doctype:str):
+        self.doctype = doctype
 
-    def tokensToTree(self, tokens:List):
+    def tokensToTree(self, tokens:List) -> List:
         """Take a list of tokens such as produced by readModelGroup,
         and return a nested list representing the correct tree. E.g.:
             ( a , b ? , ( c | d ) * ) becomes
@@ -49,16 +51,16 @@ class ModelStuff:
                 pass
             else:
                 raise SyntaxError(f"Bad token '{t}' found.")
-        return
+        return stack
 
 class Validator:
-    def __init__(self, doctype):
+    def __init__(self, doctype:str):
         self.doctype = doctype
         self.theMap = {}        # element name -> character
         self.modelTokens = {}   # tokenized content model
         self.modelRegex = {}    # model as regex
 
-    def makeElementMap(self):
+    def makeElementMap(self) -> Dict:
         """TODO Deal with #PCDATA, EMPTY, ANY.
         """
         nextCodePoint = 0xE000
@@ -84,7 +86,7 @@ class Validator:
                 raise SyntaxError from e
         return expr
 
-    def checkSequence(self, ename, seq) -> int:
+    def checkSequence(self, ename:NMTOKEN_t, seq:List) -> int:
         """The sequence is so far, but may require more.
         regex.match(r"a+b+c+", "aaaaabbc", partial=True)
         """
@@ -94,7 +96,7 @@ class Validator:
         if mat.partial: return 1
         return 30
 
-    def successors(self, ename, seq) -> List:
+    def successors(self, ename:NMTOKEN_t, seq:List) -> List:
         """Find what elements could happen next.
         The list should include a "None" entry if it's ok as-is.
         I don't see a way to do this with typical regex engines.

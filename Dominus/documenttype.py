@@ -7,43 +7,105 @@ from enum import Enum
 from datetime import datetime, date, time, timedelta
 from collections import defaultdict, namedtuple
 
-from typing import List, Set, Any, Union
-from typing import NewType
+from typing import List, Set, Any, Union, Iterable
 
-from xmlstrings import XmlStrings as XStr
-from domenums import NodeType  #, UNormTx, CaseTx
+from basedomtypes import NMTOKEN_t
+from xmlstrings import XmlStrings as XStr, CaseHandler
+
+from basedomtypes import NSuppE
+from domenums import NodeType
 from basedom import Node
 
-NmToken = str  # TODO Switch to NewType
-
 descr = """
-This library provides a basic interface to XML schema information.
-An instance should be loadable from XSD, RelaxNG, or DTD, and provide a common
-API for any of them. That's hard, so I'm starting with DTD++ and parts of XSD.
+This library provides a basic interface to schema information, whether created
+via the API, an XML (or perhaps SGML) DTD, an XML Schems, or (eventually) a Relax-NG schema (I'm less
+familiar with those, so that may be a while). The idea here is to get any
+schema into a common API that parsers and validators can talk to.
 
-The hardest bits will likely be (a) preserving DTD classes implemented via
-parameter entities, and (b) making that compatible with XSD complex types.
+The major classes include:
 
-I may also integrate the shorthand declarations I rough out in XSD_compact
-and elsewhere.
+SimpleType --
+
+ComplexType -- This covers the needed info describing an element type,
+such as its name, content type and model, attributes, etc.
 """
 
 
 ###############################################################################
 #
+class PropDict(dict):
+    """A dict whose keys must be drawn from a certain set of values.
+    """
+    def __init__(self, *args, keyList:Iterable, caseTx="NONE"):
+        super().__init__(*args)
+        self.caseTx = CaseHandler(caseTx)
+        self.keyList = {}
+        for key in keyList:
+            normKey = self.caseTx.normalize(key)
+            self.keyList[normKey] = key
+
+    def __setitem__(self, k:NMTOKEN_t, v:Any) -> None:
+        normKey = self.caseTx.normalize(k)
+        if normKey in self.keyList:
+            super().__setitem__(normKey, v)
+        else:
+            raise KeyError("Key '{k}' (->{normKey}) not in list.")
+
+    def __getitem__(self, k) -> Union[List, 'Node']:
+        normKey = self.caseTx.normalize(k)
+        if normKey in self.keyList:
+            return super().__getitem__(normKey)
+        else:
+            raise KeyError("Key '{k}' (->{normKey}) not in list.")
+
+
+###############################################################################
+#
+# restrictions: min/max; len; pattern; etc.
+#
+class SimpleType(dict):
+    def __init__(self, name:NMTOKEN_t, baseType:NMTOKEN_t):
+        self.name = name
+        self.baseType = baseType
+        self.restrictions = {}
+        self.memberTypes = None  # For list and union types
+        self.caseTx = "NONE"
+        self.unormTx = "NONE"
+        self.wsTx = "XML"
+
+
+###############################################################################
+#
+class DerivationLimits(Enum):
+    """for XSD .block and .final
+    """
+    NONE = "NONE"
+    EXTENSION = "EXTENSION"
+    RESTRICTION = "RESTRICTION"
+    ALL = "ALL"
+
+class ComplexType(SimpleType):
+    def __init__(self, name:NMTOKEN_t, model):
+        super().__init__(name, model)
+        self.abstract = False
+        self.final = None
+        self.block = None
+        self.attributeDefs = {}
+        self.contentType = None
+        self.model = None
+
+
+###############################################################################
+#
 class XsdType(dict):
-    def __getitem__(self, key):
+    """Support the XSD built-in datatypes (e.g. for attributes).
+    """
+    def __getitem__(self, key) -> Union[List, 'Node']:
         # TODO fetch up the inheritance chain?
         return super().get(key, None)
 
 MinMax = namedtuple('MinMax',
     ['minInclusive', 'minExclusive', 'maxExclusive', 'maxInclusive'])
-
-ALPHA = "[a-zA-Z]"
-ALNUM = "[a-zA-Z0-9]"
-HEX = "[0-9a-fA-F]"
-DIGIT = r"\d"
-EXPNAN = r"([eE][-+]?\d+)?|INF|NaN"
 
 # These are the signed, positive maxima (rest calculated from them)
 MAXLONG = 9223372036854775807
@@ -51,17 +113,18 @@ MAXINT = 2147483647
 MAXSHORT = 32767
 MAXBYTE = 127
 
-TZONE = r"(Z|(\+|-)((0\d|1[0-3]):[0-5]\d|14:00))?"
-GYEAR = r"-?([1-9]\d{3,}|0\d{3})"
-GMONTH = r"-?([1-9]\d{3,}|0\d{3})"
-GDAY = r"\(0\[1-9\]\|\[12\]\\d\|3\[01\]\)"
-TIME = (r"\(\(\[01\]\\d\|2\[0-3\]\):\[0-5\]\\d:\[0-5\]\\d\(\\\.\\d\+\)\?\|" +
-    r"\(24:00:00\(\\\.0\+\)\?\)\)")
+ALPHA_re = "[a-zA-Z]"
+ALNUM_re = "[a-zA-Z0-9]"
+HEX_re = "[0-9a-fA-F]"
+DIGIT_re = r"\d"
+EXPNAN_re = r"([eE][-+]?\d+)?|INF|NaN"
 
-NMTOKEN = XStr.xmlNmtoken
-NCNAME = "^%s$" % (XStr.xmlNCName)
-QNAME = "^%s$" % (XStr.xmlQName)
-QQNAME = "^%s$" % (XStr.xmlQQName)
+TZONE_re = r"(Z|(\+|-)((0\d|1[0-3]):[0-5]\d|14:00))?"
+GYEAR_re = r"-?([1-9]\d{3,}|0\d{3})"
+GMONTH_re = r"-?([1-9]\d{3,}|0\d{3})"
+GDAY_re = r"\(0\[1-9\]\|\[12\]\\d\|3\[01\]\)"
+TIME_re = (r"\(\(\[01\]\\d\|2\[0-3\]\):\[0-5\]\\d:\[0-5\]\\d\(\\\.\\d\+\)\?\|" +
+    r"\(24:00:00\(\\\.0\+\)\?\)\)")
 
 
 ###########################################################################
@@ -84,11 +147,13 @@ AttrTypes = {
     "normalizedString": XsdType({
         "pybase": str,
         "base": "string",
+        "pattern": r".*",
         "whiteSpace": "replace"
     }),
     "token": XsdType({
         "pybase": str,
         "base": "normalizedString",
+        "pattern": r".*",
         "whiteSpace": "collapse"
     }),
     "language": XsdType({
@@ -99,60 +164,61 @@ AttrTypes = {
     "NMTOKEN": XsdType({
         "pybase": str,
         "base": "token",
-        "pattern": NMTOKEN,
+        "pattern": XStr.NMTOKEN_re,
     }),
     "NMTOKENS": XsdType({
         "pybase": str,
         "list": True,
         "base": "NMTOKEN",
-        "pattern": r"%s(\s+%s)*" % (NMTOKEN, NMTOKEN),
+        "pattern": r"%s(\s+%s)*" % (XStr.NMTOKEN_re, XStr.NMTOKEN_re),
     }),
     "Name": XsdType({
         "pybase": str,
         "base": "token",
-        "pattern": QQNAME,
+        "pattern": XStr.QQName_re,
     }),
     "NCName": XsdType({
         "pybase": str,
         "base": "Name",
-        "pattern": NCNAME,
+        "pattern": XStr.NCName_re,
     }),
     "ID": XsdType({
         "pybase": str,
         "base": "NCName",
-        "pattern": NCNAME,
+        "pattern": XStr.NCName_re,
     }),
     "IDREF": XsdType({
         "pybase": str,
         "base": "NCName",
+        "pattern": XStr.NCName_re,
     }),
     "IDREFS": XsdType({
         "pybase": str,
         "base": "IDREF",
         "list": True,
-        "pattern": r"%s(\s+%s)*" % (QNAME, QNAME),
+        "pattern": r"%s(\s+%s)*" % (XStr.QName_re, XStr.QName_re),
     }),
     "ENTITY": XsdType({
         "pybase": str,
         "base": "NCName",
-        "pattern": NCNAME,
+        "pattern": XStr.NCName_re,
     }),
     "ENTITIES": XsdType({
         "pybase": str,
         "base": "ENTITY",
         "list": True,
-        "pattern": r"%s(\s+%s)*" % (NCNAME, NCNAME),
+        "pattern": r"%s(\s+%s)*" % (XStr.NCName_re, XStr.NCName_re),
     }),
     "QName": XsdType({
         "pybase": str,
         "base": "string",
-        "pattern": QNAME,
+        "pattern": XStr.QName_re,
         "whiteSpace": "collapse",
     }),
     "NOTATION": XsdType({
         "pybase": str,
         "base": "string",
-        "pattern": QNAME,
+        "pattern": XStr.QName_re,
         "whiteSpace": "collapse",
     }),
 
@@ -186,53 +252,61 @@ AttrTypes = {
     "nonNegativeInteger": XsdType({
         "pybase": int,
         "base": "integer",
-        "pattern": r"(\+)?\d+",
+        "pattern": r"[+]?\d+",
         "range": MinMax(0, None, None, None),
     }),
     "positiveInteger": XsdType({
         "pybase": int,
         "base": "nonNegativeInteger",
-        "pattern": r"(\+)?\d*[1-9]\d*",
+        "pattern": r"[+]?\d*[1-9]\d*",
         "range": MinMax(1, None, None, None),
     }),
     "long": XsdType({
         "pybase": int,
         "base": "integer",
+        "pattern": r"[-+]?\d+",
         "range": MinMax(-MAXLONG-1, None, None, MAXLONG),
     }),
     "int": XsdType({
         "pybase": int,
         "base": "long",
+        "pattern": r"[-+]?\d+",
         "range": MinMax(-MAXINT-1, None, None, MAXINT),
     }),
     "short": XsdType({
         "pybase": int,
         "base": "int",
+        "pattern": r"[-+]?\d+",
         "range": MinMax(-MAXSHORT-1, None, None, MAXSHORT),
     }),
     "byte": XsdType({
         "pybase": int,
         "base": "short",
+        "pattern": r"[-+]?\d+",
         "range": MinMax(-MAXBYTE-1, None, None, MAXBYTE),
     }),
     "unsignedLong": XsdType({
         "pybase": int,
         "base": "nonNegativeInteger",
+        "pattern": r"[+]?\d+",
         "range": MinMax(0, None, None, MAXLONG<<1 + 1),
     }),
     "unsignedInt": XsdType({
         "pybase": int,
         "base": "unsignedLong",
+        "pattern": r"[+]?\d+",
         "range": MinMax(0, None, None, MAXINT<<1 + 1),
     }),
     "unsignedShort": XsdType({
         "pybase": int,
         "base": "unsignedInt",
+        "pattern": r"[+]?\d+",
         "range": MinMax(0, None, None, MAXSHORT<<1 + 1),
     }),
     "unsignedByte": XsdType({
         "pybase": int,
         "base": "unsignedShort",
+        "pattern": r"[+]?\d+",
         "range": MinMax(0, None, None, MAXBYTE<<1 + 1),
     }),
 
@@ -248,13 +322,13 @@ AttrTypes = {
     "float": XsdType({
         "pybase": float,
         "base": "decimal",
-        "pattern": r"(\+|-)?(\d+(\.\d*)?|\.\d+)" + EXPNAN,
+        "pattern": r"(\+|-)?(\d+(\.\d*)?|\.\d+)" + EXPNAN_re,
         "whiteSpace": "collapse",
     }),
     "double": XsdType({
         "pybase": float,
         "base": "decimal",
-        "pattern": r"(\+|-)?(\d+(\.\d*)?|\.\d+)" + EXPNAN,
+        "pattern": r"(\+|-)?(\d+(\.\d*)?|\.\d+)" + EXPNAN_re,
         "whiteSpace": "collapse",
     }),
 
@@ -270,46 +344,46 @@ AttrTypes = {
     "dateTime": XsdType({
         "pybase": datetime,
         "base": None,
-        "pattern": GYEAR + r"-" + GMONTH + r"-" + GDAY + r"T" + TIME + TZONE,
+        "pattern": GYEAR_re + r"-" + GMONTH_re + r"-" + GDAY_re + r"T" + TIME_re + TZONE_re,
         "whiteSpace": "collapse",
     }),
     "time": XsdType({
         "pybase": time,
         "base": None,
-        "pattern": TIME + TZONE,
+        "pattern": TIME_re + TZONE_re,
         "whiteSpace": "collapse",
     }),
     "date": XsdType({
         "pybase": date,
         "base": None,
-        "pattern": GYEAR + r"-" + GMONTH + r"-" + GDAY + TZONE,
+        "pattern": GYEAR_re + r"-" + GMONTH_re + r"-" + GDAY_re + TZONE_re,
         "whiteSpace": "collapse",
     }),
     "gYearMonth": XsdType({
         "pybase": date,
         "base": None,
-        "pattern": GYEAR + r"-" + GMONTH + TZONE,
+        "pattern": GYEAR_re + r"-" + GMONTH_re + TZONE_re,
         "whiteSpace": "collapse",
     }),
     "gYear": XsdType({
         "pybase": date,
         "base": None,
-        "pattern": GYEAR + TZONE,
+        "pattern": GYEAR_re + TZONE_re,
         "whiteSpace": "collapse",
     }),
     "gMonthDay": XsdType({
         "base": None,
-        "pattern": r"--" + GMONTH + r"-" + GDAY + TZONE,
+        "pattern": r"--" + GMONTH_re + r"-" + GDAY_re + TZONE_re,
         "whiteSpace": "collapse",
     }),
     "gDay": XsdType({
         "base": None,
-        "pattern": r"---" + GDAY + TZONE,
+        "pattern": r"---" + GDAY_re + TZONE_re,
         "whiteSpace": "collapse",
     }),
     "gMonth": XsdType({
         "base": None,
-        "pattern": r"--" + GMONTH + TZONE,
+        "pattern": r"--" + GMONTH_re + TZONE_re,
         "whiteSpace": "collapse",
     }),
 
@@ -336,7 +410,7 @@ AttrTypes = {
     "anyURI": XsdType({
         "pybase": str,
         "base": "string",
-        "pattern": r".*",  # Too lenient
+        "pattern": r".*",  # Too lenient, at least rule out spaces?
         "whiteSpace": "collapse",
     }),
 }  # AttrTypes
@@ -393,101 +467,55 @@ def fitsDatatype(val:Any, typ:Union[str, type]) -> bool:
 
 
 ###############################################################################
-# NewType mainly informs linters (and humans), for type-hinting etc.
-# TODO Keep?
-
-### Bits
-base64Binary        = NewType('base64Binary', bytes)
-hexBinary           = NewType('hexBinary', bytes)
-
-### Truth values
-boolean             = NewType('boolean', bool)
-
-### Various integers
-byte                = NewType('byte', int)
-short               = NewType('short', int)
-#int                 = NewType('int', int)
-integer             = NewType('integer', int)
-long                = NewType('long', int)
-nonPositiveInteger  = NewType('nonPositiveInteger', int)
-negativeInteger     = NewType('negativeInteger', int)
-nonNegativeInteger  = NewType('nonNegativeInteger', int)
-positiveInteger     = NewType('positiveInteger', int)
-unsignedByte        = NewType('unsignedByte', int)
-unsignedShort       = NewType('unsignedShort', int)
-unsignedInt         = NewType('unsignedInt', int)
-unsignedLong        = NewType('unsignedLong', int)
-
-### Real numbers
-#decimal            = NewType('decimal', float)
-double              = NewType('double', float)
-#float               = NewType('float', float)
-
-### Dates and times (unfinished)
-gDay                = NewType('gDay', int)
-gMonth              = NewType('gMonth', int)
-gMonthDay           = NewType('gMonthDay', str)
-gYear               = NewType('gYear', date)
-gYearMonth          = NewType('gYearMonth', date)
-date                = NewType('date', date)
-dateTime            = NewType('dateTime', datetime)
-time                = NewType('time', time)
-duration            = NewType('duration', timedelta)
-
-### Strings
-language            = NewType('language', str)
-normalizedString    = NewType('normalizedString', str)
-string              = NewType('string', str)
-token               = NewType('token', str)
-anyURI              = NewType('anyURI', str)
-
-### XML constructs (note caps)
-XmlName             = NewType('XmlName', str)
-XmlQName            = NewType('XmlQName', str)
-XmlNmtoken          = NewType('XmlNmtoken', str)
-
-ID                  = NewType('ID', str)
-IDREF               = NewType('IDREF', str)
-IDREFS              = NewType('IDREFS', str)  # [str]
-Name                = NewType('Name', str)
-NCName              = NewType('NCName', str)
-NMTOKEN             = NewType('NMTOKEN', str)
-NMTOKENS            = NewType('NMTOKENS', str)  # [str]
-QName               = NewType('QName', str)
-ENTITY              = NewType('ENTITY', str)
-ENTITIES            = NewType('ENTITIES', str)  # [str]
-
-
-###############################################################################
 # TODO Sync w/ lxml or similar.
 #
-class ContentType(Enum):
-    """Predicated of each element type
-    """
-    EMPTY   = 0     # EMPTY
-    PCDATA  = 1     # #PCDATA allowed
-    ELEMENT = 2     # Element(s) allowed
-    ANY     = 3     # Mixed content (includes ANY)
+class DKey(Enum):
+    # DTD items (not incl. attribute types, dcl names,...)
+    #
+    ANY     = "ANY"
+    EMPTY   = "EMPTY"
+    PCDATA  = "#PCDATA"
+    X_ELEMENT = "X_ELEMENT"  # HERE -- for element-only content
+    X_MODEL = "X_MODEL"      # Has content model, not one of the above
 
-    # Extras
-    CDATA   = 8
+    CDATA   = "CDATA"
+    RCDATA  = "RCDATA"
+    NDATA   = "NDATA"
+    SDATA   = "SDATA"
 
-    def tostring(self):
-        if self == ContentType.EMPTY: return "EMPTY"
-        if self == ContentType.PCDATA: return "(#PCDATA)"
-        if self == ContentType.ELEMENT:
-            raise ValueError("No export for dcl content 'ELEMENT' extension.")
-        return "ANY"
+    REQUIRED= "#REQUIRED"
+    IMPLIED = "#IMPLIED"
+    FIXED   = "#FIXED"
+    X_VALUE = "X_VALUE"  # Set when there's a literal default value
 
-class SeqType(Enum):
-    """Predicated of each ()-group in a model.
-    """
-    CHOICE = "|"      # (x | y | z)
-    ALL = "&"         # (x & y & z)   # SGML only
-    SEQUENCE = ","    # (x, y, z)
+    SEQ   = ","
+    OR    = "|"
+    AND   = "&"  # SGML but not XML
 
+    STAR    = "*"
+    PLUS    = "+"
+    QUEST   = "?"
+    X_BOUNDS= r"{\d*(,\d*)?}"  # Like regex and xsd
 
-class RepType:
+    PERO    = "%"
+    RNI     = "#"
+
+    def isContentType(self):
+        """Is the value one that specifies element content?
+        """
+        return self in [
+            DKey.ANY, DKey.EMPTY, DKey.PCDATA, DKey.X_ELEMENT, DKey.X_MODEL ]
+
+    def isSeqType(self):
+        return self in [ DKey.SEQ, DKey.OR, DKey.AND ]
+
+    def isRepType(self):
+        return self in [ DKey.STAR, DKey.PLUS, DKey.QUEST, DKey.X_BOUNDS ]
+
+    def isAttrDefault(self):
+        return self in [ DKey.REQUIRED, DKey.IMPLIED, DKey.FIXED, DKey.X_VALUE ]
+
+class RepType:  # TODO?
     def __init__(self, minOccurs:int=1, maxOccurs:int=1):
         assert int(minOccurs) and int(maxOccurs)
         self.minOccurs = int(minOccurs)
@@ -502,10 +530,14 @@ class RepType:
             if (self.maxOccurs == -1): return "+"
         return "{%d,%d}" % (self.minOccurs, self.maxOccurs)
 
+
+###############################################################################
+#
 class ModelItem:
-    """One item (and element name with a rep, or just #PCDATA).
+    """One item (an element name with a rep, or just #PCDATA).
     """
-    def __init__(self, name:NmToken, rep:RepType=None):
+    def __init__(self, name:NMTOKEN_t, rep:RepType=None):
+        assert name == DKey.PCDATA.value or XStr.isXmlNMTOKEN(name)
         self.name = name
         self.rep = rep
 
@@ -516,12 +548,14 @@ class ModelGroup:
     """Any parenthesized group, with ModelItem members, plus connector and rep.
     Maybe keep the original string (if any), or a list of PEs in it?
     """
-    def __init__(self, items:List=None, seq:SeqType=None, rep:RepType=None):
+    def __init__(self, items:List=None, seq:DKey=None, rep:DKey=None):
+        assert DKey.isSeqType(seq)
+        assert DKey.isRepType(rep)
         self.items = items
         self.seq = seq
         self.rep =  rep
 
-    def getNames(self):
+    def getNames(self) -> Set:
         """Extract the set of all names used anywhere in a model.
         """
         names = set()
@@ -532,7 +566,7 @@ class ModelGroup:
                 names = names.union(item.getNames())
         return names
 
-    def tostring(self):
+    def tostring(self) -> str:
         """TODO Maybe re-introduce PEs or complex types?
         """
         buf = ""
@@ -551,12 +585,17 @@ class ModelGroup:
         return buf
 
 class Model(ModelGroup):
-    """The top model, which can be a declared content keyword OR a ModelGroup.
+    """The whole/top model, which can be a declared content keyword OR a ModelGroup.
     This also converts a token sequence to the model ASN.
     """
-    def __init__(self, contentType:ContentType=None, tokens:List[str]=None):
+    def __init__(self, contentType:DKey=None, tokens:List[str]=None):
         super(). __init__()
+        assert DKey.isContentType(contentType)
+        if tokens: assert contentType == DKey.X_MODEL
+
         self.contentType = contentType
+        self.tokens = tokens
+
         if not tokens: return
         self.items = []
         self.seq = None
@@ -572,14 +611,14 @@ class Model(ModelGroup):
                 if i+1 < len(tokens) and isinstance(tokens[i+1], RepType):
                     pstack[-1].rep = tokens[i+1]
                     i += 1
-            elif t in "|&,":
+            elif t in "|&,":  # TODO Map to enum
                 if pstack[-1].seq != t:
                     if pstack[-1].seq is None: pstack[-1].seq = t
                     else: raise SyntaxError("Inconsistent connectors.")
             elif XStr.isXmlName(t):
                 newItem = ModelItem(t)
                 pstack[-1].items.append(newItem)
-                if i+1 < len(tokens) and isinstance(tokens[i+1], RepType):
+                if i+1 < len(tokens) and isinstance(tokens[i+1], RepType):   # TODO Map to enum
                     newItem.rep = tokens[i+1]
                     i += 1
             else:
@@ -587,59 +626,50 @@ class Model(ModelGroup):
         if (len(pstack) != 1):
             raise SyntaxError("Unbalanced () in model.")
 
-    def tostring(self):
+    def tostring(self) -> str:
         if self.contentType: return self.contentType.tostring()
         else: return super().tostring()
 
-class ElementDef:
-    def __init__(self, name:NmToken, model:Model):
-        self.name = name
-        self.model = model
+class ElementDef(ComplexType):
+    def __init__(self, name:NMTOKEN_t, model:Model, readOrder:int=0):
+        super().__init__(name, model)
         self.attributeDefs = None
         self.allowText:bool = True
         self.allowAnywhere:Set = None
         self.allowNowhere:Set = None
-        self.readOrder = 0
+        self.readOrder = readOrder
 
     def tostring(self) -> str:
         buf = "<!ELEMEMT %-12s %s>\n" % (self.name, self.model.tostring())
         # TODO Add attlist?
         return buf
 
-class ComplexType:
-    def __init__(self, name:str, model:Model):
-        self.name = name
-        self.model = model
-
 
 ###############################################################################
 # TODO Move attr stuff to separate file
 #
-class AttrDefault(Enum):
-    REQUIRED = "#REQUIRED"
-    IMPLIED = "#IMPLIED"
-    FIXED = "#FIXED"
-
 class AttributeDef:
-    def __init__(self, name:NmToken, aname:NmToken, atype:str, adefault:Any):
+    def __init__(self, name:NMTOKEN_t, aname:NMTOKEN_t, atype:str, adefault:Any, readOrder:int=0):
         self.name = name
         self.aname = aname
         self.atype = atype
         self.adefault = adefault
-        self.caseTx = None
-        self.multi = False
+        self.caseTx = "NONE"
+        self.wsTx = "NONE"
         self.enumList = None
+        self.readOrder = readOrder
 
-    def enumSpec(self):
+    def enumSpec(self) -> str:
         if self.enumList: return " (%s)" % (" | ".join(self.enumList))
         return None
 
 class AttlistDef(dict):
-    def __init__(self, name:str):  # Or list of enames?
+    def __init__(self, name:str, readOrder:int=0):  # Or list of enames?
         self.name = name
         self.attrs = {}
+        self.readOrder = readOrder
 
-    def __setitem__(self, aname:NmToken, atype:str, adefault:Any=None) -> AttributeDef:
+    def __setitem__(self, aname:NMTOKEN_t, atype:str, adefault:Any=None) -> AttributeDef:
         if aname in self.attrs:
             raise KeyError("Attribute {aname} already defined for {self.ename}.")
         if atype not in AttrTypes and not isinstance(atype, type):
@@ -711,11 +741,12 @@ class DataSource:
 class EntityDef:
     """Any of several subtypes.
     """
-    def __init__(self, name:NmToken,
+    def __init__(self, name:NMTOKEN_t,
         etype:EntityType,
         dataSource:DataSource,
         parseType:EntityParseType=EntityParseType.PCDATA,
-        notation:NmToken=None
+        notation:NMTOKEN_t=None,
+        readOrder:int=0
         ):
         self.name = name
         self.etype = etype
@@ -723,6 +754,7 @@ class EntityDef:
         self.parseType = parseType
         self.notation = notation
         self.localPath = None
+        self.readOrder = readOrder
 
     def tostring(self) -> str:
         # TODO Support keywords -- SDATA, CTYPE,....
@@ -736,11 +768,12 @@ class Notation:
     mentioning that entity name (not actually referencing the entity) as
     the value of an attribute that was declared as being of type ENTITY.
     """
-    def __init__(self, name:NmToken, dataSource:DataSource):
+    def __init__(self, name:NMTOKEN_t, dataSource:DataSource, readOrder:int=0):
         if (dataSource.literal is not None):
             raise SyntaxError("NOTATION {nname} has QLit, not PUBLIC or SYSTEM.")
         self.name = name
         self.dataSource = dataSource
+        self.readOrder = readOrder
 
     def tostring(self) -> str:
         return "<!NOTATION %-12s %s>\n" % (self.name, self.dataSource.tostring())
@@ -779,10 +812,10 @@ class DocumentType(Node):
         self.nameSetDefs = {}  # Accommodation for schema maintenance
 
     @property
-    def nodeValue(self):
+    def nodeValue(self) -> str:
         return None
 
-    def after(self, stuff:List):
+    def after(self, stuff:List) -> None:
         """Inserts a set of Node or string objects in the child list of the
         parent, just after this node.
         """
@@ -794,7 +827,7 @@ class DocumentType(Node):
             for thing in stuff:
                 par.appendChild(thing)
 
-    def before(self, stuff:List):
+    def before(self, stuff:List) -> None:
         """Inserts a set of Node or string objects in the child list of the
         parent, just before this node.
         """
@@ -802,19 +835,20 @@ class DocumentType(Node):
         for thing in stuff:
             par.insertBefore(self, thing)
 
-    def removeNode(self):
+    def removeNode(self) -> None:
         """Removes this object from its parent child list.
         """
         par = self.parentNode
         par.removeChild(self)
 
-    def replaceWith(self, stuff:List):
+    def replaceWith(self, stuff:List) -> None:
         """Replaces the document type with a set of given nodes.
         """
+        raise NSuppE
 
     ####### EXTENSIONS
 
-    def reindex(self):
+    def reindex(self) -> None:
         self.elementDefs = {}
         self.attributeDefs = {}
         self.entityDefs = {}
@@ -832,59 +866,59 @@ class DocumentType(Node):
         return
 
     # ELEMENT
-    def getElementDef(self, name:NmToken):
+    def getElementDef(self, name:NMTOKEN_t) -> ElementDef:
         return self.elementDefs[name] if name in self.elementDefs else None
 
-    def defineElement(self, name:NmToken, modelInfo):
+    def defineElement(self, name:NMTOKEN_t, modelInfo):
         assert name not in self.elementDefs
         self.elementDefs[name] = modelInfo
 
     # Attribute
-    def getAttributeDef(self, ename:NmToken, aname:NmToken):
+    def getAttributeDef(self, ename:NMTOKEN_t, aname:NMTOKEN_t) -> AttributeDef:
         if ename not in self.elementDefs: return None
         edef = self.elementDefs[ename]
         if aname not in edef.attributeDefs: return None
         return edef.attributeDefs[aname]
 
-    def defineAttribute(self, ename:NmToken, aname:NmToken,
-        atype:NmToken="CDATA", adefault:NmToken="IMPLIED"):
+    def defineAttribute(self, ename:NMTOKEN_t, aname:NMTOKEN_t,
+        atype:NMTOKEN_t="CDATA", adefault:NMTOKEN_t="IMPLIED") -> None:
         assert aname not in self.attributeDefs
         self.elementDefs[(ename)].attributeDefs[aname] = [ atype, adefault ]
 
     # Entity (subtypes for General, Parameter, Notation, and NameSet)
-    def getEntityDef(self, name:NmToken):
+    def getEntityDef(self, name:NMTOKEN_t) -> EntityDef:
         return self.entityDefs[name] if name in self.entityDefs else None
 
-    def defineEntity(self, name:NmToken,
+    def defineEntity(self, name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None,
-        parseType:EntityParseType=EntityParseType.PCDATA, notation:NmToken=None):
+        parseType:EntityParseType=EntityParseType.PCDATA, notation:NMTOKEN_t=None) -> None:
         assert name not in self.entityDefs
         assert isinstance(parseType, EntityParseType)
         ds = DataSource(literal, publicId, systemId)
         self.entityDefs[name] = EntityDef(name, EntityType.GENERAL,
             dataSource=ds, parseType=parseType, notation=notation)
 
-    def getPEntityDef(self, name:NmToken):
+    def getPEntityDef(self, name:NMTOKEN_t) -> EntityDef:
         return self.pentityDefs[name] if name in self.pentityDefs else None
 
-    def definePEntity(self, name:NmToken,
-        literal:str=None, publicId:str=None, systemId:str=None):
+    def definePEntity(self, name:NMTOKEN_t,
+        literal:str=None, publicId:str=None, systemId:str=None) -> None:
         assert name not in self.pentityDefs
         self.entityDefs[name] = EntityDef(name,
             EntityType.PARAMETER, literal, publicId, systemId)
 
-    def getNotationDef(self, name:NmToken):
+    def getNotationDef(self, name:NMTOKEN_t) -> EntityDef:
         return self.notationDefs[name] if name in self.notationDefs else None
 
-    def defineNotation(self, name:NmToken,
-        literal:str=None, publicId:str=None, systemId:str=None):
+    def defineNotation(self, name:NMTOKEN_t,
+        literal:str=None, publicId:str=None, systemId:str=None) -> None:
         assert name not in self.notationDefs
         self.notationDefs[name] = EntityDef(name,
             EntityType.NOTATION, literal, publicId, systemId)
 
     # Basic operations
     #
-    def cloneNode(self, deep:bool=False):
+    def cloneNode(self, deep:bool=False) -> 'Node':
         newNode = DocumentType(
             qualifiedName=self.name,
             doctypeString=self.doctypeString,

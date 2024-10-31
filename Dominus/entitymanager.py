@@ -2,7 +2,6 @@
 #
 # EntityManager
 # multiXml written 2011-03-11 by Steven J. DeRose.
-# Broken out from multiXML.py, 2013-02-25.
 #
 #pylint: disable=W1201
 #
@@ -18,10 +17,10 @@ from types import SimpleNamespace
 #import html
 #from html.entities import codepoint2name
 
-from xmlstrings import XmlStrings as XStr
+from xmlstrings import XmlStrings as XStr, WSDef, CaseHandler, UNormHandler
 from saxplayer import SaxEvents
-from domexceptions import NotSupportedError
-from documenttype import Model, RepType, AttrTypes  # ModelGroup
+from basedomtypes import NotSupportedError
+from documenttype import Model, RepType, AttrTypes, ContentType  # ModelGroup
 
 lg = logging.getLogger("EntityManager")
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -210,13 +209,17 @@ class EntityDef:
         self.space = space
         self.name = name
         self.parseType = parseType
+
+        self.encoding = encoding
+        self.wsTx = WSDef("XML")
+        self.caseTx = CaseHandler("NONE")
+        self.uNormTx = UNormHandler("NONE")
+
         if publicId: self.locType = LocType.PUBLIC
         elif systemId: self.locType = LocType.SYSTEM
         else: self.locType = LocType.LITERAL
-
         self.publicId = publicId
         self.systemId = systemId
-        self.encoding = encoding
         self.data = data
         self.notationName = notationName
 
@@ -269,15 +272,15 @@ class EntityFrame:
             self.ifh = codecs.open(self.eDef.path, "rb", self.eDef.encoding)
             self.buf = self.ifh.read()
 
-    def close(self):
+    def close(self) -> None:
         if self.ifh: self.ifh.close()
         self.buf = None
 
     @property
-    def bufLeft(self):
+    def bufLeft(self) -> int:
         return len(self.buf) - self.bufPos
 
-    def peek(self, n:int=1):
+    def peek(self, n:int=1) -> str:
         """Return the next n characters (or fewer if EOF is coming),
         without actually consuming them. No skipSpaces options here,
         it could get circular.
@@ -287,7 +290,7 @@ class EntityFrame:
             if self.bufLeft < n: return None
         return self.buf[self.bufPos:self.bufPos+n]
 
-    def consume(self, n:int=1):
+    def consume(self, n:int=1) -> str:
         """Same as peek except the characters really ARE consumed.
         But only if there are at least n available.No skipSpaces options here,
         it could get circular.
@@ -299,7 +302,7 @@ class EntityFrame:
         self.bufPos += n
         return rc
 
-    def pushBack(self, s:str):
+    def pushBack(self, s:str) -> None:
         """You can push back as much as memory permits. But if what you push
         back isn't what you read, that may not be good. Real file reading
         will pick up once the buffer (including the pushBack) is exhausted.
@@ -334,7 +337,7 @@ class EntityFrame:
             return False  # EOF
         return True
 
-    def skipSpaces(self, allowComments:bool=True):
+    def skipSpaces(self, allowComments:bool=True) -> bool:
         """XML eliminated in-space --...-- comments.
         Calling this is key to keeping the buffer full.
         Since this is in EntityFrame, it doesn't handle parameter entities
@@ -351,7 +354,7 @@ class EntityFrame:
             else:
                 return True
 
-    def readSepComment(self, ss:bool=True):
+    def readSepComment(self, ss:bool=True) -> str:
         """Read a comment that's just the --...-- part.
         """
         if ss: self.skipSpaces()
@@ -361,17 +364,18 @@ class EntityFrame:
         self.bufPos += len(mat.group(1))
         return mat.group(1)
 
-    def readConst(self, const:str, ss:bool=True, thenSp:bool=False):
+    def readConst(self, const:str, ss:bool=True, thenSp:bool=False) -> str:
         # TODO Case-ignoring option?
         if ss: self.skipSpaces()
         if self.bufLeft < len(const)+1: self.topOff()
         if not self.buf[self.bufPos:].startswith(const): return None
-        if thenSp and not self.buf[self.bufPos+len(const)].isspace(): return None
+        if thenSp and not self.buf[self.bufPos+len(const)].isspace():
+            return None
         self.bufPos += len(const)
         return const
 
-    def readInt(self,  ss:bool=True, signed:bool=True):
-        """TODO: Offer hex/octal/bin?
+    def readInt(self,  ss:bool=True, signed:bool=True) -> int:
+        """TODO: Offer hex/octal/bin? Return int or orig string?
         NIT: Consumes a sign even if no following number.
         """
         if ss: self.skipSpaces()
@@ -394,18 +398,18 @@ class EntityFrame:
             if self.readConst("NaN"): return float("NaN")
             if self.readConst("-Inf"): return float("-Inf")
             if self.readConst("Inf"): return float("Inf")
-        seenRadix = False
         fToken = ""
         c = self.peek()
         if (signed and c in "+-"):
             fToken = self.consume()
             c = self.peek()
         while (c is not None):
-            if c.isdigit(): fToken += c
-            if c == self.options.radix:
-                if seenRadix: self.SE("Extra radix point.")
-                fToken += c
-        if (fToken.strip("+-.") == ""): return None
+            if c.isdigit(): fToken += self.consume()
+            elif c == ".":
+                if "." in fToken: break
+                fToken += self.consume()
+            c = self.peek()
+        if (fToken.strip("+-.") == ""): return None  # Pushback?
         return float(fToken)
 
     def readName(self, ss:bool=True) -> str:
@@ -487,6 +491,7 @@ class EntityFrame:
                 bestTarget = target
         return bestTarget, bestIndex
 
+
 ###############################################################################
 #
 class StackReader:
@@ -560,13 +565,12 @@ class StackReader:
             "emptyEnd": False,      # </>
 
             ### Unicode-related
-            "curlyQuotes" : False,  #
-            #"elementFold": False,   #
-            #"entityFold": False,    #
-            #"keywordFold": False,   #
-            # "caseTx"
-            # "UNormTx"
-            # "WSDef"
+            "curlyQuotes": False,
+            "case_element": "NONE",
+            "case_entity": "NONE",
+            "case_keyword": "NONE",
+            "uNorm": "NONE",
+            "wsDef": "XML",
             "radix": ".",           # Decimal point choice
 
             ### Experiments, overlap, etc.
@@ -591,12 +595,12 @@ class StackReader:
             self.setupDocEntity(rootPath, encoding)
             self.parseTop()
 
-    def SE(self, msg:str):
+    def SE(self, msg:str) -> None:
         """Deal with a syntax error.
         """
         raise SyntaxError(msg + " at \n$$$" + self.bufSample + "$$$")
 
-    def doCB(self, typ:SaxEvents, *args):
+    def doCB(self, typ:SaxEvents, *args) -> None:
         """Given an event type and its args, call the handler if any.
         """
         msg = ", ".join(f"{x}" for x in args)
@@ -604,7 +608,7 @@ class StackReader:
         if typ in self.handlers: self.handlers[typ](self, args)
         self.totEvents += 1
 
-    def setupDocEntity(self, rootPath:str, encoding:str="utf-8"):
+    def setupDocEntity(self, rootPath:str, encoding:str="utf-8") -> None:
         assert len(self.entStack) == 0
         if not os.path.isfile(rootPath):
             raise IOError(f"File not found: {rootPath}.")
@@ -624,7 +628,7 @@ class StackReader:
         if name in tgt: return tgt[name]
         return None
 
-    def expandPEntities(self, s:str):
+    def expandPEntities(self, s:str) -> str:
         """Recursively expand parameter entity references in a string.
         But do it breadth-first.
         Fairly well protected against reference bombs.
@@ -643,7 +647,7 @@ class StackReader:
                     % (totpasses, totsubs))
         return s
 
-    def getParameterText(self, mat):
+    def getParameterText(self, mat) -> str:
         peName = mat.group(1)
         if self.isOpen(SpaceType.PARAMETER, peName):
             self.SE("Parameter entity {peName} is already open.")
@@ -709,7 +713,7 @@ class StackReader:
     ### Reading
 
     @property
-    def buf(self):
+    def buf(self) -> str:
         return self.curFrame.buf
     @property
     def bufPos(self) -> int:
@@ -729,20 +733,23 @@ class StackReader:
             "^" +  # or "\uFE0E" +  # WHITE FROWNING FACE
             self.buf[self.bufPos:self.bufPos+postLen])
 
-    def readConst(self, const:str, ss:bool=True, thenSp:bool=False):
+    def readConst(self, const:str, ss:bool=True, thenSp:bool=False) -> str:
         return self.curFrame.readConst(const, ss, thenSp)
-    def readInt(self,  ss:bool=True, signed:bool=True):
+    def readInt(self,  ss:bool=True, signed:bool=True) -> int:
         return self.curFrame.readInt(ss, signed)
-    def readName(self, ss:bool=True):
+    def readFloat(self,  ss:bool=True, signed:bool=True,
+        specialFloats:bool=False) -> float:
+        return self.curFrame.readFloat(ss=ss, signed=signed, specialFloats=specialFloats)
+    def readName(self, ss:bool=True) -> str:
         return self.curFrame.readName(ss)
-    def readRegex(self, regex:Union[str, re.Pattern], ss:bool=True, ignoreCase:bool=True):
+    def readRegex(self, regex:Union[str, re.Pattern], ss:bool=True, ignoreCase:bool=True) -> Match:
         return self.curFrame.readRegex(regex, ss, ignoreCase)
-    def readToString(self, ender:str, consumeEnder:bool=True):
+    def readToString(self, ender:str, consumeEnder:bool=True) -> str:
         return self.curFrame.readToString(ender, consumeEnder)
-    def readSepComment(self, ss:bool=True):
+    def readSepComment(self, ss:bool=True) -> str:
         return self.curFrame.readSepComment(ss)
 
-    def peek(self, n:int=1):
+    def peek(self, n:int=1) -> str:
         return self.curFrame.peek(n)
     def consume(self, n:int=1) -> str:
         return self.curFrame.consume(n)
@@ -758,7 +765,7 @@ class StackReader:
             self.close()
         return False
 
-    def skipSpaces(self, allowComments:bool=False, allowParams:bool=False):
+    def skipSpaces(self, allowComments:bool=False, allowParams:bool=False) -> bool:
         #crossEntityEnds:bool=False):  # TODO Implement stack!
         """Basically skip spaces, but at option, also:
             * skip a comment
@@ -784,14 +791,14 @@ class StackReader:
             if self.bufLeft < self.bufSize>>2:
                 self.topOff()
                 if not self.entStack: break
-        return
+        return nFound > 0
 
-    def allowPE(self):
+    def allowPE(self) -> None:
         """Used by skipSpaces and others when it's ok to have a parameter
         entity reference.
         """
         # skipspaces???? don't go circular
-        if self.peek() != "%": return False
+        if self.peek() != "%": return
         self.bufPos += 1
         pename = self.readName()
         if not pename:
@@ -1023,7 +1030,7 @@ class StackReader:
             lims = [ minO, maxO ]
         return RepType(*lims)
 
-    def readAttListDcl(self):                           # ATTLIST DCL
+    def readAttListDcl(self) -> (List, Dict):           # ATTLIST DCL
         """Example:
             <!ATTLIST para  class   NMTOKENS    #IMPLIED
                             level   NUMTOKEN    #REQUIRED
@@ -1070,7 +1077,7 @@ class StackReader:
         # TODO Allocate AttlistDef
         return names, atts
 
-    def readEntityDcl(self):                            # ENTITY DCL
+    def readEntityDcl(self) -> Tuple:                   # ENTITY DCL
         """Examples:
             <!ENTITY % foo "(i | b* | (tt, lang0))*">
             <!ENTITY XML "Extensible Markup Language">
@@ -1194,7 +1201,11 @@ class StackReader:
                 raise NotSupportedError("Unsupported SGML MS Keyword {topKey}")
             self.msStack.pop()
 
-    def parseTop(self):
+    def parseTop(self) -> None:
+        """Parse the start of an XML document, up through the declaration
+        subset (the stuff between [] in the DOCTYPE). Return before actually
+        parsing the document instance (caller can do parseDocument() for that).
+        """
         #import pudb; pudb.set_trace()
         self.doCB(SaxEvents.START)
         _props = self.readXmlDcl()
@@ -1242,6 +1253,7 @@ class StackReader:
                     self.SE("Unexpected content is DOCTYPE after '<'.")
             else:
                 self.SE(f"Expected ']' or '<' in DOCTYPE, not '{p}'.")
+
         self.doCB(SaxEvents.FINAL)
 
 
@@ -1249,10 +1261,10 @@ class StackReader:
     # This seems to be all we need atop the DTD/entity parser, to do documents.
     #
     @property
-    def inRCDATA(self):
+    def inRCDATA(self) -> bool:
         return self.msStack and self.msStack[-1] == "RCDATA"
 
-    def parseDocument(self):
+    def parseDocument(self) -> None:
         """Starts after parseTop.
         """
         buf = ""

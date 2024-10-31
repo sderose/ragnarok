@@ -7,7 +7,9 @@
 import re
 from typing import Union, Match, Dict, List
 
+import unicodedata
 from html.entities import codepoint2name, name2codepoint
+from basedomtypes import NMTOKEN_t
 
 __metadata__ = {
     "title"        : "xmlstrings",
@@ -100,20 +102,41 @@ Internal whitespace is left unchanged.
 
 ==Useful sets of characters==
 
-* _nameStartCharRanges: A list of 2-tuples of code point integers,
-each defining a range of characters that are XML name start characters.
+How these are represented is indicated by a suffix on the name:
 
-* _nameCharAddlRanges: Like _nameStartCharRanges, but including only
+* '''_list''' is just a list of characters as a string.
+For example,
+    xmlSpaces_list = " \\n\\r\\t".
+
+* '''_rangelist''' is a list of (start, end) codepoint pairs.
+For example,
+    _nameStartChar_rangelist = [ (0x00, 0x1F), (0x80, 0x9F), ... ].
+
+* '''_rangespec''' is generally derived from a _rangelist, using
+''rangelist2rangespec()''. It is ready to put inside regex [], but does not
+include the brackets (to make it trivial to combine specs when needed).
+For example,
+    _nameStartChar_rangespec = "\\u005f\\u0041-\\u005A..."
+
+* '''_re''' is an entire usable regex (compiled or not). Perhaps just [...], or
+perhaps fancier. For example,
+    NMTOKEN_re = r"[%s]+" % (_nameChar_rangespec)
+
+Thus:
+
+* xmlSpace_list: A string containing only the XML space characters,
+namely SPACE, TAB, LF, and CR. No other Unicode space chars (see the
+''WsDefs'' class for fancier space-handling options).
+
+* _nameStartChar_rangelist: A list of the ranges of characters that are
+XML name start characters. This is straight from the XML REC (see the
+''NameTest'' class for fancier name definition options).
+
+* _nameCharAddl_rangelist: Like _nameStartChar_rangelist, but including only
 the *additional* ranges allowed as XML name characters.
 
-* _nameStartCharSpec: A single string expressing the same ranges
-as _nameStartCharRanges, in the form to go inside [] in a regex.
-
-* _addlSpec: A single string expressing the same ranges
-as _nameStartCharRanges, in the form to go inside [] in a regex.
-
-* xmlSpaceChars: A string containing only the XML space characters,
-namely SPACE, TAB, LF, and CR. This does not include other Unicode space chars.
+* _nameStartChar_rangespec: A single string expressing the same ranges
+as _nameStartChar_rangelist, in the form to go inside [] in a regex.
 
 In addition, `allNameStartChars()` and `allNameCharAddls()`
 return strings containing all of the characters in the given category (this is
@@ -122,9 +145,9 @@ much less compact than the regex-style range notation).
 
 ==Useful regexes==
 
-* xmlSpaceExpr: A regex that matches one or more XML space characters.
+* xmlSpaces_re: A regex that matches one or more XML space characters.
 
-* xmlSpaceOnlyRegex: A regex that matches a string if it
+* xmlSpaceOnly_re: A regex that matches a string if it
 consists entirely of XML space characters (this can also be approximated by
 testing is str.strip() is empty/falsish).
 
@@ -193,7 +216,7 @@ in getAttributeAs(). Turn off default of appending id comment in getEndTag().
 * 2024-08-14: Clean up extracted XmlStrings package, add and pass unit tests.
 Fix bugs with name-start character list.
 * 2024-09: Tighter integration with other packages. Normalize name casing.
-Add actual types for NmToken etc. via NewType.
+Add actual types for NMTOKEN etc. via NewType.
 
 
 =Rights=
@@ -209,10 +232,13 @@ For the most recent version, see [http://www.derose.net/steve/utilities] or
 =Options=
 """
 
-def rangesToSpec(ranges:List) -> str:
+
+###############################################################################
+#
+def rangelist2rangespec(ranges:List) -> str:
     """Convert a list of codepoint pairs (start, end) to the form to put
     inside [] in a regex. Doesn't insert the brackets themselves.
-    TODO: Tweak to support rest of Unicode past BMP.
+    TODO: Ssupport rest of Unicode past BMP.
     """
     buf = ""
     for r in ranges:
@@ -222,21 +248,16 @@ def rangesToSpec(ranges:List) -> str:
         else: buf += "\\u%04x-\\u%04x" % (r[0], r[1])
     return buf
 
-
-
-
-###############################################################################
-#
 class XmlStrings:
     """This class contains static methods and variables for basic XML
     operations such as testing syntax forms, escaping strings, etc.
     """
-    xmlSpaceChars = " \t\r\n"
-    xmlSpaceExpr = r"[" + xmlSpaceChars + r"]+"
-    xmlSpaceOnlyRegex = re.compile("^[%s]*$" % (xmlSpaceChars))
+    xmlSpaces_list = " \t\r\n"
+    xmlSpaces_re = r"[" + xmlSpaces_list + r"]+"
+    xmlSpaceOnly_re = re.compile("^[%s]*$" % (xmlSpaces_list))
 
     # This excludes colon (":"), since we want to distinguish QNames.
-    _nameStartCharRanges = [
+    _nameStartChar_rangelist = [
         ( ord("_"), ord("_") ),
         ( ord("A"), ord("Z") ),
         ( ord("a"), ord("z") ),
@@ -255,7 +276,7 @@ class XmlStrings:
         # ( "0x00010000, 0x000EFFFF" ),
     ]
 
-    _nameCharAddlRanges = [
+    _nameCharAddl_rangelist = [
         ( ord("-"), ord("-") ), # Watch out for regex
         ( ord("."), ord(".") ),
         ( ord("0"), ord("9") ),
@@ -264,32 +285,35 @@ class XmlStrings:
         ( 0x203F, 0x2040 ),     # Undertie and Char tie
     ]
 
-    _nonXmlRanges = [
+    _nonXml_rangelist = [
         ( 0x0000, 0x0008 ),
         ( 0x000B, 0x000B ),
         ( 0x000E, 0x001F ),
         ( 0xD800, 0xDFFF ),
     ]
 
-    _nameStartCharSpec = rangesToSpec(_nameStartCharRanges)
-    _addlSpec = rangesToSpec(_nameCharAddlRanges)
-    _nameCharSpec = _nameStartCharSpec + _addlSpec
-    _nonXmlSpec = rangesToSpec(_nonXmlRanges)
+    _nameStartChar_rangespec = rangelist2rangespec(_nameStartChar_rangelist)
+    _addl_rangespec = rangelist2rangespec(_nameCharAddl_rangelist)
+    _nameChar_rangespec = _nameStartChar_rangespec + _addl_rangespec
+    _nonXml_rangespec = rangelist2rangespec(_nonXml_rangelist)
 
-    # These do not include ^...$, e.g. so can match against start of a buffer.
-    xmlNmtoken = r"[%s]+" % (_nameCharSpec)
-    xmlNCName  = r"[%s][%s]*" % (_nameStartCharSpec, _nameCharSpec)
+    # These do not include ^...$, e.g. so can match against start of a buffer
+    # regardless of what follows. Depending on the purpose, callers may have
+    # to check -- for example, that a space follows a matching NCNAME.
+    #
+    NMTOKEN_re = r"[%s]+" % (_nameChar_rangespec)
+    NCName_re  = r"[%s][%s]*" % (_nameStartChar_rangespec, _nameChar_rangespec)
 
-    xmlQName = r"%s(:%s)?" % (xmlNCName, xmlNCName)
-    xmlQQName = r"%s(:%s)*" % (xmlNCName, xmlNCName)
-    xmlPName = r"%s:%s" % (xmlNCName, xmlNCName)
+    QName_re = r"%s(:%s)?" % (NCName_re, NCName_re)
+    QQName_re = r"%s(:%s)*" % (NCName_re, NCName_re)
+    PName_re = r"%s:%s" % (NCName_re, NCName_re)
 
     @staticmethod
     def allNameStartChars() -> str:
         """A string of all chars allowed as first char of XML NAME.
         """
         buf = ""
-        for r in XmlStrings._nameStartCharRanges:
+        for r in XmlStrings._nameStartChar_rangelist:
             buf += "".join([ chr(cp) for cp in range(r[0], r[1]+1) ])
         return buf
 
@@ -298,7 +322,7 @@ class XmlStrings:
         """A string of *additional* chars allowed past first char of XML NAME.
         """
         buf = ""
-        for r in XmlStrings._nameCharAddlRanges:
+        for r in XmlStrings._nameCharAddl_rangelist:
             buf += "".join([ chr(cp) for cp in range(r[0], r[1]+1) ])
         return buf
 
@@ -310,43 +334,62 @@ class XmlStrings:
 
 
     ###########################################################################
+    # XML string predicates
     #
+    isXmlChars_re = re.compile(r"[%s]" % (_nonXml_rangespec))
+    isXmlName_re = re.compile(f"^{NCName_re}$")
+    isXmlQName_re = re.compile(f"^{QName_re}$")
+    isXmlQQName_re = re.compile(f"^{QQName_re}$")
+    isXmlPName_re = re.compile(f"^{PName_re}$")
+    isXmlNMTOKEN_re = re.compile(f"^{NMTOKEN_re}$")
+    isXmlNumber_re = re.compile(r"^\d+$")
+
     @staticmethod
     def isXmlChars(s:str) -> bool:
         """At least one char, and all the individual chars are allowed.
         """
-        return s and not re.search(r"[%s]" % (XmlStrings._nonXmlSpec), s)
+        return s and not re.search(XmlStrings.isXmlChars_re, s)
 
     @staticmethod
     def isXmlName(s:str) -> bool:
         """Return True for a NON-namespace-prefixed (aka) local name.
         """
-        return bool(re.match(f"^{XmlStrings.xmlNCName}$", s))
+        return bool(re.match(XmlStrings.isXmlName_re, s))
     isXmlLName = isXmlName
 
     @staticmethod
     def isXmlQName(s:str) -> bool:
         """Return True for a namespace-prefixed OR unprefixed name.
         """
-        return bool(re.match(f"^{XmlStrings.xmlQName}$", s))
+        return bool(re.match(XmlStrings.isXmlQName_re, s))
+
+    @staticmethod
+    def isXmlQQName(s:str) -> bool:
+        """Return True even for multiple prefixes.
+        """
+        return bool(re.match(XmlStrings.isXmlQQName_re, s))
 
     @staticmethod
     def isXmlPName(s:str) -> bool:
         """Return True only for a namespace-prefixed name.
         """
-        return bool(re.match(f"^{XmlStrings.xmlPName}$", s))
+        return bool(re.match(XmlStrings.isXmlPName_re, s))
 
     @staticmethod
-    def isXmlNmtoken(s:str) -> bool:
-        return bool(re.match(f"^{XmlStrings.xmlNmtoken}$", s))
+    def isXmlNMTOKEN(s:str) -> bool:
+        return bool(re.match(XmlStrings.isXmlNMTOKEN_re, s))
 
     @staticmethod
     def isXmlNumber(s:str) -> bool:
         """Check whether the token is a number. This turns off re.Unicode,
         lest we get all the non-Arabic digits (category [Nd]).
         """
-        return bool(re.match(r"^\d+$", s, flags=re.ASCII))
+        return bool(re.match(XmlStrings.isXmlNumber_re, s, flags=re.ASCII))
 
+
+    ###########################################################################
+    # Escapers
+    #
     @staticmethod
     def escapeAttribute(s:str, quoteChar:str='"') -> str:
         """Turn characters special in (double-quoted) attributes, into char refs.
@@ -373,7 +416,6 @@ class XmlStrings:
         if (escapeAllGT): s = s.replace('>', "&gt;")
         else: s = s.replace(']]>', "]]&gt;")
         return s
-
     escapeXmlText = escapeText
 
     @staticmethod
@@ -425,20 +467,24 @@ class XmlStrings:
         s = XmlStrings.escapeText(s)
         return s
 
+    ###########################################################################
+    # Unescapers and cleaners
+    #
     @staticmethod
     def dropNonXmlChars(s:str) -> str:
         """Remove the C0 control characters not allowed in XML.
         Unassigned Unicode characters higher up are left unchanged.
         """
-        return re.sub(r"[%s]+" % (XmlStrings._nonXmlSpec), "", s)
+        return re.sub(r"[%s]+" % (XmlStrings._nonXml_rangespec), "", s)
+
+    entref_re = r"&(#[xX]?)?(\w+);"  # TODO Ok for common ent names, but...
 
     @staticmethod
     def unescapeXml(s:str) -> str:
         """Converted HTML named, and SGML/XML/HTML numeric character references,
         to the literal characters.
         """
-        assert isinstance(s, str)
-        return re.sub(r'&(#[xX]?)?(\w+);', XmlStrings.unescapeXmlFunction, str(s))
+        return re.sub(XmlStrings.entref_re, XmlStrings.unescapeXmlFunction, str(s))
 
     @staticmethod
     def unescapeXmlFunction(mat:Match) -> str:
@@ -455,26 +501,52 @@ class XmlStrings:
         else:
             return chr(int(mat.group(2), 10))
 
+
+    ###########################################################################
+    # XML syntax builders
+    #
+    @staticmethod
+    def makeStartTag(gi:str, attrs:Union[str, Dict]="",
+        empty:bool=False, sort:bool=False) -> str:
+        tag = "<" + gi
+        if (attrs):
+            if (isinstance(attrs, str)):
+                tag += " " + attrs.strip()
+            else:
+                tag += XmlStrings.dictToAttrs(attrs, sort=sort)
+        tag += "/>" if empty else ">"
+        return tag
+
+    @staticmethod
+    def dictToAttrs(dct:Dict, sort:bool=False, normValues:bool=False) -> str:
+        """Turn a dict into a serialized attribute list (possibly sorted
+        and/or space-normalized). Escape as needed.
+        """
+        sep = " "
+        anames = dct.keys()
+        if (sort): anames = sorted(list(anames))
+        attrString = ""
+        for a in (anames):
+            v = dct[a]
+            if (normValues): v = XmlStrings.normalizeSpace(v)
+            attrString += f"{sep}{a}=\"{XmlStrings.escapeAttribute(v)}\""
+        return attrString
+
+    @staticmethod
+    def makeEndTag(name:NMTOKEN_t) -> str:
+        return f"</{name}>"
+
+
+    ### TODO Integrate with more general space-handling below.
+    #
     @staticmethod
     def normalizeSpace(s:str, allUnicode:bool=False) -> str:
-        """By default, this only normalizes *XML* whitespace,
-        per the XML spec, section 2.3, grammar rule 3.
-
-        NOTE: Some methods of removing whitespace do not suffice
-        for Unicode. See https://stackoverflow.com/questions/1832893/
-
-        U+200B ZERO WIDTH SPACE, U+FEFF ZERO WIDTH NO-BREAK SPACE are not in \\s.
-        But U+00A0 NO-BREAK SPACE is.
-        TODO Provide all basedom.WSDefs options.
-        """
         if (allUnicode):
             s = re.sub(r"\s+", " ", s, flags=re.UNICODE)
         else:
-            s = re.sub(XmlStrings.xmlSpaceExpr, " ", s)
+            s = re.sub(XmlStrings.xmlSpaces_re, " ", s)
         s = s.strip(" ")
         return s
-
-    collapseSpace = normalizeSpace
 
     @staticmethod
     def replaceSpace(s:str, allUnicode:bool=False) -> str:
@@ -490,45 +562,267 @@ class XmlStrings:
         if (allUnicode):
             s = re.sub(r'^\s+|\s+$', "", s, flags=re.UNICODE)
         else:
-            s = s.strip(XmlStrings.xmlSpaceChars)
+            s = s.strip(XmlStrings.xmlSpaces_list)
         return s
 
-    @staticmethod
-    def makeStartTag(gi:str, attrs:Union[str, Dict]="",
-        empty:bool=False, sort:bool=False) -> str:
-        tag = "<" + gi
-        if (attrs):
-            if (isinstance(attrs, str)):
-                tag += " " + attrs.strip()
-            else:
-                tag += XmlStrings.dictToAttrs(attrs, sort=sort)
-        tag += "/>" if empty else ">"
-        return tag
 
+    ###########################################################################
+    # XML name manglers
+    #
     @staticmethod
-    def dictToAttrs(dct, sort:bool=False, normValues:bool=False) -> str:
-        """Turn a dict into a serialized attribute list (possibly sorted
-        and/or space-normalized). Escape as needed.
-        """
-        sep = " "
-        anames = dct.keys()
-        if (sort): anames = sorted(list(anames))
-        attrString = ""
-        for a in (anames):
-            v = dct[a]
-            if (normValues): v = XmlStrings.normalizeSpace(v)
-            attrString += f"{sep}{a}=\"{XmlStrings.escapeAttribute(v)}\""
-        return attrString
-
-    @staticmethod
-    def makeEndTag(name:str) -> str:
-        return f"</{name}>"
+    def getPrefixPart(s:str) -> str:
+        p, _, l = s.partition(":")
+        return p if l else ""
 
     @staticmethod
     def getLocalPart(s:str) -> str:
         return s.partition(":")[2] or s  # This is faster
 
-    @staticmethod
-    def getPrefixPart(s:str) -> str:
-        p, _, l = s.partition(":")
-        return p if l else ""
+
+###############################################################################
+#
+class NameTest:
+    """Name/identifier characters vary.
+
+    "Stat rosa pristina nomine, nomina nuda tenemus"
+        -- Umberto Ecu, Il nome d'rosa
+    """
+    _NameStyle = {
+        "XML": 1,     # XML NAME
+        "HTML": 2,    # Any but XML SPACE? For Class tokens, etc.
+        "WHATWG": 3,  # Any but WHATWG__whitespace
+        "ASCII": 4,   # XML except no non-ASCII
+        "PYTHON": 5,  # Python identifiers
+    }
+
+    def __init__(self, nameStyle:str="XML"):
+        assert nameStyle in NameTest._NameStyle
+        self.nameStyle = nameStyle
+        self.expr = None
+        if nameStyle == "XML":
+            self.expr = None
+        elif nameStyle == "HTML":
+            self.expr = re.compile(r"^[^ \t\r\n]+$")
+        elif nameStyle == "WHATWG":
+            self.expr = re.compile(r"^[^ \t\r\n\f]+$")
+        elif nameStyle == "ASCII":
+            self.expr = re.compile(r"^[_a-zA-Z][-_.a-zA-Z0-9]*$")
+        elif nameStyle == "PYTHON":
+            self.expr = None
+
+    def isName(self, s:str) -> bool:
+        if self.nameStyle == "XML":
+            return XmlStrings.isXmlName(s)
+        elif self.nameStyle == "PYTHON":
+            return s.isidentifier()
+        else:
+            return re.match(self.expr, s)
+
+
+###############################################################################
+#
+class UNormHandler:
+    """Whether/how various tokens should be Unicode-normalized.
+
+    "Lest one good custom should corrupt the world."
+        -- Alfred Lord Tennyson, "The Passing of Arthur"
+    """
+    _UNormTx = {
+        "NONE": None,
+        "NFKC": "NFKC",
+        "NFKD": "NFKD",
+        "NFC": "NFC",
+        "NFD": "NFD",
+    }
+
+    def __init__(self, how:str="NONE"):
+        if not how: how = "NONE"
+        if how not in UNormHandler._UNormTx:
+            raise KeyError(f"Unknown Unicode normalization form '{how}'.")
+        self.formName = UNormHandler._UNormTx[how]
+        # or lambda s: unicodedata.normalize(UNormHandler._UNormTx[how], s)
+
+    def normalize(self, s:str) -> str:
+        if not self.formName: return s
+        return unicodedata.normalize(self.formName, s)
+
+
+###############################################################################
+#
+class CaseHandler:
+    """How case should be handled.
+
+    "You've got to know when to hold 'em,
+    know when to fold 'em,
+    know when to walk away
+    know when to run."
+        -- Don Schlitz, The Gambler
+    """
+    _CaseTx = {
+        "NONE": None,
+        "FOLD": str.casefold,
+        "LOWER": str.lower,
+        "UPPER": str.upper,
+    }
+
+    def __init__(self, how:str="NONE"):
+        if how in CaseHandler._CaseTx:
+            self.how = CaseHandler._CaseTx[how]
+        else:
+            self.how = None
+        self.foldFn = CaseHandler._CaseTx[how]
+
+    def normalize(self, s:str) -> str:
+        if not self.how: return s
+        return self.foldFn(s)
+
+
+###############################################################################
+#
+class WSDef:
+    """Ways to define blank space.
+
+    “And then I have a secret. Did you know what will happen if you
+    eliminate the empty spaces from the universe, eliminate the  empty
+    spaces in all the atoms? The universe will become as big as my fist."
+        -- Umberto Ecu, Interview with Mukund Padmanabhan, Oct 23, 2005
+    """
+    _xmlSpaces = XmlStrings.xmlSpaces_list
+    _unicodeZs = ( ""
+        # TAB LF CR are all Cc
+        #"\u0020"  # (Zs) SPACE
+        + "\u00a0"  # (Zs) NO-BREAK SPACE
+        + "\u1680"  # (Zs) OGHAM SPACE MARK
+        + "\u2000"  # (Zs) EN QUAD
+        + "\u2001"  # (Zs) EM QUAD
+        + "\u2002"  # (Zs) EN SPACE
+        + "\u2003"  # (Zs) EM SPACE
+        + "\u2004"  # (Zs) THREE-PER-EM SPACE
+        + "\u2005"  # (Zs) FOUR-PER-EM SPACE
+        + "\u2006"  # (Zs) SIX-PER-EM SPACE
+        + "\u2007"  # (Zs) FIGURE SPACE
+        + "\u2008"  # (Zs) PUNCTUATION SPACE
+        + "\u2009"  # (Zs) THIN SPACE
+        + "\u200a"  # (Zs) HAIR SPACE
+        + "\u202f"  # (Zs) NARROW NO-BREAK SPACE
+        + "\u205f"  # (Zs) MEDIUM MATHEMATICAL SPACE
+        + "\u3000"  # (Zs) IDEOGRAPHIC SPACE
+    )
+    _unicodeAll = (
+        _xmlSpaces
+        + _unicodeZs
+        + "\x0C"    # FORM FEED (Cc)
+        + "\x0B"    # LINE TABULATION (Cc)
+        + "\x85"    # NEXT LINE (Cc) -- beware PC ELLIPSIS, Mac O+diaeresis
+        + "\u2028"  # LINE SEPARATOR (Zl)
+        + "\u2029"  # PARAGRAPH SEPARATOR (Zp)
+    )
+
+    # Possible additions (none are in Python str.isspace())
+    _aggressive = (
+          "\u0008"  # BACKSPACE (Cc)
+        + "\u1361"  # ETHIOPIC WORDSPACE (Po)
+        + "\u180E"  # MONGOLIAN VOWEL SEPARATOR (was Zs (?), now Cf)
+        + "\u200B"  # ZERO WIDTH SPACE (Cf)
+        + "\u200C"  # ZERO WIDTH NON-JOINER (Cf)
+        + "\u200D"  # ZERO WIDTH JOINER (Cf)
+        + "\u2060"  # WORD JOINER (???)
+        + "\u303F"  # IDEOGRAPHIC HALF FILL SPACE (So)
+        + "\u3164"  # HANGUL FILLER (Lo)
+        + "\uFE0F"  # VARIATION SELECTOR-16 (Mn)
+        + "\uFEFF"  # ZERO WIDTH NO-BREAK SPACE (Cf)
+        + "\uFFA0"  # HALFWIDTH HANGUL FILLER (Lo)
+    )
+
+    _WSChoices = {
+        "XML": _xmlSpaces,
+        "WHATWG": _xmlSpaces + "\f",
+        "CPP": _xmlSpaces + "\f\x0B",
+        "UNICODE_ALL": _unicodeAll,
+        "JAVASCRIPT": _unicodeAll,
+        "PY_ISSPACE": _unicodeAll,
+        "AGGRESSIVE": _unicodeAll + _aggressive,
+    }
+
+    def __init__(self, how:str="XML"):
+        assert how in WSDef._WSChoices
+        self.how = how
+        self.spaceList = WSDef._WSChoices[how]
+
+    @property
+    def spaces(self) -> str:
+        """Return the list of all characters in the designated spaceList.
+        """
+        return self.spaceList
+
+    def isSpace(self, s:str) -> bool:
+        """Like Python is___(), True if non-empty and all chars in category.
+        """
+        return s and not re.search(f"[^{self.spaceList}]", s)
+
+    def hasSpace(self, s:str) -> bool:
+        """True if there is at least one space character in s.
+        """
+        return re.search(f"[{self.spaceList}]", s)
+
+
+###############################################################################
+#
+class WSHandler:
+    """Make functions to do one of the space cleanups given a spaceDef.
+
+    "And the people did whatever seemed right in their own eyes."
+        -- Judges 21:25
+    """
+    def __init__(self, spaceDef:str="XML", tgtChar:str=" "):
+        self.spaceList = WSDef(how=spaceDef).spaces
+        assert len(tgtChar) == 1
+        self.tgtChar = tgtChar
+
+    def lstrip(self, s:str) -> str:
+        return s.lstrip(self.spaceList)
+
+    def rstrip(self, s:str) -> str:
+        return s.lstrip(self.spaceList)
+
+    def strip(self, s:str) -> str:
+        return s.strip(self.spaceList)
+
+    def replace(self, s:str) -> str:
+        return re.sub(f"[{self.spaceList}]", self.tgtChar, s)
+
+    def normalize(self, s:str) -> str:
+        """Reduce internal spaces/runs to a single tgtChar and
+        drop leading and trailing spaces.
+        """
+        return re.sub(f"[{self.spaceList}]+", self.tgtChar, s).strip(self.tgtChar)
+    collapse = normalize
+
+
+###############################################################################
+#
+class Normalizer:
+    """Do a selected set of normalizations (case, unicode, and/or whitespace).
+
+    Nobody realizes that some people expend tremendous energy
+    merely to be normal.
+        -- Albert Camus, Notebook 4, quoting Blanche Balain
+    """
+    def __init__(self, unorm:str="NONE", case:str="NONE", wsDef:str="XML",
+        tgtChar:str=" "):
+        self.unorm = UNormHandler(unorm)
+        self.case = CaseHandler(case)
+        self.wsDef = WSDef(wsDef)
+        self.tgtChar = tgtChar
+        self.wsHandler = WSHandler(spaceDef=self.wsDef, tgtChar=tgtChar)
+
+    def normalize(self, s:str) -> str:
+        s = self.unorm.normalize(s)
+        s = self.case.normalize(s)
+        s = self.wsHandler.normalize(s)
+        return s
+
+    def cmp(self, s1:str, s2:str) -> int:
+        s1 = self.normalize(s1)
+        s2 = self.normalize(s2)
+        return (s1 > s2) - (s1 < s2)

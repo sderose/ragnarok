@@ -9,10 +9,12 @@
 import os
 import re
 import codecs
-from typing import IO, Union
+from typing import Dict, Any, Union,  IO, Protocol
 import logging
 
 from xml.parsers import expat
+
+from basedomtypes import NMTOKEN_t, NCName_t, QName_t
 from domenums import RWord
 
 lg = logging.getLogger("dombuilder")
@@ -83,7 +85,12 @@ or [http://github.com/sderose].
 =Options=
 """
 
-# So we can get at file offsets, errors, etc. from expat:
+
+###############################################################################
+#
+class XMLParser(Protocol):
+    def Parse(self, data: str) -> None: ...
+    def ParseFile(self, file: IO) -> None: ...
 
 
 ###############################################################################
@@ -99,15 +106,15 @@ class DomBuilder():
         "&amp;"  : "&",
     }
 
-    def __init__(self, theDocumentClass:type,
+    def __init__(self, domImpl:type,
         wsn:bool=False, verbose:int=1, nsSep:str=":"):
         """Set up to parse an XML file(s) and have SAX callbacks create a DOM.
 
-        @param theDocumentClass: a DOM Document implementation to use.
+        @param domImpl: a DOM implementation to use.
         @param wsn: Discard whitespace-only text nodes.
         @param verbose: Trace some stuff.
         """
-        assert theDocumentClass is not None
+        assert isinstance(domImpl, type)
 
         self.IdIndex = {}       # Keep index of ID attributes
         self.nodeStack = []     # Open Element objects
@@ -116,7 +123,7 @@ class DomBuilder():
         self.nsSep = nsSep
 
         # The first start tag event will construct a Document().
-        self.theDocumentClass = theDocumentClass
+        self.domImpl = domImpl
         self.domDoc = None
         self.domDocType = None
         self.theParser = None
@@ -148,14 +155,25 @@ class DomBuilder():
         if not isinstance(path_or_fh, str): fh.close()
         return self.domDoc
 
-    def parse_string(self, s) -> 'Document':
+    def parse_string(self, s:str) -> 'Document':
         if not isinstance(s, str):
             raise ValueError("Not a string.")
         self.theParser = self.parser_setup()
         self.theParser.Parse(s)
         return self.domDoc
 
-    def parser_setup(self, encoding:str="utf-8", dcls:bool=True) -> None:
+    def dom_setup(self, namespaceURI:str=None, qualifiedName:QName_t=None,
+        docType:'DocumentType'=None):
+        self.domDoc = self.domImpl.createDocument(
+            namespaceURI=namespaceURI, qualifiedName=qualifiedName,
+            docType=docType)
+        self.domDoc.encoding = self.encoding
+        self.domDoc.version = self.version
+        self.domDoc.standalone = self.standalone
+
+    def parser_setup(self, encoding:str="utf-8", dcls:bool=True) -> XMLParser:
+        """Construct a parser instance and hook up SAX events handlers.
+        """
         self.theParser = expat.ParserCreate(
             encoding=encoding, namespace_separator=self.nsSep)
         p = self.theParser
@@ -185,32 +203,32 @@ class DomBuilder():
         #lg.info("DomBuilder, domDoc is a %s." , type(self.domDoc))
         return self.domDoc.collectAllXml2()
 
-    def isCurrent(self, name) -> bool:
+    def isCurrent(self, name:NMTOKEN_t) -> bool:
         """Is the innermost open element of the given type?
         """
         if self.nodeStack and self.nodeStack[-1] == name:
             return True
         return False
 
-    def isOpen(self, name) -> bool:
+    def isOpen(self, name:NMTOKEN_t) -> bool:
         """Is any element of the given type open?
         """
         if name in self.nodeStack: return True
         return False
 
     def ind(self) -> bool:
+        """Return the indentation string for the current depth.
+        """
         return("    " * len(self.nodeStack))
 
 
     ### Handlers ##############################################################
     #
-    def StartElementHandler(self, name, attributes=None):
+    def StartElementHandler(self, name:NMTOKEN_t, attributes:Dict=None) -> None:
         if self.domDoc is None:
-            lg.info("Creating Document via {self.theDocumentClass.__name__}.")
-            self.domDoc = self.theDocumentClass()
-            self.domDoc.encoding = self.encoding
-            self.domDoc.version = self.version
-            self.domDoc.standalone = self.standalone
+            lg.info("Creating Document via {self.domImpl.__name__}.")
+            self.dom_setup(
+                namespaceURI=None, qualifiedName=name, docType=None)
         else:
             lg.info("Appending %s to a %s (depth %d, nChildren %d).",
                 name, self.nodeStack[-1].nodeName,
@@ -242,7 +260,7 @@ class DomBuilder():
         self.nodeStack.append(el)
         return
 
-    def AttrHandler(self, aname:str, avalue:str):
+    def AttrHandler(self, aname:NMTOKEN_t, avalue:str) -> None:
         """Support option of parser returning attributes as separate events.
         """
         curElement = self.nodeStack[-1]
@@ -250,7 +268,7 @@ class DomBuilder():
             raise SyntaxError(f"Duplicate attribute '{aname}'.")
         curElement.setAttribute(aname, avalue)
 
-    def EndElementHandler(self, name) -> None:
+    def EndElementHandler(self, name:NMTOKEN_t) -> None:
         lg.info("EndElement: '%s'", name)
         if not self.nodeStack:
             raise IndexError(
@@ -264,14 +282,14 @@ class DomBuilder():
         self.nodeStack.pop()
         return
 
-    def EmptyElementHandler(self, name, attributes) -> None:
+    def EmptyElementHandler(self, name:NMTOKEN_t, attributes) -> None:
         assert(False)
         lg.info("EmptyElement: got '%s'", name)
         self.StartElementHandler(name, attributes)
         self.EndElementHandler(name)
         return
 
-    def CharacterDataHandler(self, data) -> None:
+    def CharacterDataHandler(self, data:str) -> None:
         lg.info("CharacterData: got '%s'", data.strip())
         if not re.match(r"\S", data):  # whitespace-only
             if not self.wsn: return
@@ -282,25 +300,25 @@ class DomBuilder():
         self.nodeStack[-1].appendChild(tn)
         return
 
-    def CommentHandler(self, data) -> None:
+    def CommentHandler(self, data:str) -> None:
         lg.info("Comment: got '%s'", data)
         newCom = self.domDoc.createComment(data)
         self.nodeStack[-1].appendChild(newCom)
         return
 
-    def DeclHandler(self, data) -> None:
+    def DeclHandler(self, data:str) -> None:
         lg.info("Decl: ignoring '%s'", data)
         #newDcl = self.domDoc.create(data)
         #self.nodeStack[-1].appendChild(newDcl)
         return
 
-    def ProcessingInstructionHandler(self, target, data) -> None:
+    def ProcessingInstructionHandler(self, target:NCName_t, data:str) -> None:
         lg.info("ProcessingInstruction: got '%s'", data)
         newPI = self.domDoc.createProcessingInstruction(target, data)
         self.nodeStack[-1].appendChild(newPI)
         return
 
-    def Unknown_declHandler(self, data) -> None:
+    def Unknown_declHandler(self, data:Any) -> None:
         lg.warning("Unknown_decl: got '%s'", data)
         # raise ValueError("Unknown markup declaration: '%s'" % (data))
         newDcl = self.domDoc.createComment(data)
@@ -328,28 +346,28 @@ class DomBuilder():
             raise ValueError(f"Unexpected standalone '{standalone}'.")
         # TODO Store them
 
-    def StartDoctypeDeclHandler(self, name:str,
-        literal=None, publicId:str=None, systemId:str=None) -> None:
+    def StartDoctypeDeclHandler(self, name:NMTOKEN_t,
+        literal:str=None, publicId:str=None, systemId:str=None) -> None:
         #self.domDocType = DocType(name, literal, publicId, systemId)
         pass
 
     def EndDoctypeDeclHandler(self) -> None:
         pass
 
-    def ElementDeclHandler(self, name:str, model:str="ANY") -> None:
+    def ElementDeclHandler(self, name:NMTOKEN_t, model:str="ANY") -> None:
         self.domDocType.ElementDef(name, aliasFor=None, model=model)
 
-    def AttlistDeclHandler(self, ename:str, aname:str, atype:str, adefault:str) -> None:
+    def AttlistDeclHandler(self, ename:NMTOKEN_t, aname:NMTOKEN_t, atype:str, adefault:str) -> None:
         self.domDocType.AttributeDef(ename, aname, atype, adefault)
 
-    def EntityDeclHandler(self, name:str,
-        literal=None, publicId:str=None, systemId:str=None) -> None:
+    def EntityDeclHandler(self, name:NMTOKEN_t,
+        literal:str=None, publicId:str=None, systemId:str=None) -> None:
         self.domDocType.EntityDef(name, literal, publicId, systemId)
 
-    def UnparsedEntityDeclHandler(self, name:str,
-        literal=None, publicId:str=None, systemId:str=None) -> None:
+    def UnparsedEntityDeclHandler(self, name:NMTOKEN_t,
+        literal:str=None, publicId:str=None, systemId:str=None) -> None:
         self.domDocType.EntityDef(name, literal, publicId, systemId)
 
-    def NotationDeclHandler(self, name:str,
-        literal=None, publicId:str=None, systemId:str=None) -> None:
+    def NotationDeclHandler(self, name:NMTOKEN_t,
+        literal:str=None, publicId:str=None, systemId:str=None) -> None:
         self.domDocType.NotationDef(name, literal, publicId, systemId)

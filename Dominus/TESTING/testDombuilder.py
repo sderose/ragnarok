@@ -53,7 +53,7 @@ def packXml(s:str) -> str:
 
 def countStuff(doc) -> dict:
     counts = defaultdict(int)
-    for n in doc.eachNode(attrs=True):
+    for n in doc.eachNode(includeAttributes=True):
         if n.isAttribute:
             counts["@"+n.nodeName] += 1
         elif n.isPI:

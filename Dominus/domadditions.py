@@ -11,9 +11,8 @@ import re
 from typing import List, Iterable, Union
 import logging
 
-from domexceptions import InvalidCharacterError, NotSupportedError
-from xmlstrings import XmlStrings as XStr
-from domenums import UNormTx, CaseTx, NameTx
+from basedomtypes import InvalidCharacterError, NotSupportedError
+from xmlstrings import NameTest  #XmlStrings as XStr, UNormHandler, CaseHandler
 lg = logging.getLogger("BaseDOM")
 
 # Provide synonym types for type-hints these common args
@@ -189,14 +188,14 @@ class DOMTokenList(set):
     You can also choose among various definitions of NAME (see above).
     """
     def __init__(self, ownerElement:'Node'=None, ownerAttribute:str=None,
-        unorm:UNormTx="", caseTx:CaseTx=CaseTx.FOLD, rules:NameTx=NameTx.XML,
+        unormTx=None, caseTx=None, naming:NameTest=None,
         vals:Union=None):
         super(DOMTokenList, self).__init__()
         self.ownerElement = ownerElement
         self.ownerAttribute = ownerAttribute
-        self.unorm = unorm
+        self.unormTx = unormTx
         self.caseTx = caseTx
-        self.rules = rules
+        self.naming = naming
         if not isinstance(vals, Iterable):
             vals = re.split(r"[ \t\r\n]+", str(vals).strip)
         for val in vals: self.add(val)
@@ -219,22 +218,10 @@ class DOMTokenList(set):
         if key == "": raise SyntaxError("normalizeKey 'key' arg is empty.")
 
         # Support varying token rules WhatWG, HTML4, XML NAME, and Python.
-        if self.rules == NameTx.XML:
-            if  not XStr.isXmlName(key):
-                raise InvalidCharacterError("Key is not an XML NAME.")
-        elif self.rules == NameTx.HTML:
-            if  not re.search(r"\s", key):
-                raise InvalidCharacterError("Key is not an HTML NAME.")
-        elif self.rules == NameTx.WHATWG:
-            if  not re.search(r"\s", key):
-                raise InvalidCharacterError("Key is not a WHATWG NAME.")
-        elif self.rules == NameTx.PYTHON:
-            if  not key.isidentifier():
-                raise InvalidCharacterError("Key is not a Python NAME.")
-
-        if self.unorm: key = UNormTx.normalize(key, self.unorm)
-        if self.caseTx == CaseTx.FOLD: key = key.casefold()
-        elif self.caseTx == CaseTx.LOWER: key = key.lower()
+        if self.unormTx: key = self.unormTx.normalize(key)
+        if self.caseTx: key = self.caseTx.normalize()
+        if self.naming and not self.naming.nameTest(key):
+            raise InvalidCharacterError(f"Key '{key}' is not a valid NAME.")
         return key
 
 

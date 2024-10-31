@@ -29,7 +29,7 @@ ElementSamples = [
 
 AttlistSamples = [
     """<!ATTLIST  p  id ID #IMPLIED  class NMTOKENS "big">""",
-"""<!ATTLIST td
+    """<!ATTLIST td
     id              ID              #IMPLIED
     tgt             IDREF           #IMPLIED
     tgts            IDREFS          "foo bar1.a"
@@ -41,7 +41,7 @@ AttlistSamples = [
     compass         (n | s | e | w) 'w'
     thePic          ENTITY          "fig1"
     >
-""",
+    """,
 ]
 
 

@@ -32,10 +32,9 @@ to avoid confusion the author recommends you use the synonymous
 
 ==Semantic questions==
 
-** Should Node be constructable?
-** Should cloneNode copy userData and/or ownerDocument?
-** Should removeAttribute___ unlink from ownerDoc/ownerEl?
-** Effect of changing xmlns: attributes.
+* Should Node be constructable?
+* Should cloneNode copy userData and/or ownerDocument?
+* Should removeAttribute___ unlink from ownerDoc/ownerEl?
 
     # A Node is its own context manager, to ensure that an unlink() call occurs.
     # This is similar to how a file object works.
@@ -52,10 +51,19 @@ to avoid confusion the author recommends you use the synonymous
 
 * How best to interface multiple/extended selectors?
 
+* How to trigger update of IdIndex?
 
 ==Namespaces==
 
 * How should ns matching in the face of None and "" work?
+* Effect of changing xmlns: attributes.
+
+* Option to require:
+** ns dcls only at top
+** no redef prefixes
+** no ns at all
+** ns on ids
+** alt ways for attr ns
 
 
 ==Whether/how to support EntityRefs==
@@ -66,11 +74,11 @@ then they should be able to show up in many places.
 ** Sometimes you'd like to retain the physical structure, such as having
 each chapter in a separate entity, or even which characters were references.
 
-One way to do this is to tweak a parser to issue entity start/end events
+One way to do this is to tweak a parser to issue entity events
 with the name (many parsers hand back extra (non-normalized) text events for
 this anyway). Then dombuilder could insert an EntRef node, with at least the
 name, and then a subtree constructed under it. However, that makes the tree
-topology not what you'd expect, so lots of operation would be much more complicated.
+topology not what you'd expect, so lots of operations would be complicated.
 
 Another way is to annotate nodes created within an entity with that entity.
 If we assume that nodes do not start in one entity and end in another (certainly
@@ -90,21 +98,20 @@ outerXML, and insertAdjacentXML normalize.
 
 * Perhaps derive from UserList instead of list?
 
-* Should plainnode include the list dunders?
+* Should PlainNode include the list dunders?
+
+* Split PlainNode and Node from rest of file?
 
 * The validator
 
 
 ==Methods==
 
-* Should toprettyxml() etc. offer options to wrap text/comments?
+* Should toprettyxml() offer options to wrap text/comments?
 
 * should `cloneNode()` copy `userData`?
 
-* charset vs. inputencoding
-
-* relation of removeChild to unlink. Is there a way to tell when it *really*
-gets lost?
+* charset vs. inputencoding vs. encoding
 
 * Should things test for bad names?
     has/get/set/removeAttribute
@@ -127,8 +134,6 @@ more useful; but what of text, attrs, maybe other CharacterData, where
 normal string compare might be better? Order on Attrs is weird -- all attrs
 of same node would compare equal. Maybe hide these for CharacterData?
 
-Or should Attr compare data? They don't have position....
-
 
 ==Exceptions==
 
@@ -142,15 +147,24 @@ HierarchyRequestError (as now and in minidom),
 or NotImplementedError vs. DOM NotSupportedError
 or InvalidModificationError or TypeError or InvalidNodeTypeError?
 
-* mixin/inclusions -- dcl like incl exceptions?
-
 * build in xinclude (switchable of course)
-
-* sync doctype to tree.docinfo.internalDTD
 
 * Direct DC support?
 
+
+==Schema stuff==
+
 * global attributes?
+
+* sync doctype to tree.docinfo.internalDTD
+
+* mixin/inclusions -- dcl like incl exceptions?
+
+* Option to make plural attrs be list/dicts/sets? cf xsd
+
+* Vector attrs (maybe just float{3,3}?)
+
+* Is it worth definiing a JSONX mapping for DTDs?
 
 
 ==See also==

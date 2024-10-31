@@ -4,53 +4,175 @@
 #
 import sys
 import codecs
-#from enum import Enum
-from typing import Any
+from enum import Enum
+from typing import Any  #, List
 import json
 
 from xmlstrings import XmlStrings as XStr
 from saxplayer import SaxEvents
+from dombuilder import DomBuilder
+from domenums import RWord, NodeType
 
-#from xml.dom import minidom as theDOMmodule
-import basedom as theDOMmodule
+# DOMImplementation
 
-impl = theDOMmodule.getDOMImplementation()
-Document = theDOMmodule.Document
-Node = theDOMmodule.Node
-Element = theDOMmodule.Element
+descr = """
+==Description==
+
+Load some JsonX: a JSON structure that can round-trip with XML.
+An example:
+
+[ { "#name":"#document", "#format":"JSONX",
+    "#version":"1.0", "#encoding":"utf-8", "#standalone":"yes",
+    "#doctype":"html", "#systemId":"http://w3.org/html" },
+  [ { "#name": "html", "xmlns:htmlhttp://www.w3.org/1999/xhtml" },
+    [ { "#name": "head" },
+      [ { "#name": "title" },
+        "My document" ]
+    ],
+    [ { "#name": "body" },
+      [ { "#name": "p", "id":"stuff" },
+        "This is a ",
+        [ { "#name": "i" }, "very" ],
+        " short document."
+      ]
+    ],
+    [ { "#name": "hr" } ]
+  ]
+]
+
+
+==To Do==
+"""
 
 
 ###############################################################################
 #
-# See domgetitem.NodeSelKind, which covers these as well as special
-# names for things like @attr, @, #wsn,...
-#
-reservedWords = {
-    "#text":    Node.TEXT_NODE,
-    "#cdata":   Node.CDATA_SECTION_NODE,
-    "#pi":      Node.PROCESSING_INSTRUCTION_NODE,
-    "#comment": Node.COMMENT_NODE,
-}
+class JKeys(Enum):
+    # JsonX pseudo-attribute names
+    #
+    J_NAME      = "#name"
+    J_PARENT    = "#parent"
+    J_ODOC      = "#odoc"
+    J_PSIB      = "#psib"
+    J_NSIB      = "#nsib"
+    J_VERSION   = "#version"
+    J_ENCODING  = "#encoding"
+    J_STANDALONE= "#standalone"
+    J_DOCTYPE   = "#doctype"
+    J_PUBLICID  = "#publicId"
+    J_SYSTEMID  = "#systemId"
+    J_FORMAT    = "#format"  # Const value "JSONX"
 
 
 ###############################################################################
 #
-class JsonX(list):
-    """An isomorphic mapping between JSON and XML.
-    TODO:
-        cdata special?
-        entrefs preservable?
-        doctype?
-        wsn?
-        nsprefixes
+class JNode(list):
+    """The equivalent of an XML Node, in JsonX as loaded. That a list,
+    where [0] is a dict with attrs and a few reserved items like "#name",
+    and [1:] are children, which are JNodes or atomic types like strings:
+        [ { "#name"="P", "id"="myId" }, "Hello, world" ]
+    Since there are no cross-references (pointers, IDs) available in JSON,
+    once a tree is loaded key ones can be added by calling link().
     """
-    def __init__(self):
+    def __init__(self, domImpl:'DOMImplementation'):
+        self.domImpl = domImpl
         self.jroot = None
+        self.loader = None
+
+    def loadJsonX2Dom(self, path:str):
+        self.loader = Loader(domImpl=self.domImpl)
+        self.loader.parse_jsonx(path)
+        self.loader.check_jsonx()
+        self.jroot.link()
+
+    @property
+    def nodeType(self):
+        if self.nodeName.startswith("#"):
+            return RWord[self.nodeName]
+        return NodeType.ELEMENT_NODE
+    @property
+    def nodeName(self):
+        return self[0][JKeys.J_NAME]
+    @property
+    def prefix(self):
+        if ":" not in self.nodeName: return
+        return self.nodeName.partition(":")[0]
+    @property
+    def localName(self):
+        if ":" not in self.nodeName: return self.nodeName
+        return self.nodeName.partition(":")[2]
+
+    def hasAttributes(self) -> bool:
+        return bool(self[0])
+    def hasAttribute(self, aname:str) -> bool:
+        return aname in self[0]
+    def getAttribute(self, aname:str) -> Any:
+        if aname not in self[0]: return None
+        return self[0][aname]
+    def setAttribute(self, aname:str, avalue:Any) -> None:
+        self[0][aname] = avalue
+
+    def hasChildNodes(self) -> bool:
+        return bool(len(self) > 1)
+
+    def childNodes(self):
+        return self[1:]
+
+
+    ##########################################################################
+    # To get location-related properties, need to run link() first.
+    #
+    def link(self, oDoc:'JNode'):
+        """Add all the pointers that plain JSON rep lacks.
+        But, there are no Attr and Text nodes (the attr Dict has oDoc).
+        """
+        for i, ch in enumerate(self):
+            if not isinstance(ch, JNode): continue
+            ch[0][JKeys.J_ODOC] = oDoc
+            ch[0][JKeys.J_PARENT] = self
+            if i == 0: continue
+            ch[0][JKeys.J_PSIB] = self[i-1]
+            if i < len(self)-1: ch[0][JKeys.J_NSIB] = self[i+1]
+            ch.annotate(oDoc=oDoc)
+
+    def unlink(self):
+        del self[0][JKeys.J_ODOC]
+        del self[0][JKeys.J_PARENT]
+        del self[0][JKeys.J_PSIB]
+        del self[0][JKeys.J_NSIB]
+        for ch in self:
+            if isinstance(ch, JNode): ch.unlink()
+
+    @property
+    def ownerDocument(self):
+        return self.getAttribute(JKeys.J_ODOC)
+    @property
+    def parentNode(self):
+        return self.getAttribute(JKeys.J_PARENT)
+    @property
+    def previousSibling(self):
+        return self.getAttribute(JKeys.J_PSIB)
+    @property
+    def nextSibling(self):
+        return self.getAttribute(JKeys.J_NSIB)
+
+
+###############################################################################
+#
+class Loader:
+    def __init__(self, domImpl:'DOMImplementation'):
         self.domDoc = None
         self.callbacks = None
+        self.jroot = JNode(domImpl)
+        self.domBuilder = DomBuilder(
+            domImpl=domImpl, wsn=False, verbose=1, nsSep=":")
+        self.callbacks = DomBuilder.getCallBackDict()
+        self.jsonSax(self.jroot)
 
     def parse_jsonx(self, path:str) -> 'Document':
-        # TODO: Support passing handle instead of path
+        """Just load the JSON en mass, into self.jroot.
+        TODO: Support passing handle instead of path.
+        """
         try:
             fh = codecs.open(path, "rb", encoding="utf-8")
             self.jroot = json.load(fh)
@@ -59,52 +181,23 @@ class JsonX(list):
             sys.stderr.write("JSON load failed for %s:\n    %s\n", path, e)
             sys.exit()
 
-    def jsonx2dom(self):
-        self.check_jsonx(self)
-        self.domDoc = self.jsonDom(self.jroot)
-        return self.domDoc
-
-    def jsonx2Xml(self, jsonxpath:str, xmlpath:str):
-        self.parse_jsonx(jsonxpath)
-        self.domDoc.writexml(xmlpath)
-
-    ### Separate class for whole doc vs. node?
-
-    @property
-    def nodeType(self):
-        if self.nodeName.startswith("#"):
-            return reservedWords[self.nodeName]
-        return Node.ELEMENT_NODE
-
-    @property
-    def nodeName(self):
-        return self[0]["name"]
-
-    def check_jsonx(self, jroot):
+    def check_jsonx(self, node:'Node'):
         """Want elements like
             [{"#name":para, "class":"foo"}, [...], "txt"]
         """
-        if not isinstance(jroot, list):
-            assert isinstance(jroot, (str, int, float, bool))
+        if not isinstance(self.jroot, list):
+            assert isinstance(self.jroot, (str, int, float, bool))
             return
 
-        assert isinstance(jroot, list)
-        assert isinstance(jroot[0], dict)
-        nam = jroot.nodeName
-        assert XStr.isXmlName(nam) or reservedWords[nam]
-        if len(jroot) > 1:
-            for ch in jroot[1:]: self.check_jsonx(ch)
-
-    def jsonDom(self, jroot):
-        """Run jsonSax and build a DOM.
-        """
-        self.domDoc = None
-        self.setSaxCallbacks()
-        self.jsonSax(jroot)
-        return self.domDoc
+        assert isinstance(node, list)
+        assert isinstance(node[0], dict)
+        assert JKeys.J_NAME in node[0]
+        assert XStr.isXmlName(node.nodeName) or RWord(node.nodeName)
+        if len(self.jroot) > 1:
+            for ch in self.jroot[1:]: self.check_jsonx(ch)
 
     def setSaxCallbacks(self):
-        self.callbacks = DomBuilder.getCallBackDict()
+        pass
 
     def jsonSax(self, jroot):
         """Generate a SAX stream from a JSON-X document.
@@ -120,99 +213,37 @@ class JsonX(list):
             self.tryEvent(SaxEvents.CHAR, str(jroot))
         elif not nn.startswith("#"):
             self.tryEvent(SaxEvents.START, nn, *jroot[0])
-            for ch in self[1:]: self.jsonSax(ch)
+            for ch in self.jroot[1:]: self.jsonSax(ch)
             self.tryEvent(SaxEvents.END, nn, *jroot[0])
-        elif nn == "text":
+        elif nn == RWord.NN_TEXT:
             self.tryEvent(SaxEvents.CHAR, self.getLeafText())
-        elif nn == "#pi":
+        elif nn == RWord.NN_PI:
             self.tryEvent(SaxEvents.CHAR, self.getLeafText())
-        elif nn == "#cdata":
+        elif nn == RWord.NN_CDATA:
             self.tryEvent(SaxEvents.CDATASTART)
             self.tryEvent(SaxEvents.CHAR, self.getLeafText())
             self.tryEvent(SaxEvents.CDATAEND)
-        elif nn == "#comment":
+        elif nn == RWord.NN_COMMENT:
             self.tryEvent(SaxEvents.COMMENT, self.getLeafText())
-        elif nn == "#doctype":
+        elif nn == RWord.NN_DOCTYPE:
             return  # TODO Doctype???
 
     def getLeafText(self) -> str:
         if isinstance(self, list):
-            return "".join([ str(s) for s in self[1:]])
+            return "".join([ str(s) for s in self.jroot[1:]])
         return str(self)
 
     def tryEvent(self, eventType:SaxEvents, *args):
+        """If there's a handler, call it.
+        """
         if eventType in self.callbacks:
             self.callbacks[eventType](args)
 
     def makeStartTag(self, empty:bool=False):
-        buf = "<" + self.nodeName
-        for k, v in self[0].items():
+        buf = "<" + self.jroot.nodeName
+        for k, v in self.jroot[0].items():
             buf += ' %s="%s"' % (k, v)
         return buf + ("/>" if empty else ">")
 
     def makeEndTag(self):
-        return "</" + self.nodeName + ">"
-
-class DomBuilder:
-    """A set of SAX callbacks to create the corresponding DOM.
-    """
-    def __init__(self, domImplementation):
-        self.domImplementation = domImplementation or impl
-        self.domDoc = None
-        self.tagStack = []
-
-    @staticmethod
-    def getCallBackDict():
-        """Return a Dict mapping the SAXEvents Enum items, to the
-        corresponding DomBuilder callbacks.
-        """
-        cbd = {
-            SaxEvents.INIT: DomBuilder.INIT,
-            SaxEvents.START: DomBuilder.START,
-            SaxEvents.CHAR: DomBuilder.CHAR,
-            SaxEvents.PROC: DomBuilder.PROC,
-            SaxEvents.COMMENT: DomBuilder.COMMENT,
-            SaxEvents.CDATASTART: DomBuilder.CDATASTART,
-            SaxEvents.CDATAEND: DomBuilder.CDATAEND,
-            SaxEvents.END: DomBuilder.END,
-            SaxEvents.FINAL: DomBuilder.FINAL,
-        }
-        return cbd
-
-    def INIT(self):
-        self.domDoc = self.domImplementation.createDocument(None, "temp", None)
-        self.tagStack.append(self.domDoc.documentElement)
-
-    def START(self, name:str, **attrs):
-        newNode = self.domDoc.createElement(name)
-        for k, v in attrs.items():
-            newNode.setAttribute(k, v)
-        self.tagStack[-1].appendChild(newNode)
-        self.tagStack.append(newNode)
-
-    def END(self, name:str=None):
-        assert self.tagStack[-1].nodeName == name
-        self.tagStack[-1].pop()
-
-    def CDATASTART(self):
-        newNode = self.domDoc.createTextNode("")
-        self.tagStack[-1].appendChild(newNode)
-
-    def CDATAEND(self):
-        assert self.tagStack[-1].nodeName == "#text"
-        self.tagStack[-1].pop()
-
-    def CHAR(self, text:str=None):
-        newNode = self.domDoc.createTextNode(text)
-        self.tagStack[-1].appendChild(newNode)
-
-    def PROC(self, target:str=None, data:str=None):
-        newNode = self.domDoc.createProcessingInstruction(target, data)
-        self.tagStack[-1].appendChild(newNode)
-
-    def COMMENT(self, data:str=None):
-        newNode = self.domDoc.createComment(data)
-        self.tagStack[-1].appendChild(newNode)
-
-    def FINAL(self):
-        assert len(self.tagStack) == 0
+        return "</" + self.jroot.nodeName + ">"
