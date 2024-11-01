@@ -4,7 +4,7 @@
 #
 from enum import Enum
 
-class SaxEvents(Enum):
+class SaxEvent(Enum):
     START        =  1
     END          =  2
     CHAR         =  3
@@ -31,10 +31,11 @@ class SaxEvents(Enum):
     XMLDCL       = 100
     ELEMENTDCL   = 101
     ATTLISTDCL   = 102
-    ENTITYDCL    = 103
-    PENTITYDCL   = 104
-    SDATADCL     = 106
-    NOTATIONDCL  = 105
+    ENTITYDCL    = 103  # General
+    PENTITYDCL   = 104  # Parameter
+    UENTITYDCL   = 105  # Unparsed
+    SENTITYDCL   = 106  # SDATA
+    NOTATIONDCL  = 110
 
     # Potential overlap events
     START_MULTI  = 201

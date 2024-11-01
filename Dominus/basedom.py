@@ -8,22 +8,20 @@
 #pylint: disable=E1101
 #
 #import sys
-import re
 from collections import OrderedDict
 from types import SimpleNamespace
-import unicodedata
+from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Union, Iterable, Tuple
 import functools
 import logging
+import unicodedata
+import re
 
 from basedomtypes import HReqE, ICharE, NSuppE
-from basedomtypes import NamespaceError
-from basedomtypes import NotFoundError
-from basedomtypes import OperationError
+from basedomtypes import NamespaceError, NotFoundError, OperationError
+from basedomtypes import DOMImplementation_P, NMTOKEN_t
 
-from basedomtypes import NMTOKEN_t
-
-from saxplayer import SaxEvents
+from saxplayer import SaxEvent
 from domenums import NodeType, RelPosition, RWord
 from dombuilder import DomBuilder
 from xmlstrings import XmlStrings as XStr, CaseHandler
@@ -75,9 +73,9 @@ def escapeJsonStr(s:str) -> str:
 ###############################################################################
 #
 def getDOMImplementation(name:str=None) -> type:
-    return DOMImplementation()
+    return DOMImplementation(name)
 
-class DOMImplementation:
+class DOMImplementation(DOMImplementation_P):
     name = "BaseDOM"
     version = "0.1"
 
@@ -123,18 +121,20 @@ class DOMImplementation:
 
     @staticmethod
     def getImplementation() -> type:
-        return DOMImplementation
+        return DOMImplementation()
 
     # Put in some loaders
 
     def parse(self, filename_or_file:str, parser=None, bufsize:int=None
         ) -> 'Document':
-        dbuilder = DomBuilder(domImpl=Document)
+        domImpl = getDOMImplementation()
+        dbuilder = DomBuilder(domImpl=domImpl)
         theDom = dbuilder.parse(filename_or_file)
         return theDom
 
     def parse_string(self, s:str, parser=None) -> 'Document':
-        dbuilder = DomBuilder(domImpl=Document)
+        domImpl = getDOMImplementation()
+        dbuilder = DomBuilder(domImpl=domImpl)
         theDom = dbuilder.parse_string(s)
         return theDom
 
@@ -1310,10 +1310,10 @@ class Node(PlainNode):
         if isinstance(excludeNodeNames, str):
             excludeNodeNames = excludeNodeNames.split()
 
-        yield (SaxEvents.INIT, )
+        yield (SaxEvent.INIT, )
         for se in self.eachSaxEvent_R(separateAttributes, excludeNodeNames):
             yield se
-        yield (SaxEvents.FINAL, )
+        yield (SaxEvent.FINAL, )
         return
 
     def eachSaxEvent_R(self:'Node', separateAttributes:bool=False,
@@ -1327,26 +1327,26 @@ class Node(PlainNode):
         # TODO Add entref, doctype, etc?
 
         if self.nodeType == Node.TEXT_NODE:
-            yield (SaxEvents.CHAR, self.data)
+            yield (SaxEvent.CHAR, self.data)
         elif self.nodeType == Node.COMMENT_NODE:
-            yield (SaxEvents.COMMENT, self.data)
+            yield (SaxEvent.COMMENT, self.data)
         elif self.nodeType == Node.CDATA_NODE:
-            yield (SaxEvents.CDATASTART, )
-            yield (SaxEvents.CHAR, self.data)
-            yield (SaxEvents.CDATAEND, )
+            yield (SaxEvent.CDATASTART, )
+            yield (SaxEvent.CHAR, self.data)
+            yield (SaxEvent.CDATAEND, )
         elif self.nodeType == Node.PROCESSING_INSTRUCTION_NODE:
-            yield (SaxEvents.PROC, self.target, self.data)
+            yield (SaxEvent.PROC, self.target, self.data)
         elif self.nodeType == Node.ELEMENT_NODE:
             if separateAttributes:
-                yield (SaxEvents.START, self.nodeName)
+                yield (SaxEvent.START, self.nodeName)
                 for k in self.attributes:
-                    yield (SaxEvents.ATTRIBUTE, k, self.getAttribute[k])
+                    yield (SaxEvent.ATTRIBUTE, k, self.getAttribute[k])
                 if self.declaredNS:
                     for k in self.declaredNS:
-                        yield (SaxEvents.ATTRIBUTE,
+                        yield (SaxEvent.ATTRIBUTE,
                             RWord.NS_PREFIX+k, self.getAttribute[k])
             else:
-                vals = [ SaxEvents.START, self.nodeName ]
+                vals = [ SaxEvent.START, self.nodeName ]
                 for k in self.attributes:
                     vals.append(k)
                     vals.append(self.getAttribute[k])
@@ -1361,7 +1361,7 @@ class Node(PlainNode):
                     for chEvent in ch.eachSaxEvent_R(
                         separateAttributes, excludeNodeNames):
                         yield chEvent
-            yield (SaxEvents.END, self.nodeName)
+            yield (SaxEvent.END, self.nodeName)
         return
 
     ### Meta (Node)
@@ -2118,7 +2118,7 @@ class Element(Node):
         and then parse. Used for inner/outerXML setters
         and for insertAdjacentXML.
         """
-        db = DomBuilder(domImpl=Document)
+        db = DomBuilder(domImpl=DOMImplementation())
         newDoc = db.parse_string(f"<wrapper>{xml}</wrapper>")
         if newDoc is None:
             raise ValueError("parse_string failed.")

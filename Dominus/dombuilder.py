@@ -9,12 +9,13 @@
 import os
 import re
 import codecs
-from typing import Dict, Any, Union,  IO, Protocol
+from typing import Dict, Any, Union,  IO
 import logging
 
 from xml.parsers import expat
-
-from basedomtypes import NMTOKEN_t, NCName_t, QName_t
+from saxplayer import SaxEvent
+from basedomtypes import (NMTOKEN_t, NCName_t, QName_t, XMLParser_P,
+    DOMImplementation_P)
 from domenums import RWord
 
 lg = logging.getLogger("dombuilder")
@@ -88,13 +89,6 @@ or [http://github.com/sderose].
 
 ###############################################################################
 #
-class XMLParser(Protocol):
-    def Parse(self, data: str) -> None: ...
-    def ParseFile(self, file: IO) -> None: ...
-
-
-###############################################################################
-#
 class DomBuilder():
     """Build a DOM structure by parsing something.
     """
@@ -106,16 +100,19 @@ class DomBuilder():
         "&amp;"  : "&",
     }
 
-    def __init__(self, domImpl:type,
-        wsn:bool=False, verbose:int=1, nsSep:str=":"):
+    def __init__(
+        self,
+        domImpl:DOMImplementation_P,
+        wsn:bool=False,
+        verbose:int=1,
+        nsSep:str=":"
+        ):
         """Set up to parse an XML file(s) and have SAX callbacks create a DOM.
 
-        @param domImpl: a DOM implementation to use.
+        @param domImpl: a DOM implementation instance to use.
         @param wsn: Discard whitespace-only text nodes.
         @param verbose: Trace some stuff.
         """
-        assert isinstance(domImpl, type)
-
         self.IdIndex = {}       # Keep index of ID attributes
         self.nodeStack = []     # Open Element objects
         self.wsn = wsn          # Include whitespace-only nodes?
@@ -171,7 +168,7 @@ class DomBuilder():
         self.domDoc.version = self.version
         self.domDoc.standalone = self.standalone
 
-    def parser_setup(self, encoding:str="utf-8", dcls:bool=True) -> XMLParser:
+    def parser_setup(self, encoding:str="utf-8", dcls:bool=True) -> XMLParser_P:
         """Construct a parser instance and hook up SAX events handlers.
         """
         self.theParser = expat.ParserCreate(
@@ -180,24 +177,34 @@ class DomBuilder():
 
         # Init and Final
 
-        p.StartElementHandler           = self.StartElementHandler
-        p.EndElementHandler             = self.EndElementHandler
-        p.CharacterDataHandler          = self.CharacterDataHandler
-        p.ProcessingInstructionHandler  = self.ProcessingInstructionHandler
-        p.CommentHandler                = self.CommentHandler
+    def getHandlerDict(self, dcls:bool=False) -> Dict:
+        """Return a dict of the SAX event handlers.
+        """
+        h = {}
+        #h[SaxEvent.INIT]         =
+        h[SaxEvent.DOCTYPE]      = self.StartDoctypeDeclHandler
+        h[SaxEvent.DOCTYPEFIN]   = self.EndDoctypeDeclHandler
+        h[SaxEvent.START]        = self.StartElementHandler
+        h[SaxEvent.END]          = self.EndElementHandler
+        h[SaxEvent.CHAR]         = self.CharacterDataHandler
+        h[SaxEvent.PROC]         = self.ProcessingInstructionHandler
+        h[SaxEvent.COMMENT]      = self.CommentHandler
+        #h[SaxEvent.CDATASTART]   =
+        #h[SaxEvent.CDATAEND]     =
+        #h[SaxEvent.DEFAULT]      =
+        #h[SaxEvent.FINAL]        =
 
         if dcls:
-            p.XmlDeclHandler            = self.XmlDeclHandler
-            p.StartDoctypeDeclHandler   = self.StartDoctypeDeclHandler
-            p.EndDoctypeDeclHandler     = self.EndDoctypeDeclHandler
+            h[SaxEvent.XMLDCL]      = self.XmlDeclHandler
+            h[SaxEvent.ELEMENTDCL]  = self.ElementDeclHandler
+            h[SaxEvent.ATTLISTDCL]  = self.AttlistDeclHandler
+            h[SaxEvent.ENTITYDCL]   = self.EntityDeclHandler
+            h[SaxEvent.PENTITYDCL]  = self.EntityDeclHandler
+            h[SaxEvent.SENTITYDCL]  = self.SDATAEntityDeclHandler
+            h[SaxEvent.UENTITYDCL]  = self.UnparsedEntityDeclHandler
+            h[SaxEvent.NOTATIONDCL] = self.NotationDeclHandler
 
-            p.ElementDeclHandler        = self.ElementDeclHandler
-            p.AttlistDeclHandler        = self.AttlistDeclHandler
-            p.EntityDeclHandler         = self.EntityDeclHandler
-            p.UnparsedEntityDeclHandler = self.UnparsedEntityDeclHandler
-            p.NotationDeclHandler       = self.NotationDeclHandler
-
-        return p
+        return h
 
     def tostring(self) -> str:
         #lg.info("DomBuilder, domDoc is a %s." , type(self.domDoc))
@@ -357,7 +364,8 @@ class DomBuilder():
     def ElementDeclHandler(self, name:NMTOKEN_t, model:str="ANY") -> None:
         self.domDocType.ElementDef(name, aliasFor=None, model=model)
 
-    def AttlistDeclHandler(self, ename:NMTOKEN_t, aname:NMTOKEN_t, atype:str, adefault:str) -> None:
+    def AttlistDeclHandler(self, ename:NMTOKEN_t,
+        aname:NMTOKEN_t, atype:str, adefault:str) -> None:
         self.domDocType.AttributeDef(ename, aname, atype, adefault)
 
     def EntityDeclHandler(self, name:NMTOKEN_t,
@@ -367,6 +375,9 @@ class DomBuilder():
     def UnparsedEntityDeclHandler(self, name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
         self.domDocType.EntityDef(name, literal, publicId, systemId)
+
+    def SDATAEntityDeclHandler(self, name:NMTOKEN_t, literal:str=None) -> None:
+        self.domDocType.EntityDef(name, literal)
 
     def NotationDeclHandler(self, name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:

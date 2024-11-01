@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Small/shared types, including Enums, XSD datatypes, and Exceptions.
 #
-from typing import NewType
+from typing import NewType, Union, TextIO, IO, Protocol
 from datetime import datetime, date, time, timedelta
 
 
@@ -93,6 +93,23 @@ if (legacyExceptions):
     TIMEOUT_ERR = TimeoutError                      # 23 (BUILTIN)
     INVALID_NODE_TYPE_ERR = InvalidNodeTypeError    # 24
     DATA_CLONE_ERR = DataCloneError                 # 25
+
+
+###############################################################################
+# Protocols for pluggable classes
+#
+class XMLParser_P(Protocol):
+    def Parse(self, data: str) -> None: ...
+    def ParseFile(self, file: IO) -> None: ...
+
+class DOMImplementation_P(Protocol):
+    def createDocument(self, namespaceURI:str, qualifiedName:NMTOKEN_t,
+        doctype:'DocumentType') -> 'Document': ...
+    def createDocumentType(self, qualifiedName:NMTOKEN_t,
+        publicId:str, systemId:str) -> 'DocumentType': ...
+    def parse(self, f:Union[str, TextIO], parser=None, bufsize:int=None
+        ) -> 'Document': ...
+    def parse_string(self, s:str, parser=None) -> 'Document': ...
 
 
 ###############################################################################

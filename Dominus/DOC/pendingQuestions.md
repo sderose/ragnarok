@@ -32,6 +32,7 @@ to avoid confusion the author recommends you use the synonymous
 
 ==Semantic questions==
 
+* ABC or Protocols?
 * Should Node be constructable?
 * Should cloneNode copy userData and/or ownerDocument?
 * Should removeAttribute___ unlink from ownerDoc/ownerEl?

@@ -9,7 +9,7 @@ from typing import Any  #, List
 import json
 
 from xmlstrings import XmlStrings as XStr
-from saxplayer import SaxEvents
+from saxplayer import SaxEvent
 from dombuilder import DomBuilder
 from domenums import RWord, NodeType
 
@@ -22,10 +22,10 @@ Load some JsonX: a JSON structure that can round-trip with XML.
 An example:
 
 [ { "#name":"#document", "#format":"JSONX",
-    "#version":"1.0", "#encoding":"utf-8", "#standalone":"yes",
+    "#version":"1.1", "#encoding":"utf-8", "#standalone":"yes",
     "#doctype":"html", "#systemId":"http://w3.org/html" },
-  [ { "#name": "html", "xmlns:htmlhttp://www.w3.org/1999/xhtml" },
-    [ { "#name": "head" },
+  [ { "#name": "html", "xmlns:html": "http://www.w3.org/1999/xhtml" },
+    [ { "#name": "html:head" },
       [ { "#name": "title" },
         "My document" ]
     ],
@@ -36,12 +36,47 @@ An example:
         " short document."
       ]
     ],
-    [ { "#name": "hr" } ]
+    [ { "#name": "hr" } ],
+    [ { "#name": "#cdata" }, "This is some \"literal\" <text>." ],
+    [ { "#name": "#comment" }, "Pay no attention to the comment behind the curtains." ],
+    [ { "#name": "#pi", "#target":"myApp" }, "foo='bar' version='1.0'" ]
   ]
 ]
 
 
+==Doctype?==
+
+[ { "#name"="DOCTYPE", "root"="html", "systemId"="...",
+    "elementFold":true, "entityFold":false },
+
+  [ { "#name"="ELEMENT", "name"="br", "type="EMPTY" } ],
+  [ { "#name"="ELEMENT", "name"="i", "type="PCDATA" } ],
+  [ { "#name"="ELEMENT", "name"="div", "type="ANY" } ],
+  [ { "#name"="ELEMENT", "name"="html", "type="MODEL",
+      "model"="(head, body)" } ],
+
+  [ { "#name"="ENTITY", "type"="parameter", "name"="chap1", "systemId"="..." } ],
+  [ { "#name"="ENTITY", "name"="em", "data"=" -- " } ],
+  [ { "#name"="ATTLIST", "for"="p" },
+    [ { "#name"="ATT", "name"="id", "type"="ID", "use"="#IMPLIED" } ],
+    [ { "#name"="ATT", "name"="class", "type"="NMTOKENS", "use"="#FIXED",
+        "default"="normal" } ]
+    [ { "#name"="ATT", "name"="just",
+        type="(left|right|center)", default="left" } ]
+  ]
+  [ { "#name"="NOTATION", name="png", "publicId"="..." } ]
+]
+
+
 ==To Do==
+
+* Maybe shorten "#name" to "#" or "." or something?
+* Specify doctype mapping
+* How to pick documentElement among children of doc
+* Separate JSONX vs. XML version
+* Reserve a place for stylesheet pi or content
+* Enable link() to bump strings/ints/floats/bools to jnodes
+* Move jsonx support from basedom to here
 """
 
 
@@ -62,12 +97,15 @@ class JKeys(Enum):
     J_PUBLICID  = "#publicId"
     J_SYSTEMID  = "#systemId"
     J_FORMAT    = "#format"  # Const value "JSONX"
+    J_TARGET    = "#target"
+
+    # #name values are same a DOM nodeType: #text #cdata #pi #document #comment
 
 
 ###############################################################################
 #
 class JNode(list):
-    """The equivalent of an XML Node, in JsonX as loaded. That a list,
+    """The equivalent of an XML Node, in JsonX as loaded. That's a list,
     where [0] is a dict with attrs and a few reserved items like "#name",
     and [1:] are children, which are JNodes or atomic types like strings:
         [ { "#name"="P", "id"="myId" }, "Hello, world" ]
@@ -82,7 +120,7 @@ class JNode(list):
     def loadJsonX2Dom(self, path:str):
         self.loader = Loader(domImpl=self.domImpl)
         self.loader.parse_jsonx(path)
-        self.loader.check_jsonx()
+        self.loader.check_jsonx(self.jroot)
         self.jroot.link()
 
     @property
@@ -114,7 +152,6 @@ class JNode(list):
 
     def hasChildNodes(self) -> bool:
         return bool(len(self) > 1)
-
     def childNodes(self):
         return self[1:]
 
@@ -162,11 +199,10 @@ class JNode(list):
 class Loader:
     def __init__(self, domImpl:'DOMImplementation'):
         self.domDoc = None
-        self.callbacks = None
         self.jroot = JNode(domImpl)
         self.domBuilder = DomBuilder(
             domImpl=domImpl, wsn=False, verbose=1, nsSep=":")
-        self.callbacks = DomBuilder.getCallBackDict()
+        self.callbacks = self.domBuilder.getHandlerDict()
         self.jsonSax(self.jroot)
 
     def parse_jsonx(self, path:str) -> 'Document':
@@ -196,35 +232,32 @@ class Loader:
         if len(self.jroot) > 1:
             for ch in self.jroot[1:]: self.check_jsonx(ch)
 
-    def setSaxCallbacks(self):
-        pass
-
     def jsonSax(self, jroot):
         """Generate a SAX stream from a JSON-X document.
         """
-        self.tryEvent(SaxEvents.INIT)
+        self.tryEvent(SaxEvent.INIT)
         self.jsonSax_R(jroot)
-        self.tryEvent(SaxEvents.FINAL)
+        self.tryEvent(SaxEvent.FINAL)
         return
 
     def jsonSax_R(self, jroot:Any):
         nn = jroot.nodeName()
         if not isinstance(jroot, list):
-            self.tryEvent(SaxEvents.CHAR, str(jroot))
+            self.tryEvent(SaxEvent.CHAR, str(jroot))
         elif not nn.startswith("#"):
-            self.tryEvent(SaxEvents.START, nn, *jroot[0])
+            self.tryEvent(SaxEvent.START, nn, *jroot[0])
             for ch in self.jroot[1:]: self.jsonSax(ch)
-            self.tryEvent(SaxEvents.END, nn, *jroot[0])
+            self.tryEvent(SaxEvent.END, nn, *jroot[0])
         elif nn == RWord.NN_TEXT:
-            self.tryEvent(SaxEvents.CHAR, self.getLeafText())
+            self.tryEvent(SaxEvent.CHAR, self.getLeafText())
         elif nn == RWord.NN_PI:
-            self.tryEvent(SaxEvents.CHAR, self.getLeafText())
+            self.tryEvent(SaxEvent.CHAR, self.getLeafText())
         elif nn == RWord.NN_CDATA:
-            self.tryEvent(SaxEvents.CDATASTART)
-            self.tryEvent(SaxEvents.CHAR, self.getLeafText())
-            self.tryEvent(SaxEvents.CDATAEND)
+            self.tryEvent(SaxEvent.CDATASTART)
+            self.tryEvent(SaxEvent.CHAR, self.getLeafText())
+            self.tryEvent(SaxEvent.CDATAEND)
         elif nn == RWord.NN_COMMENT:
-            self.tryEvent(SaxEvents.COMMENT, self.getLeafText())
+            self.tryEvent(SaxEvent.COMMENT, self.getLeafText())
         elif nn == RWord.NN_DOCTYPE:
             return  # TODO Doctype???
 
@@ -233,7 +266,7 @@ class Loader:
             return "".join([ str(s) for s in self.jroot[1:]])
         return str(self)
 
-    def tryEvent(self, eventType:SaxEvents, *args):
+    def tryEvent(self, eventType:SaxEvent, *args):
         """If there's a handler, call it.
         """
         if eventType in self.callbacks:

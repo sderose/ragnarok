@@ -173,11 +173,18 @@ have a synonym (such as "createPI").
 ** Arrays of (start,end) pairs used to make regexes for things like Xml name
 start characters end in "_rangelist" (these are all in xmlstrings).
 
-**
 ** Variables holding regexes end in "_re".
 
-Types created by NewType to help with type-hinting (these generally correspond
-to XSD built-in datatypes) end in "_t".
+** Types created by NewType to help with type-hinting (these generally
+correspond to XSD built-in datatypes) end in "_t".
+
+** Protocol classes are defined above class that are expected to be
+"pluggable", and are named the same but with "_P" appended:
+    DOMImplementation_P --> DOMImplementation
+    XMLParser_P --> XMLParser
+
+TODO: I may switch PlainNode to be a protocol class (and rename it
+Node_P).
 
 
 ===Types===

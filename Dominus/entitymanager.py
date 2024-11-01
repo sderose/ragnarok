@@ -11,14 +11,14 @@ import codecs
 import re
 from enum import Enum
 import logging
-from typing import Union, List, Dict, Iterable
+from typing import Union, List, Dict, Tuple, Iterable
 from types import SimpleNamespace
 
 #import html
 #from html.entities import codepoint2name
 
 from xmlstrings import XmlStrings as XStr, WSDef, CaseHandler, UNormHandler
-from saxplayer import SaxEvents
+from saxplayer import SaxEvent
 from basedomtypes import NotSupportedError
 from documenttype import Model, RepType, AttrTypes, ContentType  # ModelGroup
 
@@ -515,7 +515,7 @@ class StackReader:
         options:Dict=None):
         self.rootPath = rootPath
         self.encoding = encoding
-        self.handlers = handlers or {}  # keyed off saxplayer.SaxEvents
+        self.handlers = handlers or {}  # keyed off saxplayer.SaxEvent
         self.entPath = entPath  # dirs to look in
         self.bufSize = bufSize
 
@@ -600,7 +600,7 @@ class StackReader:
         """
         raise SyntaxError(msg + " at \n$$$" + self.bufSample + "$$$")
 
-    def doCB(self, typ:SaxEvents, *args) -> None:
+    def doCB(self, typ:SaxEvent, *args) -> None:
         """Given an event type and its args, call the handler if any.
         """
         msg = ", ".join(f"{x}" for x in args)
@@ -742,7 +742,7 @@ class StackReader:
         return self.curFrame.readFloat(ss=ss, signed=signed, specialFloats=specialFloats)
     def readName(self, ss:bool=True) -> str:
         return self.curFrame.readName(ss)
-    def readRegex(self, regex:Union[str, re.Pattern], ss:bool=True, ignoreCase:bool=True) -> Match:
+    def readRegex(self, regex:Union[str, re.Pattern], ss:bool=True, ignoreCase:bool=True) -> re.Match:
         return self.curFrame.readRegex(regex, ss, ignoreCase)
     def readToString(self, ender:str, consumeEnder:bool=True) -> str:
         return self.curFrame.readToString(ender, consumeEnder)
@@ -782,7 +782,7 @@ class StackReader:
                 if com:
                     self.bufPos += len(com)
                     # This event can occur mid-dcl....
-                    self.doCB(SaxEvents.COMMENT, com)
+                    self.doCB(SaxEvent.COMMENT, com)
                 nFound += len(com)
             elif allowParams and c == "%":
                 self.allowPE()
@@ -893,7 +893,7 @@ class StackReader:
                 self.SE("Unrecognized item '{aname}' in XML DCL.")
         if not self.readConst("?>", ss=True):
             self.SE("Unterminated XML DCL.")
-        self.doCB(SaxEvents.XMLDCL, *props)
+        self.doCB(SaxEvent.XMLDCL, *props)
         return props
 
     def readPI(self) -> (str, str):                     # PI
@@ -1124,8 +1124,8 @@ class StackReader:
         if self.readConst("/>", ss): empty = True
         elif self.readConst(">", ss): empty = False
         else: self.SE("Unclosed start-tag for '{aname}'.")
-        self.doCB(SaxEvents.START, name, attrs)
-        if empty: self.doCB(SaxEvents.END, name)
+        self.doCB(SaxEvent.START, name, attrs)
+        if empty: self.doCB(SaxEvent.END, name)
         return name, attrs, empty
 
     def readAttr(self, ss:bool=True, keepPunc:bool=False) -> (str, str, bool):
@@ -1158,7 +1158,7 @@ class StackReader:
                 name = self.tagStack[-1]
         if not self.readConst(">", ss):
             self.SE("Unclosed end-tag for '{aname}'.")
-        self.doCB(SaxEvents.END, name)
+        self.doCB(SaxEvent.END, name)
         return name
 
     def readCDATA(self, ss:bool=True) -> str:
@@ -1175,9 +1175,9 @@ class StackReader:
             # In XML these aren't nestable.
             data = self.readToString("]]>")
             if not data: self.SE("Unclosed CDATA section.")
-            self.doCB(SaxEvents.CDATASTART)
-            self.doCB(SaxEvents.CHAR, data)
-            self.doCB(SaxEvents.CDATAEND)
+            self.doCB(SaxEvent.CDATASTART)
+            self.doCB(SaxEvent.CHAR, data)
+            self.doCB(SaxEvent.CDATAEND)
             return data
         elif not self.options.sgml:
             self.SE("Found '<![' but not '<![CDATA['.")
@@ -1194,9 +1194,9 @@ class StackReader:
                 # self.readToAny([ "<![", "]]>" ], consumeEnder=True)
             elif topKey == "CDATA":
                 data = self.readToString("]]>", consumeEnder=True)
-                self.doCB(SaxEvents.CDATASTART)
-                self.doCB(SaxEvents.CHAR, data)
-                self.doCB(SaxEvents.CDATAEND)
+                self.doCB(SaxEvent.CDATASTART)
+                self.doCB(SaxEvent.CHAR, data)
+                self.doCB(SaxEvent.CDATAEND)
             else:
                 raise NotSupportedError("Unsupported SGML MS Keyword {topKey}")
             self.msStack.pop()
@@ -1207,7 +1207,7 @@ class StackReader:
         parsing the document instance (caller can do parseDocument() for that).
         """
         #import pudb; pudb.set_trace()
-        self.doCB(SaxEvents.START)
+        self.doCB(SaxEvent.START)
         _props = self.readXmlDcl()
 
         if e := self.readConst("<!DOCTYPE", ss=True, thenSp=True):  # DOCTYPE
@@ -1220,7 +1220,7 @@ class StackReader:
             if self.peek(1) == "[":
                 self.sawSubsetOpen = True
                 self.consume(1)
-            self.doCB(SaxEvents.DOCTYPE, docTypeName, publicId, systemId)
+            self.doCB(SaxEvent.DOCTYPE, docTypeName, publicId, systemId)
 
         while True:                                                 # SUBSET
             self.skipSpaces(allowParams=True)
@@ -1232,29 +1232,29 @@ class StackReader:
                 self.consume()
                 if self.readConst(">", ss=True):
                     self.consume()
-                    self.doCB(SaxEvents.DOCTYPEFIN)
+                    self.doCB(SaxEvent.DOCTYPEFIN)
                     return
                 self.SE("Expected '>' to end DOCTYPE.")
             elif p == "<":
                 if e := self.readComment():
-                    self.doCB(SaxEvents.COMMENT, e)
+                    self.doCB(SaxEvent.COMMENT, e)
                 elif e := self.readElementDcl():
-                    self.doCB(SaxEvents.ELEMENTDCL, e)
+                    self.doCB(SaxEvent.ELEMENTDCL, e)
                 elif e := self.readAttListDcl():
                     # TODO by attr?
-                    self.doCB(SaxEvents.ATTLISTDCL, e)
+                    self.doCB(SaxEvent.ATTLISTDCL, e)
                 elif e := self.readEntityDcl():
-                    self.doCB(SaxEvents.ENTITYDCL, e)
+                    self.doCB(SaxEvent.ENTITYDCL, e)
                 elif e := self.readNotationDcl():
-                    self.doCB(SaxEvents.NOTATIONDCL, e)
+                    self.doCB(SaxEvent.NOTATIONDCL, e)
                 elif e := self.readPI():
-                    self.doCB(SaxEvents.PROC, e)
+                    self.doCB(SaxEvent.PROC, e)
                 else:
                     self.SE("Unexpected content is DOCTYPE after '<'.")
             else:
                 self.SE(f"Expected ']' or '<' in DOCTYPE, not '{p}'.")
 
-        self.doCB(SaxEvents.FINAL)
+        self.doCB(SaxEvent.FINAL)
 
 
     ###########################################################################
@@ -1273,7 +1273,7 @@ class StackReader:
                 buf += self.consume()
                 continue
             if buf:
-                self.doCB(SaxEvents.CHAR, buf)
+                self.doCB(SaxEvent.CHAR, buf)
                 buf = ""
             if c[0] == "&":
                 self.consume()
@@ -1292,35 +1292,35 @@ class StackReader:
                     if not self.tagStack or e != self.tagStack[-1]:
                         self.SE("End-tag for {e}, but {self.tagStack[-1]} is current.")
                     self.tagStack.pop()
-                    self.doCB(SaxEvents.END, e)
+                    self.doCB(SaxEvent.END, e)
                 elif c.startswith("<!--"):
                     e = self.readComment()
-                    if (e): self.doCB(SaxEvents.COMMENT, e)
+                    if (e): self.doCB(SaxEvent.COMMENT, e)
                 elif c.startswith("<!["):
                     e = self.readCDATA()
                     if (e):
-                        self.doCB(SaxEvents.CDATASTART)
-                        self.doCB(SaxEvents.CHAR, e or "")
-                        self.doCB(SaxEvents.CDATAEND)
+                        self.doCB(SaxEvent.CDATASTART)
+                        self.doCB(SaxEvent.CHAR, e or "")
+                        self.doCB(SaxEvent.CDATAEND)
                 elif c.startswith("<?"):
                     if not (e := self.readPI()):
                         self.SE("Expected target and data after '<?'.")
-                    self.doCB(SaxEvents.PROC, *e)
+                    self.doCB(SaxEvent.PROC, *e)
                 elif self.options.restart and c.startswith("<|>"):
                     if not self.tagStack:
                         self.SE("Can't re-start with nothing open.")
                     e = self.tagStack[-1]
-                    self.doCB(SaxEvents.END, e)
-                    self.doCB(SaxEvents.START, e)
+                    self.doCB(SaxEvent.END, e)
+                    self.doCB(SaxEvent.START, e)
                 else:
                     if not (e := self.readStartTag()):
                         self.SE("Unexpected characters after '<'.")
-                    self.doCB(SaxEvents.START, *e)
+                    self.doCB(SaxEvent.START, *e)
                     self.tagStack.append(e)
 
         if (self.tagStack):
             self.SE(f"Unclosed elements at EOF: {self.tagStack}.")
-        self.doCB(SaxEvents.FINAL)
+        self.doCB(SaxEvent.FINAL)
         return
 
 
