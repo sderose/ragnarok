@@ -15,8 +15,8 @@ import re
 #from typing import List
 
 #pylint: disable=W0401,W0611,W0621
-from domexceptions import HierarchyRequestError, InvalidCharacterError, NotSupportedError
-#from domexceptions import NotFoundError
+from basedomtypes import HierarchyRequestError, InvalidCharacterError, NotSupportedError
+#from basedomtypes import NotFoundError
 from domenums import NodeType
 from xmlstrings import NameTest, WSDef, WSHandler, CaseHandler, UNormHandler
 

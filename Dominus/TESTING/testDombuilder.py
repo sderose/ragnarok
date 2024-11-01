@@ -65,11 +65,11 @@ def countStuff(doc) -> dict:
 
 ###############################################################################
 # Test the implementation
- # TODO: Normalize space, attr order.
+# TODO: Normalize space, attr order.
 #
 class TestDomBuilderM(unittest.TestCase):
     def setUp(self):
-        self.db = dombuilder.DomBuilder(theDocumentClass=minidom.Document)
+        self.db = dombuilder.DomBuilder(domImpl=minidom.Document)
         self.doc = self.db.parse_string(sampleDoc)
         self.maxDiff = 9999
 
@@ -82,7 +82,7 @@ class TestDomBuilderM(unittest.TestCase):
 
 class TestDomBuilderB(unittest.TestCase):
     def setUp(self):
-        self.db = dombuilder.DomBuilder(theDocumentClass=basedom.Document)
+        self.db = dombuilder.DomBuilder(domImpl=basedom.Document)
         self.doc = self.db.parse_string(sampleDoc)
         self.maxDiff = None
 

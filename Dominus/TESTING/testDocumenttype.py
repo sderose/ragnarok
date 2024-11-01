@@ -8,8 +8,8 @@ import unittest
 #from collections import defaultdict
 #from typing import List
 
-#from domexceptions import HierarchyRequestError
-#from domexceptions import NotFoundError
+#from basedomtypes import HierarchyRequestError
+#from basedomtypes import NotFoundError
 
 from makeTestDoc import DBG  #makeTestDoc0, makeTestDoc2, DAT,
 from test4EachMethod import K, makeTestDocEachMethod

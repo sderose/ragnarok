@@ -8,10 +8,10 @@ import re
 import unicodedata
 
 #pylint: disable=W0401,W0611,W0621
-from domexceptions import HierarchyRequestError
-from domexceptions import InvalidCharacterError
-from domexceptions import NotSupportedError
-#from domexceptions import NotFoundError
+from basedomtypes import HierarchyRequestError
+from basedomtypes import InvalidCharacterError
+from basedomtypes import NotSupportedError
+#from basedomtypes import NotFoundError
 from domenums import NodeType
 from xmlstrings import NameTest, WSDef, WSHandler, CaseHandler, UNormHandler
 from xmlstrings import XmlStrings as XStr

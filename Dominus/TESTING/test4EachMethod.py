@@ -11,9 +11,9 @@ from collections import defaultdict
 from typing import List
 
 #pylint: disable=W0401,W0611,W0621
-from domexceptions import *
-#from domexceptions import HierarchyRequestError
-#from domexceptions import NotFoundError
+from basedomtypes import *
+#from basedomtypes import HierarchyRequestError
+#from basedomtypes import NotFoundError
 
 from domenums import NodeType
 from xmlstrings import XmlStrings as XStr
