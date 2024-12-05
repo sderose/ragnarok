@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-# Small/shared types, including Enums, XSD datatypes, and Exceptions.
 #
-from typing import NewType, Union, TextIO, IO, Protocol
+# Small/shared types, including:
+#     Exceptions
+#     NewTypes for XSD datatypes
+#     Enum enhancements
+#     Protocols
+#
+from typing import NewType, Union, TextIO, IO, Protocol, Any
+from enum import Enum
+import re
 from datetime import datetime, date, time, timedelta
 
 
@@ -96,20 +103,104 @@ if (legacyExceptions):
 
 
 ###############################################################################
-# Protocols for pluggable classes
 #
-class XMLParser_P(Protocol):
-    def Parse(self, data: str) -> None: ...
-    def ParseFile(self, file: IO) -> None: ...
+class FlexibleEnum(Enum):
+    """Subclass from this to make enums that can construct from any of:
+        E.XYZ       -- the usual enumclass.name form,
+        E(E.XYZ)    -- an instance of the Enum as argument,
+        E("XYZ")    -- a string that matches a member name,
+        E(1)        -- a value of a member.
 
-class DOMImplementation_P(Protocol):
-    def createDocument(self, namespaceURI:str, qualifiedName:NMTOKEN_t,
-        doctype:'DocumentType') -> 'Document': ...
-    def createDocumentType(self, qualifiedName:NMTOKEN_t,
-        publicId:str, systemId:str) -> 'DocumentType': ...
-    def parse(self, f:Union[str, TextIO], parser=None, bufsize:int=None
-        ) -> 'Document': ...
-    def parse_string(self, s:str, parser=None) -> 'Document': ...
+    Of course it can't work fromE.XXX if XXX is not a legit identifier.
+
+    "The necessity of an enumeration of Existences, as the basis of Logic, did
+    not escape the attention of the schoolmen, and of their master Aristotle."
+        -- J. S. Mill, A System of Logic: Ratiocinative and Inductive
+
+    "And the people did whatever seemed right in their own eyes."
+        -- Judges 21:25
+    """
+    @classmethod
+    def _missing_(cls, value: Any):
+        """Handle cases where the value isn't a proper instance already.
+        """
+        if isinstance(value, str):
+            try:
+                return cls[value]
+            except KeyError:
+                for member in cls:
+                    if member.value == value: return member
+        return None
+
+
+###############################################################################
+#
+class OpenEnum(Enum):
+    """This is for "semi-open" value sets, like a namespace request
+    that can be either the reserved name "##any" or a URI.
+    Same as FlexibleEnum except that it returns the value itself iff:
+        a) it's not a name or value from the enum
+        b) it matches a regex in pattern_ if any (cf. XSD facets).
+           For example, perhaps r"^x-\\w+$"
+    For those extension cases, what's returned is not actually an
+    instance of OpenEnum or its subclass; just whatever it was.
+    """
+    pattern_ = None
+
+    @classmethod
+    def _missing_(cls, value: Any):
+        """Handle cases where the value isn't a proper instance already.
+        """
+        if isinstance(value, str):
+            try:
+                return cls[value]
+            except KeyError:
+                for member in cls:
+                    if member.value == value: return member
+        if (cls.pattern_ is None or
+            re.match(cls.pattern_, value)): return value
+        return None
+
+
+###############################################################################
+#
+class NodeType(FlexibleEnum):
+    NONE                         = 0  # Not in DOM
+    ELEMENT_NODE                 = 1
+    ATTRIBUTE_NODE               = 2
+    TEXT_NODE                    = 3
+    CDATA_SECTION_NODE           = 4
+    ENTITY_REFERENCE_NODE        = 5  # Not in DOM
+    ENTITY_NODE                  = 6  # Not in DOM
+    PROCESSING_INSTRUCTION_NODE  = 7
+    COMMENT_NODE                 = 8
+    DOCUMENT_NODE                = 9
+    DOCUMENT_TYPE_NODE           = 10
+    DOCUMENT_FRAGMENT_NODE       = 11
+    NOTATION_NODE                = 12 # Not in DOM
+
+    @staticmethod
+    def okNodeType(nt:Union[int, 'NodeType'], die:bool=True) -> 'NodeType':
+        """Check a nodeType property. You can pass either a NodeType or an int,
+        (so people who remember the ints and just test are still ok).
+        Returns the actual NodeType.x (or None on fail).
+        """
+        if (isinstance(nt, NodeType)): return nt
+        try:
+            _nt = NodeType(nt)
+        except ValueError:
+            if (not die): return None
+            assert False, "nodeType %s is a %s, not int or NodeType." % (
+                nt, type(nt))
+        return _nt
+
+    @staticmethod
+    def tostring(value:Union[int, 'NodeType']) -> str:  # NodeType
+        if (isinstance(value, NodeType)): return value.name
+        try:
+            return NodeType(int(value))
+        except ValueError:
+            return "[UNKNOWN_NODETYPE]"
 
 
 ###############################################################################
@@ -176,3 +267,20 @@ ENTITY_t            = NewType("ENTITY_t", str)
 IDREFS_t            = NewType("IDREFS_t", str)  # [str]
 NMTOKENS_t          = NewType("NMTOKENS_t", str)  # [str]
 ENTITIES_t          = NewType("ENTITIES_t", str)  # [str]
+
+
+###############################################################################
+# Protocols for pluggable classes
+#
+class XMLParser_P(Protocol):
+    def Parse(self, data: str) -> None: ...
+    def ParseFile(self, file: IO) -> None: ...
+
+class DOMImplementation_P(Protocol):
+    def createDocument(self, namespaceURI:str, qualifiedName:NMTOKEN_t,
+        doctype:'DocumentType') -> 'Document': ...
+    def createDocumentType(self, qualifiedName:NMTOKEN_t,
+        publicId:str, systemId:str) -> 'DocumentType': ...
+    def parse(self, f:Union[str, TextIO], parser=None, bufsize:int=None
+        ) -> 'Document': ...
+    def parse_string(self, s:str, parser=None) -> 'Document': ...

@@ -46,13 +46,13 @@ class EtAdditions:
 
     How textContent (getting all the text) would be in ET:
         buf = ""
-        if (self.text): buf += self.text
+        if self.text: buf += self.text
         for ch in self.childNodes: buf += ch.textContent()
         buf += self.tail
         return buf
 
     vs. in DOM
-        if (self.nodeName == "#text"): return self.data
+        if self.nodeName == "#text": return self.data
         buf = ""
         for ch in self.childNodes: buf += ch.textContent()
         return buf
@@ -67,7 +67,7 @@ class EtAdditions:
         isQName = ":" in name
         for ch in self.childNodes:
             if not ch.isElement: continue
-            if (isQName):
+            if isQName:
                 if ch.nodeName == name: return ch
             else:
                 if ch.localName == name: return ch
@@ -81,7 +81,7 @@ class EtAdditions:
         nodes = []
         for ch in self.childNodes:
             if not ch.isElement: continue
-            if (isQName):
+            if isQName:
                 if ch.nodeName == name: nodes.append(ch)
             else:
                 if ch.localName == name: nodes.append(ch)

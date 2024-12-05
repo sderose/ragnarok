@@ -5,11 +5,12 @@
 # 2024-08: Separated from rest of DOMExtensions.
 #
 import re
-from typing import Union, Match, Dict, List
+from typing import Union, Match, Dict, List, Final
 
 import unicodedata
 from html.entities import codepoint2name, name2codepoint
-from basedomtypes import NMTOKEN_t
+
+from basedomtypes import NMTOKEN_t, FlexibleEnum
 
 __metadata__ = {
     "title"        : "xmlstrings",
@@ -57,7 +58,7 @@ escape ">" when it follows "]]".
 
 Escape the string as needed for it to
 fit in a CDATA marked section (only ']]>' is not allowed).
-XML does not specify a way to escape this. The result produced here is "]]&gt;".
+XML does not specify a way to escape this. The result produced here is "]] >".
 
 * '''escapeComment'''(string)
 
@@ -242,9 +243,9 @@ def rangelist2rangespec(ranges:List) -> str:
     """
     buf = ""
     for r in ranges:
-        if ( r[0] > r[1] or r[0] < 0 or r[1] > 0xFFFF):
+        if r[0] > r[1] or r[0] < 0 or r[1] > 0xFFFF:
             raise ValueError("Bad range, %04x to %04x." % (r[0], r[1]))
-        if (r[0] == r[1]): buf += "\\u%04x" % (r[0])
+        if r[0] == r[1]: buf += "\\u%04x" % (r[0])
         else: buf += "\\u%04x-\\u%04x" % (r[0], r[1])
     return buf
 
@@ -336,13 +337,21 @@ class XmlStrings:
     ###########################################################################
     # XML string predicates
     #
+    # These test whether a string STARTS with the specified type
+    # (such as the input buffer when parsing).
+    #
+    startsWithXmlName_re = re.compile(f"^{NCName_re}")
+    startsWithXmlQName_re = re.compile(f"^{QName_re}")
+
+    # These all test whether an ENTIRE string is of the specified type.
+    #
     isXmlChars_re = re.compile(r"[%s]" % (_nonXml_rangespec))
     isXmlName_re = re.compile(f"^{NCName_re}$")
     isXmlQName_re = re.compile(f"^{QName_re}$")
     isXmlQQName_re = re.compile(f"^{QQName_re}$")
     isXmlPName_re = re.compile(f"^{PName_re}$")
     isXmlNMTOKEN_re = re.compile(f"^{NMTOKEN_re}$")
-    isXmlNumber_re = re.compile(r"^\d+$")
+    isXmlNumber_re = re.compile(r"^\d+$", flags=re.ASCII)
 
     @staticmethod
     def isXmlChars(s:str) -> bool:
@@ -355,7 +364,7 @@ class XmlStrings:
         """Return True for a NON-namespace-prefixed (aka) local name.
         """
         return bool(re.match(XmlStrings.isXmlName_re, s))
-    isXmlLName = isXmlName
+    isXmlNCName = isXmlName
 
     @staticmethod
     def isXmlQName(s:str) -> bool:
@@ -384,7 +393,7 @@ class XmlStrings:
         """Check whether the token is a number. This turns off re.Unicode,
         lest we get all the non-Arabic digits (category [Nd]).
         """
-        return bool(re.match(XmlStrings.isXmlNumber_re, s, flags=re.ASCII))
+        return bool(re.match(XmlStrings.isXmlNumber_re, s))
 
 
     ###########################################################################
@@ -400,27 +409,33 @@ class XmlStrings:
         s = XmlStrings.dropNonXmlChars(s)
         s = s.replace('&', "&amp;")
         s = s.replace('<', "&lt;")
-        if (quoteChar == '"'): s = s.replace('"', "&quot;",)
+        if quoteChar == '"': s = s.replace('"', "&quot;",)
         else: s = s.replace("'", "&apos;")
         return s
     escapeXmlAttribute = escapeAttribute
 
     @staticmethod
-    def escapeText(s:str, escapeAllGT:bool=False) -> str:
+    def escapeText(s:str, escapeAllGT:bool=False, escapeAllPast:int=None) -> str:
         """Turn things special in text content, into char refs.
         This always uses the predefined XML named special character references.
+        TODO Config entity type, etc. Maybe -> EscapeHandler? Handle chars > FFFF
         """
         s = XmlStrings.dropNonXmlChars(s)
         s = s.replace('&',   "&amp;")
         s = s.replace('<',   "&lt;")
-        if (escapeAllGT): s = s.replace('>', "&gt;")
+        if escapeAllGT: s = s.replace('>', "&gt;")
         else: s = s.replace(']]>', "]]&gt;")
+        if escapeAllPast is not None:
+            assert 0xFF < escapeAllPast < 0x10000
+            expr = r"[%s-%s]" % (chr(escapeAllPast), chr(0xFFFF))
+            s = re.sub(expr, lambda m: "&#x%04x;" % (ord(m.group())), s)
         return s
     escapeXmlText = escapeText
 
     @staticmethod
     def escapeCDATA(s:str, replaceWith:str="]]&gt;") -> str:
-        """XML Defines no particular escaping for this, we use char-ref syntax.
+        """XML Defines no particular escaping for this, we use char-ref syntax,
+        although that's not recognized within CDATA.
         """
         s = XmlStrings.dropNonXmlChars(s)
         s = s.replace(']]>', replaceWith)
@@ -428,7 +443,8 @@ class XmlStrings:
 
     @staticmethod
     def escapeComment(s:str, replaceWith:str="-&#x2d;") -> str:
-        """XML Defines no particular escaping for this, we use char-ref syntax.
+        """XML Defines no particular escaping for this, we use char-ref syntax,
+        although that's not recognized within CDATA.
         """
         s = XmlStrings.dropNonXmlChars(s)
         s = s.replace('--', replaceWith)
@@ -436,7 +452,8 @@ class XmlStrings:
 
     @staticmethod
     def escapePI(s:str, replaceWith:str="?&gt;") -> str:
-        """XML Defines no particular escaping for this, we use char-ref syntax.
+        """XML Defines no particular escaping for this, we use char-ref syntax,
+        although that's not recognized within CDATA.
         """
         s = XmlStrings.dropNonXmlChars(s)
         s = s.replace('?>', replaceWith)
@@ -456,9 +473,9 @@ class XmlStrings:
             """
             code = ord(mat.group[1])
             nonlocal width, base, htmlNames
-            if (htmlNames and code in codepoint2name):
+            if htmlNames and code in codepoint2name:
                 return "&%s;" % (codepoint2name[code])
-            if (base == 10):
+            if base == 10:
                 return "&#%*d;" % (width, code)
             return "&#x%*x;" % (width, code)
 
@@ -492,11 +509,11 @@ class XmlStrings:
         group 1 is #, #x, or nothing; group 2 is the rest.
         TODO Add option for alt dict
         """
-        if (mat.group(1) is None):
-            if (mat.group(2) in name2codepoint):
+        if mat.group(1) is None:
+            if mat.group(2) in name2codepoint:
                 return chr(name2codepoint[mat.group(2)])
             raise ValueError("Unrecognized entity name: '%s'." % (mat.group(2)))
-        if (len(mat.group(1)) == 2):
+        if len(mat.group(1)) == 2:
             return chr(int(mat.group(2), 16))
         else:
             return chr(int(mat.group(2), 10))
@@ -509,8 +526,8 @@ class XmlStrings:
     def makeStartTag(gi:str, attrs:Union[str, Dict]="",
         empty:bool=False, sort:bool=False) -> str:
         tag = "<" + gi
-        if (attrs):
-            if (isinstance(attrs, str)):
+        if attrs:
+            if isinstance(attrs, str):
                 tag += " " + attrs.strip()
             else:
                 tag += XmlStrings.dictToAttrs(attrs, sort=sort)
@@ -524,11 +541,11 @@ class XmlStrings:
         """
         sep = " "
         anames = dct.keys()
-        if (sort): anames = sorted(list(anames))
+        if sort: anames = sorted(list(anames))
         attrString = ""
         for a in (anames):
             v = dct[a]
-            if (normValues): v = XmlStrings.normalizeSpace(v)
+            if normValues: v = XmlStrings.normalizeSpace(v)
             attrString += f"{sep}{a}=\"{XmlStrings.escapeAttribute(v)}\""
         return attrString
 
@@ -541,7 +558,7 @@ class XmlStrings:
     #
     @staticmethod
     def normalizeSpace(s:str, allUnicode:bool=False) -> str:
-        if (allUnicode):
+        if allUnicode:
             s = re.sub(r"\s+", " ", s, flags=re.UNICODE)
         else:
             s = re.sub(XmlStrings.xmlSpaces_re, " ", s)
@@ -552,14 +569,14 @@ class XmlStrings:
     def replaceSpace(s:str, allUnicode:bool=False) -> str:
         """Per xmlschema-2, section 4.3.6
         """
-        if (allUnicode): return re.sub(r"\s", " ", s, flags=re.UNICODE)
+        if allUnicode: return re.sub(r"\s", " ", s, flags=re.UNICODE)
         return re.sub(r"[\t\r\n]", " ", s)
 
     @staticmethod
     def stripSpace(s:str, allUnicode:bool=False) -> str:
         """Remove leading and trailing space, but don't touch internal.
         """
-        if (allUnicode):
+        if allUnicode:
             s = re.sub(r'^\s+|\s+$', "", s, flags=re.UNICODE)
         else:
             s = s.strip(XmlStrings.xmlSpaces_list)
@@ -580,76 +597,49 @@ class XmlStrings:
 
 
 ###############################################################################
-#
-class NameTest:
+# Customizable handling of case, unicode normalization, whitespace, and names.
+###############################################################################
+
+class NameTest(FlexibleEnum):
     """Name/identifier characters vary.
 
     "Stat rosa pristina nomine, nomina nuda tenemus"
         -- Umberto Ecu, Il nome d'rosa
     """
-    _NameStyle = {
-        "XML": 1,     # XML NAME
-        "HTML": 2,    # Any but XML SPACE? For Class tokens, etc.
-        "WHATWG": 3,  # Any but WHATWG__whitespace
-        "ASCII": 4,   # XML except no non-ASCII
-        "PYTHON": 5,  # Python identifiers
-    }
-
-    def __init__(self, nameStyle:str="XML"):
-        assert nameStyle in NameTest._NameStyle
-        self.nameStyle = nameStyle
-        self.expr = None
-        if nameStyle == "XML":
-            self.expr = None
-        elif nameStyle == "HTML":
-            self.expr = re.compile(r"^[^ \t\r\n]+$")
-        elif nameStyle == "WHATWG":
-            self.expr = re.compile(r"^[^ \t\r\n\f]+$")
-        elif nameStyle == "ASCII":
-            self.expr = re.compile(r"^[_a-zA-Z][-_.a-zA-Z0-9]*$")
-        elif nameStyle == "PYTHON":
-            self.expr = None
+    XML    = "XML"
+    PYTHON = "PYTHON"
+    HTML   = r"^[^ \t\r\n]+$"
+    WHATWG = r"^[^ \t\r\n\f]+$"
+    ASCII  = r"^[_a-zA-Z][-_.a-zA-Z0-9]*$"
 
     def isName(self, s:str) -> bool:
-        if self.nameStyle == "XML":
-            return XmlStrings.isXmlName(s)
-        elif self.nameStyle == "PYTHON":
-            return s.isidentifier()
-        else:
-            return re.match(self.expr, s)
+        if self.name == "XML": return XmlStrings.isXmlName(s)
+        elif self.name == "PYTHON": return str.isidentifier(s)
+        return re.match(self.value, s)
 
 
 ###############################################################################
 #
-class UNormHandler:
+class UNormHandler(FlexibleEnum):
     """Whether/how various tokens should be Unicode-normalized.
 
     "Lest one good custom should corrupt the world."
         -- Alfred Lord Tennyson, "The Passing of Arthur"
     """
-    _UNormTx = {
-        "NONE": None,
-        "NFKC": "NFKC",
-        "NFKD": "NFKD",
-        "NFC": "NFC",
-        "NFD": "NFD",
-    }
-
-    def __init__(self, how:str="NONE"):
-        if not how: how = "NONE"
-        if how not in UNormHandler._UNormTx:
-            raise KeyError(f"Unknown Unicode normalization form '{how}'.")
-        self.formName = UNormHandler._UNormTx[how]
-        # or lambda s: unicodedata.normalize(UNormHandler._UNormTx[how], s)
+    NONE = None
+    NFKC = "NFKC"
+    NFKD = "NFKD"
+    NFC = "NFC"
+    NFD = "NFD"
 
     def normalize(self, s:str) -> str:
-        if not self.formName: return s
-        return unicodedata.normalize(self.formName, s)
+        if self.value is None: return s
+        return unicodedata.normalize(self.value, s)
 
 
 ###############################################################################
 #
-class CaseHandler:
+class CaseHandler(FlexibleEnum):
     """How case should be handled.
 
     "You've got to know when to hold 'em,
@@ -658,151 +648,151 @@ class CaseHandler:
     know when to run."
         -- Don Schlitz, The Gambler
     """
-    _CaseTx = {
-        "NONE": None,
-        "FOLD": str.casefold,
-        "LOWER": str.lower,
-        "UPPER": str.upper,
-    }
+    NONE = None
+    FOLD = "FOLD"
+    LOWER = "LOWER"
+    UPPER = "UPPER"
 
-    def __init__(self, how:str="NONE"):
-        if how in CaseHandler._CaseTx:
-            self.how = CaseHandler._CaseTx[how]
-        else:
-            self.how = None
-        self.foldFn = CaseHandler._CaseTx[how]
+    def normalize(self, s: str) -> str:
+        """Normalize the string according to the selected case handling method."""
+        if self == CaseHandler.NONE: return s
+        if self == CaseHandler.FOLD: return s.casefold()
+        elif self == CaseHandler.LOWER: return s.lower()
+        elif self == CaseHandler.UPPER: return s.upper()
+        else: assert False
 
-    def normalize(self, s:str) -> str:
-        if not self.how: return s
-        return self.foldFn(s)
+    def strcasecmp(self, s1:str, s2:str) -> int:
+        s1c = self.normalize(s1)
+        s2c = self.normalize(s2)
+        if s1c == s2c: return 0
+        if s1c < s2c: return -1
+        return 1
+
+
+###############################################################################
+# Define exactly what characters count as whitespace, according to
+# various standards.
+#
+_xmlSpaces:Final = XmlStrings.xmlSpaces_list
+_unicodeZs:Final = ( ""
+    # TAB LF CR are all Cc
+    #"\u0020"  # (Zs) SPACE
+    + "\u00a0"  # (Zs) NO-BREAK SPACE
+    + "\u1680"  # (Zs) OGHAM SPACE MARK
+    + "\u2000"  # (Zs) EN QUAD
+    + "\u2001"  # (Zs) EM QUAD
+    + "\u2002"  # (Zs) EN SPACE
+    + "\u2003"  # (Zs) EM SPACE
+    + "\u2004"  # (Zs) THREE-PER-EM SPACE
+    + "\u2005"  # (Zs) FOUR-PER-EM SPACE
+    + "\u2006"  # (Zs) SIX-PER-EM SPACE
+    + "\u2007"  # (Zs) FIGURE SPACE
+    + "\u2008"  # (Zs) PUNCTUATION SPACE
+    + "\u2009"  # (Zs) THIN SPACE
+    + "\u200a"  # (Zs) HAIR SPACE
+    + "\u202f"  # (Zs) NARROW NO-BREAK SPACE
+    + "\u205f"  # (Zs) MEDIUM MATHEMATICAL SPACE
+    + "\u3000"  # (Zs) IDEOGRAPHIC SPACE
+)
+_unicodeAll:Final = (
+    _xmlSpaces
+    + _unicodeZs
+    + "\x0C"    # FORM FEED (Cc)
+    + "\x0B"    # LINE TABULATION (Cc)
+    + "\x85"    # NEXT LINE (Cc) -- beware PC ELLIPSIS, Mac O+diaeresis
+    + "\u2028"  # LINE SEPARATOR (Zl)
+    + "\u2029"  # PARAGRAPH SEPARATOR (Zp)
+)
+
+# Possible additions (none are in Python str.isspace())
+_aggressive:Final = (
+      "\u0008"  # BACKSPACE (Cc)
+    + "\u1361"  # ETHIOPIC WORDSPACE (Po)
+    + "\u180E"  # MONGOLIAN VOWEL SEPARATOR (was Zs (?), now Cf)
+    + "\u200B"  # ZERO WIDTH SPACE (Cf)
+    + "\u200C"  # ZERO WIDTH NON-JOINER (Cf)
+    + "\u200D"  # ZERO WIDTH JOINER (Cf)
+    + "\u2060"  # WORD JOINER (???)
+    + "\u303F"  # IDEOGRAPHIC HALF FILL SPACE (So)
+    + "\u3164"  # HANGUL FILLER (Lo)
+    + "\uFE0F"  # VARIATION SELECTOR-16 (Mn)
+    + "\uFEFF"  # ZERO WIDTH NO-BREAK SPACE (Cf)
+    + "\uFFA0"  # HALFWIDTH HANGUL FILLER (Lo)
+)
 
 
 ###############################################################################
 #
-class WSDef:
-    """Ways to define blank space.
+class WSHandler(FlexibleEnum):
+    """Make functions to do one of the space cleanups given a space def.
 
     “And then I have a secret. Did you know what will happen if you
-    eliminate the empty spaces from the universe, eliminate the  empty
+    eliminate the empty spaces from the universe, eliminate the empty
     spaces in all the atoms? The universe will become as big as my fist."
         -- Umberto Ecu, Interview with Mukund Padmanabhan, Oct 23, 2005
     """
-    _xmlSpaces = XmlStrings.xmlSpaces_list
-    _unicodeZs = ( ""
-        # TAB LF CR are all Cc
-        #"\u0020"  # (Zs) SPACE
-        + "\u00a0"  # (Zs) NO-BREAK SPACE
-        + "\u1680"  # (Zs) OGHAM SPACE MARK
-        + "\u2000"  # (Zs) EN QUAD
-        + "\u2001"  # (Zs) EM QUAD
-        + "\u2002"  # (Zs) EN SPACE
-        + "\u2003"  # (Zs) EM SPACE
-        + "\u2004"  # (Zs) THREE-PER-EM SPACE
-        + "\u2005"  # (Zs) FOUR-PER-EM SPACE
-        + "\u2006"  # (Zs) SIX-PER-EM SPACE
-        + "\u2007"  # (Zs) FIGURE SPACE
-        + "\u2008"  # (Zs) PUNCTUATION SPACE
-        + "\u2009"  # (Zs) THIN SPACE
-        + "\u200a"  # (Zs) HAIR SPACE
-        + "\u202f"  # (Zs) NARROW NO-BREAK SPACE
-        + "\u205f"  # (Zs) MEDIUM MATHEMATICAL SPACE
-        + "\u3000"  # (Zs) IDEOGRAPHIC SPACE
-    )
-    _unicodeAll = (
-        _xmlSpaces
-        + _unicodeZs
-        + "\x0C"    # FORM FEED (Cc)
-        + "\x0B"    # LINE TABULATION (Cc)
-        + "\x85"    # NEXT LINE (Cc) -- beware PC ELLIPSIS, Mac O+diaeresis
-        + "\u2028"  # LINE SEPARATOR (Zl)
-        + "\u2029"  # PARAGRAPH SEPARATOR (Zp)
-    )
-
-    # Possible additions (none are in Python str.isspace())
-    _aggressive = (
-          "\u0008"  # BACKSPACE (Cc)
-        + "\u1361"  # ETHIOPIC WORDSPACE (Po)
-        + "\u180E"  # MONGOLIAN VOWEL SEPARATOR (was Zs (?), now Cf)
-        + "\u200B"  # ZERO WIDTH SPACE (Cf)
-        + "\u200C"  # ZERO WIDTH NON-JOINER (Cf)
-        + "\u200D"  # ZERO WIDTH JOINER (Cf)
-        + "\u2060"  # WORD JOINER (???)
-        + "\u303F"  # IDEOGRAPHIC HALF FILL SPACE (So)
-        + "\u3164"  # HANGUL FILLER (Lo)
-        + "\uFE0F"  # VARIATION SELECTOR-16 (Mn)
-        + "\uFEFF"  # ZERO WIDTH NO-BREAK SPACE (Cf)
-        + "\uFFA0"  # HALFWIDTH HANGUL FILLER (Lo)
-    )
-
-    _WSChoices = {
-        "XML": _xmlSpaces,
-        "WHATWG": _xmlSpaces + "\f",
-        "CPP": _xmlSpaces + "\f\x0B",
-        "UNICODE_ALL": _unicodeAll,
-        "JAVASCRIPT": _unicodeAll,
-        "PY_ISSPACE": _unicodeAll,
-        "AGGRESSIVE": _unicodeAll + _aggressive,
-    }
-
-    def __init__(self, how:str="XML"):
-        assert how in WSDef._WSChoices
-        self.how = how
-        self.spaceList = WSDef._WSChoices[how]
+    XML = _xmlSpaces
+    WHATWG = _xmlSpaces + "\f"
+    CPP = _xmlSpaces + "\f\x0B"
+    UNICODE_ALL = _unicodeAll
+    JAVASCRIPT = _unicodeAll
+    PY_ISSPACE = _unicodeAll
+    AGGRESSIVE = _unicodeAll + _aggressive
 
     @property
     def spaces(self) -> str:
         """Return the list of all characters in the designated spaceList.
         """
-        return self.spaceList
+        return self.value
 
     def isSpace(self, s:str) -> bool:
         """Like Python is___(), True if non-empty and all chars in category.
         """
-        return s and not re.search(f"[^{self.spaceList}]", s)
+        return s and not re.search(f"[^{self.value}]", s)
 
     def hasSpace(self, s:str) -> bool:
         """True if there is at least one space character in s.
         """
-        return re.search(f"[{self.spaceList}]", s)
-
-
-###############################################################################
-#
-class WSHandler:
-    """Make functions to do one of the space cleanups given a spaceDef.
-
-    "And the people did whatever seemed right in their own eyes."
-        -- Judges 21:25
-    """
-    def __init__(self, spaceDef:str="XML", tgtChar:str=" "):
-        self.spaceList = WSDef(how=spaceDef).spaces
-        assert len(tgtChar) == 1
-        self.tgtChar = tgtChar
+        return re.search(f"[{self.value}]", s)
 
     def lstrip(self, s:str) -> str:
-        return s.lstrip(self.spaceList)
+        return s.lstrip(self.value)
 
     def rstrip(self, s:str) -> str:
-        return s.lstrip(self.spaceList)
+        return s.lstrip(self.value)
 
     def strip(self, s:str) -> str:
-        return s.strip(self.spaceList)
+        return s.strip(self.value)
 
     def replace(self, s:str) -> str:
-        return re.sub(f"[{self.spaceList}]", self.tgtChar, s)
+        return re.sub(f"[{self.value}]", " ", s)
 
     def normalize(self, s:str) -> str:
         """Reduce internal spaces/runs to a single tgtChar and
         drop leading and trailing spaces.
         """
-        return re.sub(f"[{self.spaceList}]+", self.tgtChar, s).strip(self.tgtChar)
+        return re.sub(f"[{self.value}]+", " ", s).strip(" ")
     collapse = normalize
+
+    # And the default XML definitions
+    #
+    @staticmethod
+    def xstripSpace(s:str) -> str:
+        return s.strip(" \t\r\n")
+    @staticmethod
+    def xreplaceSpace(s:str) -> str:
+        return re.sub(r"[ \t\r\n]", " ", s)
+    @staticmethod
+    def xcollapseSpace(s:str) -> str:
+        return re.sub(r"[ \t\r\n]+", " ", s).strip(" ")
 
 
 ###############################################################################
 #
 class Normalizer:
     """Do a selected set of normalizations (case, unicode, and/or whitespace).
+
+    TODO Is this all that useful?
 
     Nobody realizes that some people expend tremendous energy
     merely to be normal.
@@ -812,9 +802,8 @@ class Normalizer:
         tgtChar:str=" "):
         self.unorm = UNormHandler(unorm)
         self.case = CaseHandler(case)
-        self.wsDef = WSDef(wsDef)
         self.tgtChar = tgtChar
-        self.wsHandler = WSHandler(spaceDef=self.wsDef, tgtChar=tgtChar)
+        self.wsHandler = WSHandler(wsDef)
 
     def normalize(self, s:str) -> str:
         s = self.unorm.normalize(s)

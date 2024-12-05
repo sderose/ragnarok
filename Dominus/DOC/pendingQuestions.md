@@ -1,3 +1,72 @@
+==Construction and setup API==
+
+It's a mess -- can I support all of them?
+
+    from xml.dom.minidom import parseString, parse
+    dom = parseString(xmlText)
+    dom = parse('file.xml')
+
+    from lxml import etree
+    tree = etree.fromstring(xmlText)
+    tree = etree.parse('file.xml')
+
+    # ElementTree (built-in)
+    import xml.etree.ElementTree as ET
+    tree = ET.fromstring(xmlText)
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(xmlText, 'xml')
+    soup = BeautifulSoup(xmlText, 'html.parser')
+    with open('file.xml') as f:
+       soup = BeautifulSoup(f, 'xml')
+
+    from pyquery import PyQuery
+    pq = PyQuery(xmlText)
+    pq = PyQuery(filename='file.xml')
+
+    # Just parsing
+
+    import xml.parsers.expat
+    p = xml.parsers.expat.ParserCreate()
+    p.Parse(xmlText)
+
+    # SAX (event-based)
+    from xml.sax import parse, parseString
+    parseString(xmlText, handler)
+
+
+==General DOM Issues==
+
+* import; getDomImpl; createDoc; parse; use
+* Issue of creating doc vs. docElement
+* Case is not factored out
+* Lack of DTD and schema integration
+    * Hence weakening attribute typing, ID finding
+* Variety of SAX event names and usage
+* Whitespace issues
+* Verbose names: ProcessingInstruction, EntityReference, DocumentType,
+parentNode, previousSibling, nextSibling (and vs. preceding/following),
+ownerDocument, CharacterData, [exception names],...
+* Why should documentElement have to be a singleton?
+    ** XML requires it, but there's no reason it had to; the grammar would be
+just fine.
+    ** It forces a Document/DocumentFragment distinction, which complicates
+the class structure for little gain (and arguable loss).
+    ** Without that rule, Document would just be an Element with no parent,
+which is normal for trees. Oh, and a few added properties vars (encoding, etc).
+
+
+==DOM 3==
+
+    baseURI property
+    getUserData()/setUserData() methods
+    The whole Node.DOCUMENT_POSITION_* constants
+    normalizeDocument()
+    renameNode()
+    adoptNode()
+    strict error checking modes
+    Most of the DOM Level 3 Load and Save capabilities
+
 ==issues with contains==
 
 * __contains__ vs. contains
@@ -34,7 +103,7 @@ to avoid confusion the author recommends you use the synonymous
 
 * ABC or Protocols?
 * Should Node be constructable?
-* Should cloneNode copy userData and/or ownerDocument?
+* Should lack of attrs/ns/etc be empty or None?
 * Should removeAttribute___ unlink from ownerDoc/ownerEl?
 
     # A Node is its own context manager, to ensure that an unlink() call occurs.
@@ -46,56 +115,30 @@ to avoid confusion the author recommends you use the synonymous
         self.unlink()
 
 
-==Selectors==
+==ID extensions==
 
-* is [] with arguments beyond those of just list, more useful or confusing?
+** StackID (accumulate down tree, only need to be unique in context)
+** CoID (for overlap or other co-indexing)
+** How to trigger update of IdIndex?
+** IDs take namespace prefixes?
 
-* How best to interface multiple/extended selectors?
-
-* How to trigger update of IdIndex?
 
 ==Namespaces==
 
 * How should ns matching in the face of None and "" work?
 * Effect of changing xmlns: attributes.
 
-* Option to require:
+* Options for:
 ** ns dcls only at top
-** no redef prefixes
+** no redefining prefixes
 ** no ns at all
-** ns on ids
+** ns on ids per se
 ** alt ways for attr ns
-
-
-==Whether/how to support EntityRefs==
-
-They can be useful b/c:
-** Transclusion could unify them (esp. external/system entities) with linking;
-then they should be able to show up in many places.
-** Sometimes you'd like to retain the physical structure, such as having
-each chapter in a separate entity, or even which characters were references.
-
-One way to do this is to tweak a parser to issue entity events
-with the name (many parsers hand back extra (non-normalized) text events for
-this anyway). Then dombuilder could insert an EntRef node, with at least the
-name, and then a subtree constructed under it. However, that makes the tree
-topology not what you'd expect, so lots of operations would be complicated.
-
-Another way is to annotate nodes created within an entity with that entity.
-If we assume that nodes do not start in one entity and end in another (certainly
-seems like good practice), then the annotation is only needed on the topmost
-node(s) of each entity, perhaps with something helpful to distinguish the
-first and/or last such.
-
-For now, I'm ignoring EntRef nodes entirely, and things like innerXML,
-outerXML, and insertAdjacentXML normalize.
-
-* auto entities, unicode-name ents
+** hierarchical ns
+** inherit element ns onto attrs
 
 
 ==Classes==
-
-* SituatedList/CompositionList?
 
 * Perhaps derive from UserList instead of list?
 
@@ -103,7 +146,9 @@ outerXML, and insertAdjacentXML normalize.
 
 * Split PlainNode and Node from rest of file?
 
-* The validator
+* Whether/how to support EntityRef nodes==
+
+* auto entities, unicode-name ents
 
 
 ==Methods==
@@ -135,22 +180,22 @@ more useful; but what of text, attrs, maybe other CharacterData, where
 normal string compare might be better? Order on Attrs is weird -- all attrs
 of same node would compare equal. Maybe hide these for CharacterData?
 
+* set operations for class-like atttrs.
+
+* xml.etree.ElementTree.canonicalize()?
+
 
 ==Exceptions==
 
 * Should inner/outerXml
 raise HierarchyRequestError, TypeError, or NotSupportedError?
 
-* Python NotImplementedError vs. DOM NotSupportedError.
-
 * Should (e.g.) child-related calls on CharacterData raise
 HierarchyRequestError (as now and in minidom),
 or NotImplementedError vs. DOM NotSupportedError
 or InvalidModificationError or TypeError or InvalidNodeTypeError?
 
-* build in xinclude (switchable of course)
-
-* Direct DC support?
+* build in xinclude (switchable)?
 
 
 ==Schema stuff==
@@ -165,10 +210,4 @@ or InvalidModificationError or TypeError or InvalidNodeTypeError?
 
 * Vector attrs (maybe just float{3,3}?)
 
-* Is it worth definiing a JSONX mapping for DTDs?
-
-
-==See also==
-
-IBM’s Websphere Development Studio Client (WDSC) has a utility that converts
-DTDs to XSDs.
+* JsonX mapping for DTDs?

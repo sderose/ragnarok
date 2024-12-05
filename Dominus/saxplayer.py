@@ -2,9 +2,10 @@
 #
 # saxplayer: Common stuff for SAX-like interfaces
 #
-from enum import Enum
+#from enum import Enum
+from basedomtypes import FlexibleEnum
 
-class SaxEvent(Enum):
+class SaxEvent(FlexibleEnum):
     START        =  1
     END          =  2
     CHAR         =  3

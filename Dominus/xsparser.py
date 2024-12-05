@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
-# EntityManager
-# multiXml written 2011-03-11 by Steven J. DeRose.
+# XSParser: An easily-tweakable XML parser, with DTD++ support.
+# Original: multiXml written 2011-03-11 by Steven J. DeRose.
 #
 #pylint: disable=W1201
 #
@@ -9,30 +9,31 @@ import os
 #import sys
 import codecs
 import re
-from enum import Enum
 import logging
 from typing import Union, List, Dict, Tuple, Iterable
 from types import SimpleNamespace
 
 #import html
-#from html.entities import codepoint2name
+from html.entities import name2codepoint  # codepoint2name
 
-from xmlstrings import XmlStrings as XStr, WSDef, CaseHandler, UNormHandler
+from domenums import FlexibleEnum
+from xmlstrings import XmlStrings as XStr, WSHandler, CaseHandler, UNormHandler
 from saxplayer import SaxEvent
-from basedomtypes import NotSupportedError
+from basedomtypes import NSuppE, NMTOKEN_t
 from documenttype import Model, RepType, AttrTypes, ContentType  # ModelGroup
 
 lg = logging.getLogger("EntityManager")
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 __metadata__ = {
-    "title"        : "EntityManager",
+    "title"        : "XSParser",
+    "description"  : "An easily-tweakable XML parser, with DTD++ support.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.7",
     "created"      : "2011-03-11",
-    "modified"     : "2024-10-11",
+    "modified"     : "2024-11-15",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
@@ -43,69 +44,171 @@ descr = """
 =Description=
 
 A pure Python parser and schema tool for XML. It's mainly meant for parsing
-a DTD and creating a simple representation of it for use by a later parser.
+a DTD and creating a simple representation of it (see doctype.py).
 But that includes doing nearly everything a regular XML WF parse needs, so I
 added those and you can use this as an XML parser as well.
 
-EntityManager.py (Python)
-
-Manage Entity and Notation definitions for an XML parser, including
-reading with respect to them.
+It also supports a bunch of extensions, but all are off by default. Afaict,
+it's a fully conforming XML parser if you leave the extensions turned off.
 
 =Usage=
 
-    from entitymanager import EntityManager
-    em = EntityManager()
-    em.readDtd(path)
-    em.openEntity()
-    ...read...
+    from xsparser import XSParser
+    xsp = XSParser()
+    xsp.readDtd("someDTD.dtd")
+    xsp.openEntity("someDocument.xml")
+    ...
+
 
 ==Extensions==
 
-Beyond regular DTD syntax:
-
 There are a bunch of experimental/additional features, all disabled by default.
-You can turn them on by:
-    * Prefixing "s." to the "version" number in the XML declaration (that way
-normal XML parsers will stop instead of parsing without knowing the extensions).
-    * Adding a quasi-attribute to the XML declaration for each desired
-extension, giving it a value.
+You can turn them on by adding a quasi-attribute to the XML declaration
+for each desired extension, giving it a value.
 
 For example:
-    <?xml version="s.1.1" encoding="utf-8" curlyQuotes="1"?>
+    <?xml version="1.1" encoding="utf-8" curlyQuotes="1"?>
 
-makes this library handle curly single, curly double, and double angle
+That makes this library handle curly single, curly double, and double angle
 quotation marks around literals (such as SYSTEM identifiers, attributes, etc.).
+Note that because XML does not allow extra items in the XML declaration,
+an XML parser will stop immediately on seeing it. This is by design, so that
+a document using XSParser extensions will fail rather than produce incorrect
+results if put through a regular XML parser.
 
-The extensions include:
-* Allow {min, max}, not just [*+?].
-* "MAXEXPANSION": 1 << 20,# Limit expansion of entities
-* "MAXSUBS": 1000,        # Limit nesting of entities
-* "repBraces": False,     # {min, max} can be used for repetition
-in content models, in additional to the usual [+*?].
-* "xsdTypes": False,      # XSD built-in datatype names are
-recognize as attribute types in ATTLIST declarations.
-* "specialFloats": False, # Nan, Inf, etc.
-Only useful if "xsdTypes" is also set, and you declare some attributes
-with a floating-point type. In that case, the IEEE reserved values
-are recognized, for example <foo x="1.2" y="-Inf">
-* "sgml": False,          # <!ELEMENT - O foo...>
-Enables several minor SGML features.
-However, these don't *do* anything; it's just to parse past them without
-complaining, as you might want for a DTD originating with SGML.
-* "multiElement": False,  # <!ELEMENT (x|y|z)...>
-* "unQuotedAttr": False,  # <p x=foo>
-The value must be an XML NAME or NUMBER token.
-* "elementFold": False,   # Case-fold element names -- NOT YET
-* "entityFold": False,    # Case-fold entity names -- NOT YET
-* "keywordFold": False,   # Case-fold #PCDATA, ANY, etc. -- NOT YET
-* "multiPath": False,     # Multiple SYSTEM IDs
-* "booleanAttrs": False,  # <x +border -foo?
-* "restart": False,       # <|> to close & reopen current element type,
-for brevity in analogy to MarkDown tables or SGML OMITTAG + <>.
-* "radix": ".",           # Decimal point replacement
-* "namespaceSep" : ":",   # Colon replacement
-* "curlyQuotes" : False,  # Additional quote characters
+By definition, if you turn on any of these extensions XSParser is no longer
+an XML parser. It becomes a parser for a slightly different language, which
+can truthfully be called "XML-like", but is not XML. However, if you do not
+turn any extensions on, XSParser is designed to be a fully-conforming
+regular XML parser. If you have data that uses the XSParser extensions and
+want to transform it to regular XML, just load it with XSParser into a DOM
+implementation of your choice (such as minidom or basedom), and then export
+XML in the usual way.
+
+==DTD extensions==
+
+===Size limits===
+
+* "MAXENTITYDEPTH": 4
+Do not let entity references nest more than this deeply.
+
+* "MAXSIZE": 1 << 20,
+Limit document total length (including expanded entities).
+
+* "repBraces": False
+Allow {min, max} to be used for repetition
+in content models, not just the usual [+*?].
+
+* "xsdTypes": False
+Recognize XSD built-in datatype names as attribute types in ATTLIST declarations.
+
+
+===Elements===
+
+* "groupDcls": False
+    <!ELEMENT (x|y|z)...>
+
+* "oflags": False
+    Parse past SGML-style omission flags, as for a DTD originating with SGML:
+    <!ELEMENT - O foo...>
+
+* "sgmlWords": False
+    Permit CDATA, RCDATA, #CURRENT, etc.
+
+* "markedSectionTypes": False
+    Recognize marked section keywords other than CDATA.
+(though so far, only CDATA and IGNORE are effective).
+
+* "repBraces": False
+    {min, max} for repetition
+
+* "emptyEnd": False
+    </>
+
+* "restart": False
+    Provide shorthand to close & reopen current element type,
+for brevity in analogy to MarkDown tables or SGML OMITTAG + <>:
+    <|>
+
+* "simultaneous": False
+    Allow simultaneous starting and ending of elements, for example:
+
+* "suspend": False
+    <x>...<-x>...<+x>...</x>
+
+
+===Attributes===
+
+* "xsdTypes": False
+    Support XSD builtin types for attributes.
+
+* "specialFloats": False
+    With "xsdTypes" active, accept special IEEE values such as Nan, Inf, etc.
+for float types. For example:
+    <foo x="1.2" y="-Inf">
+
+* "unQuotedAttr": False
+The value must be an XML NAME or NUMBER token:
+    <p x=foo>
+
+* "curlyQuotes" : False
+    Allow additional quote characters around SYSTEM IDs, attributes, etc.
+
+* "booleanAttrs": False
+    Allow attributes to be set to "1" or "0" by giving just a sign prefixed
+to their name:
+    <x +border -foo>
+
+* "bangAttrs": False
+    "!=" on first use to set attr default.
+
+* "COID"
+
+===Entities etc.===
+
+* "multiPath": False
+    Multiple SYSTEM IDs:
+    <!ENTITY chap1  SYSTEM "path1" "path2"...>
+
+
+===Case and Unicode===
+
+* "elementFold": False
+Case-fold element and attribute names -- NOT YET
+
+* "entityFold": False
+Case-fold entity names -- NOT YET
+
+* "keywordFold": False
+Case-fold #PCDATA, ANY, etc. -- NOT YET
+
+* "uNormHandler": "NONE"
+
+* "wsHandler": "XML"
+
+* "radix": "."
+Decimal point replacement for XSD floats.
+
+
+===Namespace stuff===
+
+* "nsSep": ":"
+    Change the namespace-separator from ":" to something else.
+
+* "nsUsage": None
+    Restrict where namesapces can be defined.
+Expected to include: justone, global, noredef, regular.
+
+
+==Document syntax extensions==
+
+* "multiPath": False
+Allows multiple SYSTEM IDs in declarations (tried in order):
+    <!ENITY foo SYSTEM "c:\\myDocs\\chap1.xml" "/Users/abc/Documents/XML/chap1.xml"?>
+
+
+* "namespaceSep" : ":"
+Colon replacement.
 
 
 =To Do=
@@ -166,18 +269,18 @@ or [https://github.com/sderose].
 =Options
 """
 
-class LocType(Enum):
+class LocType(FlexibleEnum):
     LITERAL = 1
     SYSTEM = 2
     PUBLIC = 3
 
-class ParseType(Enum):
+class ParseType(FlexibleEnum):
     PARSED = 1
     CDATA = 2
     RCDATA = 3
     NDATA = 4
 
-class SpaceType(Enum):
+class EntSpace(FlexibleEnum):
     GENERAL = 1
     PARAMETER = 2
     NOTATION = 3
@@ -193,14 +296,14 @@ class EntityDef:
     all to be sub-spaces of the same notion.
     """
     def __init__(self,
-        space:SpaceType,
+        space:EntSpace,
         name:str,
         parseType:ParseType=ParseType.PARSED,
         publicId:str=None, systemId:str=None,  encoding:str="utf-8",
         data:str=None,
         notationName:str=None
         ):
-        assert isinstance(space, SpaceType)
+        assert isinstance(space, EntSpace)
         if not XStr.isXmlName(name):
             raise SyntaxError(f"Name '{name}' for entity is not valid.")
         assert isinstance(parseType, ParseType)
@@ -211,7 +314,7 @@ class EntityDef:
         self.parseType = parseType
 
         self.encoding = encoding
-        self.wsTx = WSDef("XML")
+        self.wsTx = WSHandler("XML")
         self.caseTx = CaseHandler("NONE")
         self.uNormTx = UNormHandler("NONE")
 
@@ -224,24 +327,32 @@ class EntityDef:
         self.notationName = notationName
 
         if self.locType == LocType.LITERAL:
-            assert space != SpaceType.NOTATION
+            assert space != EntSpace.NOTATION
             self.path = None
         else:
             self.path = self.findLocalPath()
 
-    def findLocalPath(self) -> str:
+    def findLocalPath(self, trace:bool=False) -> str:
         """Catalog, path var, etc.
+        TODO Add PUBLIC support
         """
-        evName = "ENTITYPATH"
+        evName = "ENTITYPATH"  # TODO Move up to option
         if not self.systemId:
             raise IOError("No system ID for %s." % (self.name))
-        if os.path.isfile(self.systemId): return self.systemId
-        if evName in os.environ:
-            epaths = os.environ[evName].split(":")
-            for epath in epaths:
-                cand = os.path.join(epath, self.systemId)
-                if os.path.isfile(cand): return cand
-        raise IOError("No file found for %s (systemId %s)." % (self.name, self.systemId))
+        if isinstance(self.systemId, Iterable): systemIds = self.systemId
+        else: systemIds = [ self.systemId ]
+
+        if trace: print(f"Seeking entity {self.name}:")
+        for systemId in systemIds:
+            if trace: print(f"  System id '{systemId}'")
+            if os.path.isfile(self.systemId): return self.systemId
+            if evName in os.environ:
+                epaths = os.environ[evName].split(":")
+                for epath in epaths:
+                    cand = os.path.join(epath, self.systemId)
+                    if trace: print(f"    Trying {cand}")
+                    if os.path.isfile(cand): return cand
+        raise IOError("No file found for %s (systemIds %s)." % (self.name, systemIds))
 
 
 ###############################################################################
@@ -316,7 +427,7 @@ class EntityFrame:
 
     def topOff(self, n:int=0) -> bool:
         """We do not top off across entity boundaries here.
-        Read more data (is there is any), to get at least n available.
+        Read more data (if there is any), to get at least n available chars.
         If EOF happens before n, buf ends up short.
         If EOF happens and there's nothing in buf, that's really EOF on the entity.
         """
@@ -338,10 +449,10 @@ class EntityFrame:
         return True
 
     def skipSpaces(self, allowComments:bool=True) -> bool:
-        """XML eliminated in-space --...-- comments.
-        Calling this is key to keeping the buffer full.
+        """Calling this is key to keeping the buffer full.
         Since this is in EntityFrame, it doesn't handle parameter entities
-        (they change the EntityFrame, so are hanled one level up).
+        (they change the EntityFrame, so are handled one level up).
+        XML eliminated in-markup --...-- comments.
         TODO: Option to return the actual space, for in document content?
         """
         while True:
@@ -364,29 +475,43 @@ class EntityFrame:
         self.bufPos += len(mat.group(1))
         return mat.group(1)
 
-    def readConst(self, const:str, ss:bool=True, thenSp:bool=False) -> str:
+    def readConst(self, const:str, ss:bool=True,
+        thenSp:bool=False, fold:bool=False) -> str:
+        """IF you want to do case-ignorant comparison, make sure your
+        'const' is already in the desired case.
+        """
         # TODO Case-ignoring option?
         if ss: self.skipSpaces()
-        if self.bufLeft < len(const)+1: self.topOff()
-        if not self.buf[self.bufPos:].startswith(const): return None
+        if self.bufLeft < len(const)+1:
+            self.topOff()
+            if self.bufLeft < len(const)+1: return None
+        bufPart = self.peek(len(const))
+        if fold: bufPart = CaseHandler.UPPER.normalize(bufPart)  # TODO Generalize
+        if bufPart != const: return None
         if thenSp and not self.buf[self.bufPos+len(const)].isspace():
             return None
         self.bufPos += len(const)
-        return const
+        return bufPart
 
     def readInt(self,  ss:bool=True, signed:bool=True) -> int:
-        """TODO: Offer hex/octal/bin? Return int or orig string?
-        NIT: Consumes a sign even if no following number.
+        """Read a (possibly signed) decimal int.
         """
         if ss: self.skipSpaces()
-        nToken = ""
-        c = self.peek()
-        if (signed and c in "+-"):
-            nToken = self.consume()
-            c = self.peek()
-        if (not c.isdigit()): return None  # Could pushback....
-        while (c.isdigit()): nToken += c
-        return int(nToken, 10)
+        expr = r"[-+]?\d+" if signed else r"\d+"
+        mat = re.match(expr, self.buf[self.bufPos:])
+        if not mat: return None
+        tok = self.consume(len(mat.group()))
+        return int(tok, 10)
+
+    def readBaseInt(self,  ss:bool=True) -> int:
+        """Read any of 999, 0xFFF, 0o777, 0b1111.
+        """
+        if ss: self.skipSpaces()
+        mat = re.match(r"0x[\da-f]+|0o[0-7]+|0b[01]+|[-+]?\d+",
+            self.buf[self.bufPos:], re.I)
+        if not mat: return None
+        tok = self.consume(len(mat.group()))
+        return int(tok)
 
     def readFloat(self,  ss:bool=True, signed:bool=True,
         specialFloats:bool=False) -> float:
@@ -400,7 +525,7 @@ class EntityFrame:
             if self.readConst("Inf"): return float("Inf")
         fToken = ""
         c = self.peek()
-        if (signed and c in "+-"):
+        if signed and c in "+-":
             fToken = self.consume()
             c = self.peek()
         while (c is not None):
@@ -409,7 +534,7 @@ class EntityFrame:
                 if "." in fToken: break
                 fToken += self.consume()
             c = self.peek()
-        if (fToken.strip("+-.") == ""): return None  # Pushback?
+        if fToken.strip("+-.") == "": return None  # Pushback?
         return float(fToken)
 
     def readName(self, ss:bool=True) -> str:
@@ -419,7 +544,8 @@ class EntityFrame:
         This doesn't recognize parameter entity refs. Must it?
         """
         if ss: self.skipSpaces()
-        mat = re.match(XStr.xmlNCName, self.buf[self.bufPos:])
+        #lg.warning(f"readName: buf has '{self.buf[self.bufPos:]}'.\n")
+        mat = re.match(XStr.startsWithXmlQName_re, self.buf[self.bufPos:])
         if not mat: return None
         self.bufPos += len(mat.group())
         return mat.group()
@@ -427,30 +553,30 @@ class EntityFrame:
     def readEnumName(self, names:Iterable, ss:bool=True) -> str:
         """See if the source starts with any of the names.
         For an Enum, you could pass enumType.__members__.keys().
+        TODO option to require \\W after
         """
         if ss: self.skipSpaces()
         for name in names:
-            if (self.readConst(name)): return name
+            if self.readConst(name): return name
         return None
 
     def readRegex(self, regex:Union[str, re.Pattern], ss:bool=True,
-        ignoreCase:bool=True) -> re.Match:
-        """Check if the regex matches immediately. If so, return the match object
+        fold:bool=True) -> re.Match:
+        """Check if the regex matches immediately and return the match object
         (so captures can be distinguished) and consume the matched text.
-        If not, return None and consume nothing.
+        If no match, return None and consume nothing.
         TODO Won't match across buffer topOffs or entities.
         """
         if ss: self.skipSpaces()
         self.topOff()
-        mat = re.match(regex, self.buf[self.bufPos:],
-            flags=re.I if ignoreCase else 0)
-        if (not mat): return None
+        mat = re.match(regex, self.buf[self.bufPos:], flags=re.I if fold else 0)
+        if not mat: return None
         self.bufPos += len(mat.group())
         return(mat)
 
     def readToString(self, ender:str, consumeEnder:bool=True) -> str:
         rbuf, ender = self.readToAnyOf([ ender ], consumeEnder)
-        return rbuf, ender
+        return rbuf
 
     def readToAnyOf(self, enders:List, consumeEnder:bool=True) -> (str, str):
         """Read to any of the given strings. Nothing else is recognized.
@@ -467,7 +593,7 @@ class EntityFrame:
                 self.topOff()
                 if not self.bufLeft: return None, None
             ender, where = self.findFirst(self.buf, enders, self.bufPos)
-            if (ender is None):  # Keep going
+            if ender is None:  # Keep going
                 rbuf += self.buf[self.bufPos:]
                 self.buf = ""
                 self.bufPos = 0
@@ -525,10 +651,10 @@ class StackReader:
         self.sdataDefs = {}
 
         self.spaces = {
-            SpaceType.GENERAL: self.generalDefs,
-            SpaceType.PARAMETER: self.parameterDefs,
-            SpaceType.NOTATION: self.notationDefs,
-            SpaceType.SDATA: self.sdataDefs
+            EntSpace.GENERAL: self.generalDefs,
+            EntSpace.PARAMETER: self.parameterDefs,
+            EntSpace.NOTATION: self.notationDefs,
+            EntSpace.SDATA: self.sdataDefs
         }
 
         # IO state
@@ -553,41 +679,67 @@ class StackReader:
             "MAXEXPANSION": 1 << 20,# Limit expansion of entities
             "MAXSUBS": 1000,        # Limit nesting of entities
 
-            ### XSD influence
-            "repBraces": False,     # {min, max} for repetition
-            "xsdTypes": False,      # XSD builtins for attribute types
-            "specialFloats": False, # Nan, Inf, etc.
+            ### Schemas
+            "schemaType": "DTD",    # <!DOCTYPE foo SYSTEM "" NDATA XSD>  TODO
 
-            ### SGML influence
-            "sgml": False,          # Omission flags, extra kwds, ...
-            "multiElement": False,  # <!ELEMENT (x|y|z)...>
-            "unQuotedAttr": False,  # <p x=foo>
+            ### Elements
+            "groupDcl": False,      # <!ELEMENT (x|y|z)...>             TODO
+            "oflag": False,         # <!ELEMENT - O para...>
+            "sgmlWord": False,      # CDATA, RCDATA, #CURRENT, etc.
+            "mixel": False,         # Dcl content keyword ANYELEMENT    TODO
+            "mixins": False,        # cf incl exceptions
+            "repBrace": False,      # {min, max} for repetition
             "emptyEnd": False,      # </>
-
-            ### Unicode-related
-            "curlyQuotes": False,
-            "case_element": "NONE",
-            "case_entity": "NONE",
-            "case_keyword": "NONE",
-            "uNorm": "NONE",
-            "wsDef": "XML",
-            "radix": ".",           # Decimal point choice
-
-            ### Experiments, overlap, etc.
-            "booleanAttrs": False,  # <x +border -foo?
-            "bangAttrs": False,     # != on first use to set attr dft
-            #"namespaceSep" : ":",   #
-            "multiPath": False,     # Multiple SYSTEM IDs
             "restart": False,       # <|> to close & reopen current element type
-            #"multiTag": False,      # <b|i>
-            #"suspend": False,       # <x>...<-x>...<+x>...</x> (???)
+            "simultaneous": False,  # <b|i>, </i|/b>                    TODO
+            "multiTag": False,      # <div/title>Introduction</title>   TODO
+            "suspend": False,       # <x>...<-x>...<+x>...</x> (???)    TODO
+            "olist": False,         # olist, not stack
+
+            ### Attributes
+            "globalAttr": False,    # <!ATTLIST * ...>                  TODO
+            "xsdType": False,       # XSD builtins for attribute types
+            "xsdPlural": False,     # Add list variants with a repetition suffix TODO
+            "specialFloat": False,  # Nan, Inf, etc.
+            "unQuotedAttr": False,  # <p x=foo>
+            "curlyQuote": False,
+            "booleanAttr": False,   # <x +border -foo>
+            "bangAttr": False,      # != on first use to set dft        TODO
+            "bangAttrType": False,  # !typ= to set datatype             TODO
+            "coID": False,          # co-index logical elements frags   TODO
+            "nsID": False,          # IDs can have ns prefix            TODO
+            "stackID": False,       #                                   TODO
+
+            ### Entities etc.
+            "multiPath": False,     # Multiple SYSTEM IDs
+            "charEnts": False,      # Enable HtML/Annex D named char refs
+            "unameEnts": False,     # &em_quad; etc                     TODO
+            "unameAbbr": False,     # &math_frak_r;                     TODO
+            "multiSDATA": False,    # <!SDATA nbsp 160 msp 0x2003...>   TODO
+            "setDcls": False,       # <!ENTITY % soup SET (i b tt)>     TODO
+            "backslash": False,     # \n \xff \uffff                    TODO
+
+            ### Case and Unicode
+            "elementFold": "NONE",
+            "entityFold": "NONE",
+            "keywordFold": "NONE",
+            "uNormHandler": "NONE", #                                   TODO
+            "wsDef": "XML",         #                                   TODO
+            "radix": ".",           # Decimal point choice              TODO
+            "noC1":  False,         # No C1 controls                    TODO
+
+            ### Other
+            "piAttr": False,        # PI content is parsed like attributes. TODO
+            "piAttrDcl": False,     # <!ATTLIST ?target ...>            TODO
+            "nsSep": ":",           #                                   TODO
+            "nsUsage": None,        # justone, global, noredef, regular TODO
         })
 
-        if (options):
+        if options:
             for k, v in options:
                 setattr(self.options, k, v)
 
-        if self.options.xsdTypes:
+        if self.options.xsdType:
             for xsdt in AttrTypes.keys():
                 if xsdt not in self.attrTypes: self.attrTypes[xsdt] = 1
 
@@ -612,7 +764,7 @@ class StackReader:
         assert len(self.entStack) == 0
         if not os.path.isfile(rootPath):
             raise IOError(f"File not found: {rootPath}.")
-        self.rootDef = EntityDef(space=SpaceType.GENERAL,
+        self.rootDef = EntityDef(space=EntSpace.GENERAL,
             name="_root", systemId=rootPath, encoding=encoding)
         self.rootFrame = EntityFrame(self.rootDef, encoding=encoding)
         self.entStack.append(self.rootFrame)
@@ -623,7 +775,7 @@ class StackReader:
             raise KeyError(f"{eDef.space} object already defined: '{eDef.name}'.")
         tgt[eDef.name] = eDef
 
-    def findEntity(self, space:SpaceType, name:str) -> EntityDef:
+    def findEntity(self, space:EntSpace, name:str) -> EntityDef:
         tgt = self.spaces[space]
         if name in tgt: return tgt[name]
         return None
@@ -634,22 +786,22 @@ class StackReader:
         Fairly well protected against reference bombs.
         """
         totpasses = 0
-        totsubs = 0
+        nestLevel = 0
         while "%" in s:
             if len(s) > self.options.MAXEXPANSION: raise ValueError(
                 "Parameter entity expansion exceeds MAXEXPANSION (%d)."
                 % (self.options.MAXEXPANSION))
             totpasses += 1
             s, n = re.subn(r"%([-_:.\w]+);", self.getParameterText, s)
-            totsubs += n
-            if (totsubs > self.options.MAXSUBS):
+            nestLevel += n
+            if nestLevel > self.options.MAXENTITYDEPTH:
                 self.SE("Too many parameter entity substitutions, depth %d, count %d."
-                    % (totpasses, totsubs))
+                    % (totpasses, nestLevel))
         return s
 
     def getParameterText(self, mat) -> str:
         peName = mat.group(1)
-        if self.isOpen(SpaceType.PARAMETER, peName):
+        if self.isOpen(EntSpace.PARAMETER, peName):
             self.SE("Parameter entity {peName} is already open.")
         try:
             peDef = self.parameterDefs[peName]
@@ -659,14 +811,14 @@ class StackReader:
         with codecs.open(peDef.systemId, "rb", encoding=peDef.encoding) as pefh:
             return pefh.read()
 
-    def isOpen(self, space, name) -> bool:
+    def isOpen(self, space:EntSpace, name:NMTOKEN_t) -> bool:
         eDef = self.findEntity(space, name)
-        if (eDef is None): return False
+        if eDef is None: return False
         for fr in self.entStack:
             if fr.eDef is eDef: return True
         return False
 
-    def open(self, space:SpaceType, name:str) -> EntityFrame:
+    def open(self, space:EntSpace, name:NMTOKEN_t) -> EntityFrame:
         eDef = self.findEntity(space, name)
         if not eDef: raise KeyError(
             f"Unknown entity '{name}'.")
@@ -733,16 +885,20 @@ class StackReader:
             "^" +  # or "\uFE0E" +  # WHITE FROWNING FACE
             self.buf[self.bufPos:self.bufPos+postLen])
 
+    # Forward small constructs to entity-frame-limited readers
+    #
     def readConst(self, const:str, ss:bool=True, thenSp:bool=False) -> str:
         return self.curFrame.readConst(const, ss, thenSp)
     def readInt(self,  ss:bool=True, signed:bool=True) -> int:
         return self.curFrame.readInt(ss, signed)
     def readFloat(self,  ss:bool=True, signed:bool=True,
         specialFloats:bool=False) -> float:
-        return self.curFrame.readFloat(ss=ss, signed=signed, specialFloats=specialFloats)
+        return self.curFrame.readFloat(
+            ss=ss, signed=signed, specialFloats=specialFloats)
     def readName(self, ss:bool=True) -> str:
         return self.curFrame.readName(ss)
-    def readRegex(self, regex:Union[str, re.Pattern], ss:bool=True, ignoreCase:bool=True) -> re.Match:
+    def readRegex(self, regex:Union[str, re.Pattern],
+        ss:bool=True, ignoreCase:bool=True) -> re.Match:
         return self.curFrame.readRegex(regex, ss, ignoreCase)
     def readToString(self, ender:str, consumeEnder:bool=True) -> str:
         return self.curFrame.readToString(ender, consumeEnder)
@@ -767,8 +923,8 @@ class StackReader:
 
     def skipSpaces(self, allowComments:bool=False, allowParams:bool=False) -> bool:
         #crossEntityEnds:bool=False):  # TODO Implement stack!
-        """Basically skip spaces, but at option, also:
-            * skip a comment
+        """Basically skip spaces, but at option also:
+            * skip an embedded comment (for SGML not XML DTDs)
             * expand if we hit a parameter entity reference.
         """
         nFound = 0
@@ -808,38 +964,33 @@ class StackReader:
         self.bufPos += 1
         if pename not in self.parameterDefs:
             self.SE(f"Unknown parameter entity '{pename}'.")
-        self.open(space=SpaceType.PARAMETER, name=pename)
+        self.open(space=EntSpace.PARAMETER, name=pename)
         self.entStack[-1].skipSpaces()
         return
 
     def readQLit(self, ss:bool=True, keepPunc:bool=False) -> str:
+        """TODO: Who exands stuff inside qlits???? Do one pass at end?
+        """
         if ss: self.skipSpaces(allowParams=True)
         openQ = self.peek()
         closeQ = None
         if openQ == "'" or openQ == '"':
             closeQ = openQ
-        elif self.options.curlyQuotes:
+        elif self.options.curlyQuote:
             # This isn't all the Unicode possibilities, just the main ones.
             if   openQ == "\u2018": closeQ = "\u2019"  # Curly single
             elif openQ == "\u201C": closeQ = "\u201D"  # Curly double
             elif openQ == "\u00AB": closeQ = "\u00BB"  # Double angle
         else:
             self.SE("Expected quoted string but found '{openQ}' ({ord(oenQ):04x}).")
+
         self.consume()
         dat = self.readToString(closeQ, consumeEnder=True)
         if dat is None:
             self.SE("Unclosed quoted string.")
-        if (keepPunc): return openQ + dat + closeQ
+        dat = self.expandPEntities(dat)
+        if keepPunc: return openQ + dat + closeQ
         return dat
-
-    def readQLitOrName(self, ss:bool=True, keepPunc:bool=False) -> str:
-        # TODO Distinguish which it found.
-        if ss: self.skipSpaces()
-        rc = self.readQLit(ss, keepPunc)
-        if rc is not None: return rc
-        rc = self.readName(ss)
-        if rc is not None: return rc
-        return None
 
     def readNameGroup(self, ss:bool=False) -> List:
         """Allows and mix of [&|,] or space between names.
@@ -869,7 +1020,7 @@ class StackReader:
         """
         if ss: self.skipSpaces(allowParams=True)
         c = self.peek(1)
-        if self.options.multiElement and c == "(":
+        if self.options.groupDcl and c == "(":
             names = self.readNameGroup(ss=True)
         else:
             names = [ self.readName() ]
@@ -878,13 +1029,13 @@ class StackReader:
 
     ### Readers for top-level DTD constructs
     #
-    def readXmlDcl(self) -> (str, str):                 # XML DCL
+    def readXmlDcl(self) -> (str, str):                         # <?xml ...?>
         # This is nearly the only case where ss=False.
         if not self.readConst("<?xml", ss=False, thenSp=True): return None
         props = {}
         while (True):
             aname, avalue, _ = self.readAttr(ss=True)
-            if (aname is None): break
+            if aname is None: break
             if aname in ("version", "encoding", "standalone"):
                 props[aname] = avalue
             elif aname in self.options:
@@ -892,20 +1043,23 @@ class StackReader:
             else:
                 self.SE("Unrecognized item '{aname}' in XML DCL.")
         if not self.readConst("?>", ss=True):
-            self.SE("Unterminated XML DCL.")
+            self.SE(f"Unterminated XML DCL, read {repr(props)}.")
         self.doCB(SaxEvent.XMLDCL, *props)
         return props
 
-    def readPI(self) -> (str, str):                     # PI
+    def readPI(self) -> (str, Union[str, Dict]):                # <?tgt data??>
         pio = self.readConst("<?", ss=True)
         if pio is None: return None, None
         piTarget = self.readName()
-        piData = self.readToString("?>", consumeEnder=True)
-        if piData is None:
-            self.SE("Unterminated PI.")
+        if self.options.piAttr:
+            piData = self.readAttrs(ss=True)
+            if not self.readConst("?>", ss=True): self.SE("Unterminated PI.")
+        else:
+            piData = self.readToString("?>", consumeEnder=True)
+            if piData is None: self.SE("Unterminated PI.")
         return piTarget, piData
 
-    def readComment(self) -> str:                       # COMMENT
+    def readComment(self) -> str:                               # <!-- txt -->
         como =  self.readConst("<!--", ss=True)
         if como is None: return None
         comData = self.readToString("-->", consumeEnder=True)
@@ -913,17 +1067,19 @@ class StackReader:
             self.SE("Unterminated Comment.")
         return comData
 
-    def readNotationDcl(self) -> (str, str, str):       # NOTATION DCL
+    def readNotationDcl(self) -> (str, str, str):               # <!NOTATION>
         if self.readConst("<!NOTATION", thenSp=True) is None: return None
         name = self.readName(ss=True)
         publicId, systemId = self.readLocation()
-        if publicId is None:
-            self.SE(f"Expected PUBLIC or SYSTEM identifier at {self.bufSample}.")
-        if not self.readConst(">"): self.SE("Expected '>' for NOTATION dcl.")
+        if publicId is None: self.SE(
+            f"Expected PUBLIC or SYSTEM identifier at {self.bufSample}.")
+        if not self.readConst(">"): self.SE(
+            "Expected '>' for NOTATION dcl at {self.bufSample}.")
         return (name, publicId, systemId)
 
-    def readLocation(self) -> (str, str):
+    def readLocation(self) -> (str, Union[List, str]):          # PUBLIC/SYSTEM
         """The PUBLIC "" "", or SYSTEM "" syntax.
+        Note: This returns the SYSTEM ID as a list iff 'multiPath' is on.
         """
         publicId = ""
         systemIds = []
@@ -937,17 +1093,23 @@ class StackReader:
                     systemIds.append(s)
         else:
             return None, None
-        return (publicId, systemIds)
+        if self.options.multiPath: return (publicId, systemIds)
+        return (publicId, systemIds[0])
 
-    def readElementDcl(self):                           # ELEMENT DCL
+    def readElementDcl(self) -> (                               # <!ELEMENT>
+        List, bool, bool, List, List, List):
+        """TODO Should these all do the construction, or leave to caller?
+        """
         if self.readConst("<!ELEMENT", thenSp=True) is None: return None
         omitStart = omitEnd = False
+
         if self.options.multiElement and self.peek() == "(":
             names = self.readNameGroup()
         else:
             names = [ self.readName() ]
         if names is None:
             self.SE("Expected element name or group at {self.bufSample}.")
+
         if self.options.sgml:
             omitStart = omitEnd = False
             # Doesn't handle PE refs in mid-omitFlags.
@@ -955,27 +1117,46 @@ class StackReader:
             if mat:
                 omitStart = mat.group(1) == "O"
                 omitEnd = mat.group(2) == "O"
-        model = self.readModel()
-        if model is None: self.SE("Expected model or declared content for {names}.")
-        if not self.readConst(">"): self.SE("Expected '>' for ELEMENT dcl.")
-        return (names, omitStart, omitEnd, model)
 
-    def readModel(self) -> Model:
-        # TODO Perhaps add a readKeyWord(keys:Union(List, Dict, Enum))?
-        kwds = "ANY|EMPTY|#PCDATA"
-        if self.options.sgml: kwds += r"|CDATA"
-        mat = self.readRegex(f"{kwds}\b", ss=True)
+        model = self.readModel()
+        if model is None: self.SE(
+            "Expected model or declared content for {names}.")
+
+        inclusions = exclusions = None
+        if self.options.mixins:
+            if self.peek() == "+":
+                self.consume()
+                mixins = self.readNameGroup()
+                if mixins is None: self.SE(
+                    "Expected name group after '+' for inclusions.")
+                inclusions = mixins
+            if self.peek() == "-":
+                self.consume()
+                mixins = self.readNameGroup()
+                if mixins is None: self.SE(
+                    "Expected name group after '-' for exclusions.")
+                exclusions = mixins
+
+        if not self.readConst(">"): self.SE("Expected '>' for ELEMENT dcl.")
+        return (names, omitStart, omitEnd, model, inclusions, exclusions)
+
+    def readModel(self) -> Model:                               # EMPTY | (...)
+        """Read a parenthesized content model OR a declared content keyword.
+        """
+        mat = self.readRegex(r"#?\w+\b", ss=True)
         if mat:
-            contentType = ContentType(mat.group().lstrip("#"))
-            return Model(contentType=contentType)
+            try:
+                contentType = ContentType(mat.group().lstrip("#"))
+                return Model(contentType=contentType)
+            except ValueError:
+                self.SE("Unrecognized declared content keyword '{mat.group}'.")
         mtokens = self.readModelGroup(ss=True)
         if mtokens is None: return None
-        if rep := self.readRegex(r"[*?+]", ss=True):
-            mtokens.items.append(rep.group())
         return Model(tokens=mtokens)
 
-    def readModelGroup(self, ss:bool=True) -> List[str]:
-        """Extract and return a balanced paren group like a content model.
+    def readModelGroup(self, ss:bool=True) -> List[str]:        # ( x | Y | z )
+        """Extract and return a balanced paren group like a content model,
+        possibly plus a final reoetition operator.
         Handily, you can't have parens as escaped data in there.
         Does not check that each group is uniform on [,|&].
         TODO PE refs?
@@ -1004,13 +1185,19 @@ class StackReader:
             elif c in "+?*":
                 self.consume()
                 tokens.append(c)
-            elif self.options.repBraces and (rep := self.readRepIndicator()):
+            elif self.options.repBrace and (rep := self.readRepIndicator()):
                 tokens.append(rep)
             else:
                 self.SE(f"Unexpected character '{c}' in model at {tokens}.")
+        if rep := self.readRegex(r"[*?+]", ss=True):
+            tokens.append(rep.group())
+        elif self.options.repBrace and (rep := self.readRepIndicator()):
+            tokens.append(rep)
         return Model(tokens=tokens)
 
-    def readRepIndicator(self, ss:bool=True) -> RepType:
+    def readRepIndicator(self, ss:bool=True) -> RepType:        # *|+|?|{}
+        """The repetition operator (including the {} form extension).
+        """
         if ss: self.skipSpaces()
         c = self.peek()
         if c not in "*?+{":
@@ -1021,7 +1208,7 @@ class StackReader:
         elif self.readConst("?"): lims = [ 0, 1 ]
         elif self.readConst("+"): lims = [ 0, -1 ]
         elif c == "{":
-            if not self.options.repBraces:
+            if not self.options.repBrace:
                 raise SyntaxError("repBraces extension is not enabled.")
             minO = self.readInt(ss=True)
             self.readConst(":", ss=True)
@@ -1030,7 +1217,7 @@ class StackReader:
             lims = [ minO, maxO ]
         return RepType(*lims)
 
-    def readAttListDcl(self) -> (List, Dict):           # ATTLIST DCL
+    def readAttListDcl(self) -> (List, Dict):                   # <!ATTLIST>
         """Example:
             <!ATTLIST para  class   NMTOKENS    #IMPLIED
                             level   NUMTOKEN    #REQUIRED
@@ -1055,18 +1242,18 @@ class StackReader:
             self.skipSpaces()
             if self.peek() == "(":
                 attType = self.readModelGroup(ss=True)  # TODO: No nesting....
-            elif not (attType := self.readName(ss=True)):
-                self.SE("Expected attribute type or enum-group.")
-            elif attType not in self.attrTypes:
-                self.SE(f"Unknown type {attType} for attribute {attName}.")
+            elif not (attType := self.readName(ss=True)): self.SE(
+                "Expected attribute type or enum-group.")
+            elif attType not in self.attrTypes: self.SE(
+                f"Unknown type {attType} for attribute {attName}.")
 
             self.skipSpaces(allowParams=True)
             c = self.peek()
             if c == "#":
                 attDftKwd = self.consume()
                 attDftKwd += self.readName() or ""
-                if attDftKwd not in self.attrDefaults:
-                    self.SE(f"Unknown attribute default {attDftKwd} for attribute {attName}.")
+                if attDftKwd not in self.attrDefaults: self.SE(
+                    f"Unknown attribute default {attDftKwd} for {attName}.")
                 if attDftKwd == "#FIXED":
                     dftVal = self.readQLit(ss=True)
             elif c in '"\'':
@@ -1077,7 +1264,7 @@ class StackReader:
         # TODO Allocate AttlistDef
         return names, atts
 
-    def readEntityDcl(self) -> Tuple:                   # ENTITY DCL
+    def readEntityDcl(self) -> Tuple:                           # <!ENTITY>
         """Examples:
             <!ENTITY % foo "(i | b* | (tt, lang0))*">
             <!ENTITY XML "Extensible Markup Language">
@@ -1091,7 +1278,7 @@ class StackReader:
         name = self.readName(ss=True)
         publicId = systemId = lit = ""
         publicId, systemId = self.readLocation()
-        if (publicId is None):
+        if publicId is None:
             lit = self.readQLit(ss=True)
 
         notn = None
@@ -1108,18 +1295,18 @@ class StackReader:
     # Readers for main document content
     #
     def readStartTag(self, ss:bool=True) -> (str, Dict, bool):
-        attrs = {}
+        """Returns a 3-tuple of:
+            element type name
+            dict of attributes
+            whether it used empty-element syntax
+        """
         if not self.readConst("<", ss): return None, None, None
         if not (name := self.readName(ss)):
             self.SE("Expected name in start-tag.")
-        while (True):
-            aname, avalue, bang = self.readAttr(ss=True)
-            if aname is None: break
-            attrs[aname] = avalue
-            if bang:
-                if (name, aname) in self.bangAttrs:
-                    self.SE("!= previously used for '{aname}@{aname}'.")
-                self.bangAttrs[(name, aname)] = avalue
+        if self.options.elementFold: name = name.upper()
+
+        attrs = self.readAttrs(ss=ss)
+
         empty = False
         if self.readConst("/>", ss): empty = True
         elif self.readConst(">", ss): empty = False
@@ -1128,25 +1315,60 @@ class StackReader:
         if empty: self.doCB(SaxEvent.END, name)
         return name, attrs, empty
 
+    def readAttrs(self, ss:bool=True) -> Dict:
+        attrs = {}
+        while (True):
+            aname, avalue, bang = self.readAttr(ss=True)
+            if aname is None: break
+            if self.options.elementFold: aname = aname.upper()
+            # TODO Fold and normalize and cast value per schema
+            attrs[aname] = avalue  # Move to caller or pass in elem name?
+            #if bang:
+            #    if (name, aname) in self.bangAttrs:
+            #        self.SE("!= previously used for '{aname}@{aname}'.")
+            #    self.bangAttrs[(name, aname)] = avalue
+        return attrs
+
     def readAttr(self, ss:bool=True, keepPunc:bool=False) -> (str, str, bool):
         """Used in start-tags and also in XML DCL.
+        Supports optional extensions such as curly or unquoted values,
+        boolean shorthand, and "!=" to set an enduring default.
+        Extensions:
+            <p +border -foo id=spam_37 zork!="1"
+        Returns: name, value, and 'bang' -- bang is True iff we got "!=".
         """
+        #lg.warning(f"readAttr, ss={ss}, buf starts '{self.peek(10)}'.")
+        if ss: self.skipSpaces()
+        #lg.warning(f"readAttr, after ss, buf starts '{self.peek(10)}'.")
         bang = False
-        if (self.options.booleanAttrs and self.peek() in "+-"):
+        if self.options.booleanAttr and self.peek() in "+-":
             which = self.consume()
             if not (aname := self.readName(ss)):
                 self.SE("Expected name after +/- for boolean attr.")
-            return (aname, (which == "+"), False)
-        if not (aname := self.readName(ss)): return (None, None, bang)
-        if self.options.bangAttrs and self.readConst("!=", ss):
+            lg.warning("Got boolean attr prefix '%s' for '%s'.", which, aname)
+            return (aname, "1" if (which == "+") else "0", False)
+
+        # TODO Maybe do case-folding here instead of in readStartTag()?
+        aname = self.readName(ss)
+        if not aname:
+            return (None, None, bang)
+        #lg.warning(f"Attr name '{aname}'.")
+
+        if self.options.bangAttr and self.readConst("!=", ss):
             bang = True
         elif self.readConst("=", ss):
             bang = False
         else:
             self.SE("Expected '=' after attribute name.")
-        if avalue := self.readQLit(ss, keepPunc): return (aname, avalue, bang)
-        if (self.options.unQuotedAttr):
-            if avalue := self.readName(ss): return (aname, avalue, bang)
+
+        avalue = self.readQLit(ss, keepPunc)
+        if avalue:
+            #lg.warning(f"Attr value is qlit '{avalue}' ({type(avalue)}).")
+            return (aname, avalue, bang)
+        if self.options.unQuotedAttr and (avalue := self.readName(ss)):
+            lg.warning("Attr value for %s is unquoted (%s).", aname, avalue)
+            return (aname, avalue, bang)
+
         return (None, None, bang)
 
     def readEndTag(self, ss:bool=True) -> str:
@@ -1158,10 +1380,14 @@ class StackReader:
                 name = self.tagStack[-1]
         if not self.readConst(">", ss):
             self.SE("Unclosed end-tag for '{aname}'.")
+        if self.options.elementFold: name = name.upper()
         self.doCB(SaxEvent.END, name)
         return name
 
     def readCDATA(self, ss:bool=True) -> str:
+        """This recognizes the full set of SGML keywords, but they're
+        not fully implemented yet.
+        """
         MSKeys = {
             "CDATA": 1,
             "RCDATA": 2,
@@ -1171,7 +1397,7 @@ class StackReader:
         }
         if not self.readConst("<![", ss):
             return None
-        elif self.readConst("CDATA["):
+        elif self.readConst("CDATA["):  # TODO Case?
             # In XML these aren't nestable.
             data = self.readToString("]]>")
             if not data: self.SE("Unclosed CDATA section.")
@@ -1179,15 +1405,15 @@ class StackReader:
             self.doCB(SaxEvent.CHAR, data)
             self.doCB(SaxEvent.CDATAEND)
             return data
-        elif not self.options.sgml:
+        elif not self.options.markedSectionTypes:
             self.SE("Found '<![' but not '<![CDATA['.")
         else:
-            # TODO Unfinished. rcdata easy; include/temp are a pain
+            # TODO Unfinished. rcdata is easy; include/temp are a pain
             if not (keys := self.readToString("[")):
                 self.SE("Unfinished marked section start.")
             topKey = ""
             for key in self.expandPEntities(keys).split():
-                if (not topKey or MSKeys[key] < MSKeys[topKey]): topKey = key
+                if not topKey or MSKeys[key] < MSKeys[topKey]: topKey = key
             self.msStack.append(topKey)
             if topKey == "IGNORE":
                 self.readToString("]]>", consumeEnder=True)
@@ -1198,7 +1424,7 @@ class StackReader:
                 self.doCB(SaxEvent.CHAR, data)
                 self.doCB(SaxEvent.CDATAEND)
             else:
-                raise NotSupportedError("Unsupported SGML MS Keyword {topKey}")
+                raise NSuppE("Unsupported SGML MS Keyword {topKey}")
             self.msStack.pop()
 
     def parseTop(self) -> None:
@@ -1211,8 +1437,8 @@ class StackReader:
         _props = self.readXmlDcl()
 
         if e := self.readConst("<!DOCTYPE", ss=True, thenSp=True):  # DOCTYPE
-            docTypeName = self.readName(ss=True)
-            if docTypeName is None:
+            doctypeName = self.readName(ss=True)
+            if doctypeName is None:
                 self.SE("Expected document type name in DOCTYPE.")
             self.skipSpaces()
             publicId, systemId = self.readLocation()
@@ -1220,7 +1446,7 @@ class StackReader:
             if self.peek(1) == "[":
                 self.sawSubsetOpen = True
                 self.consume(1)
-            self.doCB(SaxEvent.DOCTYPE, docTypeName, publicId, systemId)
+            self.doCB(SaxEvent.DOCTYPE, doctypeName, publicId, systemId)
 
         while True:                                                 # SUBSET
             self.skipSpaces(allowParams=True)
@@ -1268,57 +1494,86 @@ class StackReader:
         """Starts after parseTop.
         """
         buf = ""
-        while c := self.peek(4) is not None:
-            if c[0] not in "&<":
+        while c := self.peek(1) is not None:
+            if c not in "&<":
                 buf += self.consume()
                 continue
             if buf:
                 self.doCB(SaxEvent.CHAR, buf)
                 buf = ""
-            if c[0] == "&":
+            if c == "&":
                 self.consume()
                 if self.readConst("#"):
                     pass  # TODO
                 elif name := self.readName(ss=False):
                     if not self.readConst(";"):
                         self.SE(f"Expected ';' after '{name}'.")
-                    self.open(SpaceType.GENERAL, name)
+                    if self.options.entityFold: name = name.upper()
+                    if self.options.charEnt and name in name2codepoint:
+                        buf += name2codepoint[name]
+                    else:
+                        self.open(EntSpace.GENERAL, name)
                 else:
                     self.SE("Expected '#' or name after '&'.")
-            elif c[0] == "<" and not self.inRCDATA:
-                if c.startswith("</"):
+            elif c == "<" and not self.inRCDATA:
+                self.consume()
+                c2 = self.peek()
+                if c2 == "/":
                     e = self.readEndTag()
-                    if not e: self.SE("Expected name after '</'.")
-                    if not self.tagStack or e != self.tagStack[-1]:
-                        self.SE("End-tag for {e}, but {self.tagStack[-1]} is current.")
-                    self.tagStack.pop()
+                    if not e: self.SE("Expected name after '</'.")  # TODO </>
+                    if self.options.elementFold: e = e.upper()
+                    if self.options.olist:
+                        foundAt = None
+                        i = 0
+                        for i in reversed(range(len(self.tagStack))):
+                            if self.tagStack == e:
+                                foundAt = i
+                                break
+                        if foundAt is not None:
+                            del self.tagStack[i]
+                        else: self.SE(
+                            f"Element to close not found in open-list: '{e}'.")
+                    else:
+                        if not self.tagStack or e != self.tagStack[-1]: self.SE(
+                            "End-tag for {e}, but {self.tagStack[-1]} is current.")
+                        self.tagStack.pop()
                     self.doCB(SaxEvent.END, e)
-                elif c.startswith("<!--"):
-                    e = self.readComment()
-                    if (e): self.doCB(SaxEvent.COMMENT, e)
-                elif c.startswith("<!["):
-                    e = self.readCDATA()
-                    if (e):
-                        self.doCB(SaxEvent.CDATASTART)
-                        self.doCB(SaxEvent.CHAR, e or "")
-                        self.doCB(SaxEvent.CDATAEND)
-                elif c.startswith("<?"):
+                elif c2 == "!":
+                    # For SGML we'd have to check for USEMAP to
+                    if self.peek(3) == "!--":
+                        e = self.readComment()
+                        if e: self.doCB(SaxEvent.COMMENT, e)
+                    elif self.peek(2) == "![":
+                        e = self.readCDATA()
+                        if e:
+                            self.doCB(SaxEvent.CDATASTART)
+                            self.doCB(SaxEvent.CHAR, e or "")
+                            self.doCB(SaxEvent.CDATAEND)
+                elif c2 == "?":
                     if not (e := self.readPI()):
                         self.SE("Expected target and data after '<?'.")
                     self.doCB(SaxEvent.PROC, *e)
-                elif self.options.restart and c.startswith("<|>"):
+                elif self.options.restart and self.peek(2) == "|>":
                     if not self.tagStack:
                         self.SE("Can't re-start with nothing open.")
                     e = self.tagStack[-1]
                     self.doCB(SaxEvent.END, e)
                     self.doCB(SaxEvent.START, e)
+                elif c2 in "-+":  # Suspend/resume
+                    if not self.options.suspend:
+                        self.SE("<+ and <- only allowed with 'suspend' extension.")
+                    else:
+                        raise NSuppE
                 else:
-                    if not (e := self.readStartTag()):
-                        self.SE("Unexpected characters after '<'.")
-                    self.doCB(SaxEvent.START, *e)
+                    e, attrs, emptySyntax = self.readStartTag()
+                    if not (e): self.SE("Unexpected characters after '<'.")
+                    self.doCB(SaxEvent.START, e, attrs)
                     self.tagStack.append(e)
+                    if emptySyntax:
+                        self.doCB(SaxEvent.END, e)
+                        self.tagStack.pop()
 
-        if (self.tagStack):
+        if self.tagStack:
             self.SE(f"Unclosed elements at EOF: {self.tagStack}.")
         self.doCB(SaxEvent.FINAL)
         return

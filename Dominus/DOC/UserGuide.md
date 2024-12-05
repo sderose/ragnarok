@@ -33,7 +33,8 @@ of these works:
     x.nodeType == NodeType.ELEMENT_NODE
     x.nodeType == Node.ELEMENT_NODE
 
-* Reserved words ("#text" etc) are defined in an RWords Enum.
+* Reserved words ("#text", "##any", "xmlns", etc.) are defined
+in Enums in domenums.py.
 
 * There are node generators, which let you filter by nodeType.
     x.eachChild()

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 #
-from enum import Enum
 from dataclasses import dataclass
 from typing import List, Dict
 import regex
 
-from basedomtypes import NMTOKEN_t
+#from domenums import
+from basedomtypes import NMTOKEN_t, FlexibleEnum
 
-class MNodeType(Enum):
+class MNodeType(FlexibleEnum):
+    """Kinds of model (sub)-groups
+    """
     NONE = 0
     NAME = 1
     PCDATA = 2
@@ -17,12 +19,16 @@ class MNodeType(Enum):
 
 @dataclass
 class MGroup:
+    """An actual Model group, with connector type, repetition limites, and token list.
+    """
     conn: str = None
     minO: int = -1
     maxO: int = -1
     items: List = []
 
 class ModelStuff:
+    """Support content models, primarily by converting a list of tokens to an AST.
+    """
     def __init__(self, doctype:str):
         self.doctype = doctype
 
@@ -54,6 +60,13 @@ class ModelStuff:
         return stack
 
 class Validator:
+    """Sneaky way to validate:
+        * Assign a Unicode character to each element type name
+        * Convert element type names in a model to those characters
+        * Ditch commas but leave OR-bars, reps, and parentheses. No "&" for now.
+        * Convert a sequence of child-nodeNames to a Unicode character string.
+        * Match.
+    """
     def __init__(self, doctype:str):
         self.doctype = doctype
         self.theMap = {}        # element name -> character
@@ -61,7 +74,8 @@ class Validator:
         self.modelRegex = {}    # model as regex
 
     def makeElementMap(self) -> Dict:
-        """TODO Deal with #PCDATA, EMPTY, ANY.
+        """Assign a (private-use) character to each distinct element type name.
+        TODO Deal with #PCDATA, EMPTY, ANY.
         """
         nextCodePoint = 0xE000
         self.theMap = {}
@@ -74,7 +88,7 @@ class Validator:
 
     def modelTokensToRegex(self, modelTokens:List) -> str:
         """Copy operators verbatim, and map element names to single chars.
-        TODO Mixins?
+        But drop commas and whitespace.
         """
         expr = ""
         for t in modelTokens:
@@ -87,8 +101,13 @@ class Validator:
         return expr
 
     def checkSequence(self, ename:NMTOKEN_t, seq:List) -> int:
-        """The sequence is so far, but may require more.
+        """See if a sequence of element types is ok so far (it may require more).
         regex.match(r"a+b+c+", "aaaaabbc", partial=True)
+        Returns:
+            0 -- match failed (sequence invalid
+            1 -- match is an ok beginning but needs more to complete
+            30 -- match is ok and complete (but might permit more)
+            (do we need a separate case for complete and cannot have more?)
         """
         mappedSeq = self.modelTokensToRegex(seq)
         mat = regex.match(f"^{self.modelRegex[ename]}", mappedSeq, partial=True)

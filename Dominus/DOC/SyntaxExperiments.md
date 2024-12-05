@@ -23,8 +23,9 @@ that *might* potentially be useful, or worth looking at. Or not....
 
 * Default-set (on first instance)
     <table border!="border">
+    or ≝ ? U+0225d
 
-* Attr type-set (on first instance)
+* Attr type-set (on first instance)  -- prob vs. ns!
     <p class:NMTOKENS="">
 
 Especially valuable for ID, IDREF, anyURI, ENTITY, NOTATION, language
@@ -33,15 +34,15 @@ Especially valuable for ID, IDREF, anyURI, ENTITY, NOTATION, language
 ==ID extensions==
 
 * Co-index or ID suffixes?
-cf rank; tagml |layers; mecs numbers. arre numbers local or global?
+cf rank; tagml |layers; mecs numbers: are numbers local or global?
 
 * QID --- IDs with namespaces
 
 * COID -- must be >1, on same eltype, unique within eltype
 
-* Add SCOPEID -- unique within (nearest?) ancestor of type
+* SCOPEID -- unique within (nearest?) ancestor of type
 
-* Add STACKID -- value is accumulated by attr type
+* STACKID -- value is accumulated by attr type
 
 
 ==Overlap and structure extensions==
@@ -82,24 +83,24 @@ custom reserved words; they cannot be named "PCDATA" etc). They are retained
 when the model is parsed. ???
     <!CTYPE fontish "i b u tt">
 
-** Possibly add xsd-like operations on them?
-    <!CTYPE inlines (#fontish) - (tt) + (em string sup sub)>
+    ** Possibly add xsd-like operations on them?
+        <!CTYPE inlines (#fontish) - (tt) + (em string sup sub)>
 
-** * BASE declaration(s)
-    <!BASE "c:\\stuff" "/Users/jsmith/XML/entities"...>
+    ** * BASE declaration(s)
+        <!BASE "c:\\stuff" "/Users/jsmith/XML/entities"...>
 
-If you can have > 1, they need names and a way to reference. Entity subtype?
+    If you can have > 1, they need names and a way to reference. Entity subtype?
 
 * SYSTEM identifier resolution
 
-** The time-honored *nix PATH mechanism, say SYSTEMIDPATH?
+    ** The time-honored *nix PATH mechanism, say SYSTEMIDPATH?
 
-** Let SYSTEM identifiers take multiple quoted literals,
-and try them in order.
+    ** Let SYSTEM identifiers take multiple quoted literals,
+    and try them in order.
 
-** Let system identifiers interpolate environment variables.
+    ** Let system identifiers interpolate environment variables.
 
-** Allow fragment identifiers on SYSTEM identifiers
+    ** Allow fragment identifiers on SYSTEM identifiers
 
 
 ==Elements==
@@ -112,8 +113,7 @@ and try them in order.
 
 * Add content type for ANY_ELEMENT (but no #PCDATA)
 
-* Add something like inclusion exceptions -- global or element-specific
-mixins...
+* Add something like inclusion exceptions -- global or element-specific mixins...
 
 
 ==Attributes==
@@ -121,8 +121,6 @@ mixins...
 * Allow curly and angle quotes
 
 * Add all the XSD built-in datatypes to DTDs.
-
-* Add attr types for SEXP, JSON,...
 
 * Let attribute types take a rep indicator (all but CDATA?).
 

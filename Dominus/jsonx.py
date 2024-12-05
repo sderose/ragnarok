@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 #
-# jsondocs: Roundtrippable XML/JSON conversions.
+# JsonX: Roundtrippable XML/JSON conversions.
 #
-import sys
+#import sys
 import codecs
-from enum import Enum
-from typing import Any  #, List
+import re
+from typing import Any, List, IO, Union
 import json
 
 from xmlstrings import XmlStrings as XStr
-from saxplayer import SaxEvent
-from dombuilder import DomBuilder
-from domenums import RWord, NodeType
+#from dombuilder import DomBuilder
+from domenums import FlexibleEnum, RWord #, NodeType
 
 # DOMImplementation
 
 descr = """
 ==Description==
 
-Load some JsonX: a JSON structure that can round-trip with XML.
+Load some JsonX to make a DOM, or save a DOM to JsonX.
+JSonX is a JSON structure that can round-trip with XML.
 An example:
 
 [ { "#name":"#document", "#format":"JSONX",
@@ -26,6 +26,7 @@ An example:
     "#doctype":"html", "#systemId":"http://w3.org/html" },
   [ { "#name": "html", "xmlns:html": "http://www.w3.org/1999/xhtml" },
     [ { "#name": "html:head" },
+
       [ { "#name": "title" },
         "My document" ]
     ],
@@ -74,209 +75,306 @@ An example:
 * Specify doctype mapping
 * How to pick documentElement among children of doc
 * Separate JSONX vs. XML version
-* Reserve a place for stylesheet pi or content
-* Enable link() to bump strings/ints/floats/bools to jnodes
+* Enable link() to bump strings/ints/floats/bools to jnodes???
 * Move jsonx support from basedom to here
 """
 
 
 ###############################################################################
 #
-class JKeys(Enum):
-    # JsonX pseudo-attribute names
-    #
-    J_NAME      = "#name"
-    J_PARENT    = "#parent"
-    J_ODOC      = "#odoc"
-    J_PSIB      = "#psib"
-    J_NSIB      = "#nsib"
-    J_VERSION   = "#version"
-    J_ENCODING  = "#encoding"
-    J_STANDALONE= "#standalone"
-    J_DOCTYPE   = "#doctype"
-    J_PUBLICID  = "#publicId"
-    J_SYSTEMID  = "#systemId"
-    J_FORMAT    = "#format"  # Const value "JSONX"
-    J_TARGET    = "#target"
-
-    # #name values are same a DOM nodeType: #text #cdata #pi #document #comment
-
-
-###############################################################################
-#
-class JNode(list):
-    """The equivalent of an XML Node, in JsonX as loaded. That's a list,
-    where [0] is a dict with attrs and a few reserved items like "#name",
-    and [1:] are children, which are JNodes or atomic types like strings:
-        [ { "#name"="P", "id"="myId" }, "Hello, world" ]
-    Since there are no cross-references (pointers, IDs) available in JSON,
-    once a tree is loaded key ones can be added by calling link().
+class JKeys(FlexibleEnum):
+    """Constants for JSONX format. Compare domenums.RWord.
     """
-    def __init__(self, domImpl:'DOMImplementation'):
-        self.domImpl = domImpl
-        self.jroot = None
-        self.loader = None
-
-    def loadJsonX2Dom(self, path:str):
-        self.loader = Loader(domImpl=self.domImpl)
-        self.loader.parse_jsonx(path)
-        self.loader.check_jsonx(self.jroot)
-        self.jroot.link()
-
-    @property
-    def nodeType(self):
-        if self.nodeName.startswith("#"):
-            return RWord[self.nodeName]
-        return NodeType.ELEMENT_NODE
-    @property
-    def nodeName(self):
-        return self[0][JKeys.J_NAME]
-    @property
-    def prefix(self):
-        if ":" not in self.nodeName: return
-        return self.nodeName.partition(":")[0]
-    @property
-    def localName(self):
-        if ":" not in self.nodeName: return self.nodeName
-        return self.nodeName.partition(":")[2]
-
-    def hasAttributes(self) -> bool:
-        return bool(self[0])
-    def hasAttribute(self, aname:str) -> bool:
-        return aname in self[0]
-    def getAttribute(self, aname:str) -> Any:
-        if aname not in self[0]: return None
-        return self[0][aname]
-    def setAttribute(self, aname:str, avalue:Any) -> None:
-        self[0][aname] = avalue
-
-    def hasChildNodes(self) -> bool:
-        return bool(len(self) > 1)
-    def childNodes(self):
-        return self[1:]
-
-
-    ##########################################################################
-    # To get location-related properties, need to run link() first.
+    # Reserved JsonX pseudo-attribute *names*
     #
-    def link(self, oDoc:'JNode'):
-        """Add all the pointers that plain JSON rep lacks.
-        But, there are no Attr and Text nodes (the attr Dict has oDoc).
-        """
-        for i, ch in enumerate(self):
-            if not isinstance(ch, JNode): continue
-            ch[0][JKeys.J_ODOC] = oDoc
-            ch[0][JKeys.J_PARENT] = self
-            if i == 0: continue
-            ch[0][JKeys.J_PSIB] = self[i-1]
-            if i < len(self)-1: ch[0][JKeys.J_NSIB] = self[i+1]
-            ch.annotate(oDoc=oDoc)
+    J_NAME_KEY       = "#name"
+    J_TARGET_KEY     = "#target"
 
-    def unlink(self):
-        del self[0][JKeys.J_ODOC]
-        del self[0][JKeys.J_PARENT]
-        del self[0][JKeys.J_PSIB]
-        del self[0][JKeys.J_NSIB]
-        for ch in self:
-            if isinstance(ch, JNode): ch.unlink()
+    # Reserved JsonX pseudo-attribute *names* for ROOT node
+    #
+    J_FORMAT_KEY     = "#format"     # Const value "JSONX"
+    J_JSONX_VER_KEY  = "#jver"
+    J_XML_VER_KEY    = "#xver"
+    J_ENCODING_KEY   = "#encoding"
+    J_STANDALONE_KEY = "#standalone"
+    J_DOCTYPE_KEY    = "#doctype"    # DOCTYPE name, e.g. "html"
+    J_PUBLICID_KEY   = "#publicId"
+    J_SYSTEMID_KEY   = "#systemId"
 
-    @property
-    def ownerDocument(self):
-        return self.getAttribute(JKeys.J_ODOC)
-    @property
-    def parentNode(self):
-        return self.getAttribute(JKeys.J_PARENT)
-    @property
-    def previousSibling(self):
-        return self.getAttribute(JKeys.J_PSIB)
-    @property
-    def nextSibling(self):
-        return self.getAttribute(JKeys.J_NSIB)
+    # Root node property values
+    J_FORMAT         = "JSONX"
+    J_JSONX_VER      = "0.9"
+
+
+    # Reserved node-name (J_NAME_KEY) *values* (save as for DOM nodeNames)
+    J_NN_TEXT        = "#text"
+    J_NN_CDATA       = "#cdata"
+    J_NN_PI          = "#pi"
+    J_NN_DOCUMENT    = "#document"
+    J_NN_COMMENT     = "#comment"
+
+    # Potential properties (not in JSON, might add for navigation):
+    J_PARENT         = "#parent"
+    J_OWNERDOC       = "#odoc"
+    J_PSIB           = "#psib"
+    J_NSIB           = "#nsib"
+
+
+def getNodeName(jnode:List) -> str:
+    if isinstance(jnode, (str, int, float, bool)): return JKeys.J_NN_TEXT
+    if not isinstance(jnode, List):
+        raise SyntaxError(f"That's not a JsonX node, but a '{type(jnode)}'.")
+    if len(jnode) < 1:
+        raise SyntaxError(f"That's not a JsonX node, no property dict.")
+    try:
+        return jnode[0][JKeys.J_NAME_KEY]
+    except (TypeError, AttributeError, IndexError, KeyError) as e:
+        raise SyntaxError("Cannot get '%s' property." % (JKeys.J_NAME_KEY)) from e
 
 
 ###############################################################################
 #
 class Loader:
-    def __init__(self, domImpl:'DOMImplementation'):
+    def __init__(self, domImpl:'DOMImplementation',
+        jdata:Union[str, IO, List]=None):
+        self.domImpl = domImpl
         self.domDoc = None
-        self.jroot = JNode(domImpl)
-        self.domBuilder = DomBuilder(
-            domImpl=domImpl, wsn=False, verbose=1, nsSep=":")
-        self.callbacks = self.domBuilder.getHandlerDict()
-        self.jsonSax(self.jroot)
-
-    def parse_jsonx(self, path:str) -> 'Document':
-        """Just load the JSON en mass, into self.jroot.
-        TODO: Support passing handle instead of path.
-        """
-        try:
-            fh = codecs.open(path, "rb", encoding="utf-8")
-            self.jroot = json.load(fh)
-            fh.close()
-        except json.decoder.JSONDecodeError as e:
-            sys.stderr.write("JSON load failed for %s:\n    %s\n", path, e)
-            sys.exit()
-
-    def check_jsonx(self, node:'Node'):
-        """Want elements like
-            [{"#name":para, "class":"foo"}, [...], "txt"]
-        """
-        if not isinstance(self.jroot, list):
-            assert isinstance(self.jroot, (str, int, float, bool))
+        self.jroot = None
+        if not jdata:
             return
+        elif isinstance(jdata, str):
+            self.jroot = json.loads(jdata)
+        elif isinstance(jdata, IO):
+            self.jroot = json.load(jdata)
+        elif isinstance(jdata, list):
+            self.jroot = jdata
+        else:
+            raise SyntaxError(f"Bad type '{type(jdata)}' for constructor.")
+        self.check_jsonx(self.jroot)
+        self.domDoc = self.JDomBuilder(self.jroot)
 
-        assert isinstance(node, list)
-        assert isinstance(node[0], dict)
-        assert JKeys.J_NAME in node[0]
-        assert XStr.isXmlName(node.nodeName) or RWord(node.nodeName)
-        if len(self.jroot) > 1:
-            for ch in self.jroot[1:]: self.check_jsonx(ch)
+    def check_jsonx_root(self, jroot:List):
+        nn = getNodeName(jroot)
+        if nn != JKeys.J_NN_DOCUMENT:
+            raise SyntaxError(f"Not a JsonX root node, name is not '{nn}'.")
+        props = jroot[0]
+        if props[JKeys.J_FORMAT_KEY] != JKeys.J_FORMAT: raise SyntaxError(
+            f"Not JsonX, {JKeys.J_FORMAT_KEY} is '{nn}', not '{JKeys.J_FORMAT}'.")
+        assert len(self.jroot) == 2
 
-    def jsonSax(self, jroot):
-        """Generate a SAX stream from a JSON-X document.
+
+    def check_jsonx(self, jnode:Any) -> None:
+        """See if this is really correct JsonX.
+        We want elements like
+            [{"#name":para, "someAttr":"foo"}, [...], "some text"]
         """
-        self.tryEvent(SaxEvent.INIT)
-        self.jsonSax_R(jroot)
-        self.tryEvent(SaxEvent.FINAL)
-        return
+        if isinstance(jnode, (str, int, float, bool)):
+            return
+        elif not isinstance(jnode, list): raise SyntaxError(
+            f"Node must be list or atom, not {type(jnode)}.")
+        elif len(jnode) < 1 or isinstance(jnode[0], dict):
+            raise SyntaxError("No dict in first item of JsonX node.")
+        elif JKeys.J_NAME_KEY not in jnode[0]:
+            raise SyntaxError(f"No '{JKeys.J_NAME_KEY}' item in properties.")
+        else:
+            nn = getNodeName(jnode)
+            if not XStr.isXmlName(nn) and nn not in RWord:  # TODO Too forgiving
+                raise SyntaxError(f"Unrecognized name '{nn}' for node.")
+            if len(jnode) > 1:
+                for ch in jnode[1:]: self.check_jsonx(ch)
 
-    def jsonSax_R(self, jroot:Any):
-        nn = jroot.nodeName()
-        if not isinstance(jroot, list):
-            self.tryEvent(SaxEvent.CHAR, str(jroot))
-        elif not nn.startswith("#"):
-            self.tryEvent(SaxEvent.START, nn, *jroot[0])
-            for ch in self.jroot[1:]: self.jsonSax(ch)
-            self.tryEvent(SaxEvent.END, nn, *jroot[0])
-        elif nn == RWord.NN_TEXT:
-            self.tryEvent(SaxEvent.CHAR, self.getLeafText())
-        elif nn == RWord.NN_PI:
-            self.tryEvent(SaxEvent.CHAR, self.getLeafText())
-        elif nn == RWord.NN_CDATA:
-            self.tryEvent(SaxEvent.CDATASTART)
-            self.tryEvent(SaxEvent.CHAR, self.getLeafText())
-            self.tryEvent(SaxEvent.CDATAEND)
-        elif nn == RWord.NN_COMMENT:
-            self.tryEvent(SaxEvent.COMMENT, self.getLeafText())
-        elif nn == RWord.NN_DOCTYPE:
-            return  # TODO Doctype???
-
-    def getLeafText(self) -> str:
-        if isinstance(self, list):
-            return "".join([ str(s) for s in self.jroot[1:]])
-        return str(self)
-
-    def tryEvent(self, eventType:SaxEvent, *args):
-        """If there's a handler, call it.
+    def JDomBuilder(self, jroot:List) -> 'Document':
+        """Build a DOM by traversing loaded JSONX.
         """
-        if eventType in self.callbacks:
-            self.callbacks[eventType](args)
+        jDocEl = jroot[1]
+        assert isinstance(jDocEl, list)
+        self.domDoc = self.domImpl.createDocument(None, None, None)
 
-    def makeStartTag(self, empty:bool=False):
-        buf = "<" + self.jroot.nodeName
-        for k, v in self.jroot[0].items():
-            buf += ' %s="%s"' % (k, v)
-        return buf + ("/>" if empty else ">")
+        self.domDoc.version = jroot[0]["#version"]
+        self.domDoc.standalone = jroot[0]["#standalone"]
+        self.domDoc.doctype = jroot[0]["#doctype"]
+        self.domDoc.encoding = jroot[0]["#encoding"]
+        self.domDoc.systemId = jroot[0]["#systemId"]
 
-    def makeEndTag(self):
-        return "</" + self.jroot.nodeName + ">"
+        self.jsonSax_R(
+            od=self.domDoc, par=self.domDoc.documentElement, jnode=jroot[1])
+        return self.domDoc
+
+    def jsonSax_R(self, od:'Document', par:'Node', jnode:Any):
+        if isinstance(jnode, list):
+            nodeName = jnode[0][JKeys.J_NAME_KEY]
+            if nodeName == "#text":
+                # Save (below) doesn't produce these, but someone could, and
+                # it's no sweat to allow it.
+                txt = self.gatherAtomTexts(jnode)
+                node = self.domDoc.createTextNode(ownerDocument=od, data=txt)
+                par.appendChild(node)
+            elif nodeName == "#cdata":
+                txt = self.gatherAtomTexts(jnode)
+                node = self.domDoc.createCDATASection(
+                    ownerDocument=od, data=txt)
+                par.appendChild(node)
+            elif nodeName == "#comment":
+                txt = self.gatherAtomTexts(jnode)
+                node = self.domDoc.createComment(
+                    ownerDocument=od, data=txt)
+                par.appendChild(node)
+            elif nodeName == "#pi":
+                tgt = jnode[0][JKeys.J_TARGET_KEY]
+                txt = self.gatherAtomTexts(jnode)
+                node = self.domDoc.createprocessingInstruction(
+                    ownerDocument=od, parentNode=par, target=tgt, data=txt)
+                par.appendChild(node)
+            elif XStr.isXmlQName(nodeName):                 # ELEMENT
+                node = self.domDoc.createElement(
+                    ownerDocument=od, parentNode=par, nodeName=nodeName)
+                for k, v in jnode[0].items():
+                    if k.startswith("#"): continue
+                    node.setAttribute(k, str(v))
+                par.appendChild(node)
+                for cNum in range(1, len(jnode)):
+                    self.jsonSax_R(od=od, par=jnode, jnode=jnode[cNum])
+            else:
+                raise SyntaxError("Unrecognized #name='{nodeName}'.")
+        else: # Scalars
+            node = self.domDoc.createTextNode(ownerDocument=od, data=str(jnode))
+            par.appendChild(node)
+
+    @staticmethod
+    def gatherAtomTexts(jnode:List) -> str:
+        """Really should only be a single str, but we'll be generous.
+        """
+        buf = ""
+        for i in range(1, len(jnode)):
+            assert isinstance(jnode[i], (bool, int, float, str))
+            buf += str(jnode[i])
+        return buf
+
+
+###############################################################################
+#
+def escapeJsonStr(s:str) -> str:
+    return re.sub(r'([\\"])', "\\\\1", s)
+
+class Saver:
+    """Convert a subtree to isomorphic JSON.
+    Intended to be idempotently round-trippable.
+    Defined in each subclass.
+    """
+    def __init__(self, domDoc:'Document', encoding:str="utf-8", indent:str="  "):
+        self.domDoc = domDoc
+        self.encoding = encoding
+        self.indent = indent
+
+    def tofile(self, path:str) -> None:
+        with codecs.open(path, "wb", encoding=self.encoding) as ifh:
+            ifh.write(self.DocumentToJsonX(
+                domDoc=self.domDoc, indent=self.indent, depth=0))
+
+    def tostring(self) -> str:
+        return self.DocumentToJsonX(
+            domDoc=self.domDoc, indent=self.indent, depth=0)
+
+    def NodeToJsonX(self, node:'Node', depth:int=0) -> str:
+        """Dispatch to a nodeType-specific method.
+        """
+        if node.isElement: return self.ElementToJsonX(node, depth)
+        elif node.isTextNode: return self.TextToJsonX(node, depth)
+        elif node.isCDATA: return self.CDATAToJsonX(node, depth)
+        elif node.isPI: return self.PIToJsonX(node, depth)
+        elif node.isComment: return self.CommentToJsonX(node, depth)
+        elif node.isEntRef: return self.EntRefToJsonX(node, depth)
+        else:
+            raise SyntaxError("Unknown node type {node.nodeType}.")
+
+    def DocumentToJsonX(self, domDoc:'Document', indent:str=None, depth:int=0) -> str:
+        """Intended to be idempotently round-trippable.
+        TODO: Add in Doctype or at least its reference.
+        """
+        if indent is not None: self.indent = indent
+        try:
+            pub = domDoc.publicId
+        except AttributeError:
+            pub = ""
+        try:
+            sys = domDoc.systemId
+        except AttributeError:
+            sys = ""
+
+        buf = (
+            """[{ "%s":"%s", "%s":"%s", "%s":"%s", "%s":"%s",""" + indent +
+            """ "%s":"%s", "%s":"%s", "%s":"%s", "%s":"%s" },\n""") % (
+            JKeys.J_FORMAT_KEY,     JKeys.J_FORMAT,
+            JKeys.J_JSONX_VER_KEY,  JKeys.J_JSONX_VER,
+            JKeys.J_XML_VER_KEY,    "1.1",
+            JKeys.J_ENCODING_KEY,   "utf-8",
+            JKeys.J_STANDALONE_KEY, "yes",
+            JKeys.J_DOCTYPE_KEY,    domDoc.nodeName,
+            JKeys.J_PUBLICID_KEY,   pub,
+            JKeys.J_SYSTEMID_KEY,   sys)
+        buf += self.NodeToJsonX(domDoc.documentElement, depth=depth+1) + "]\n"
+
+    def ElementToJsonX(self, node:'Node', depth:int=0) -> str:
+        istr = self.indent * depth
+        buf = '%s[ { "#name":"%s"' % (istr, node.nodeName)
+        if node.attributes:
+            for k in node.attributes:
+                anode = node.getAttributeNode(k)
+                # If the values are actual int/float/bool/none, use JSON vals.
+                buf += ', ' + self.attrToJson(anode)
+        buf += " }"
+        if node.childNodes is not None:
+            for ch in node.childNodes:
+                buf += ",\n" + istr
+                buf += self.NodeToJsonX(ch, depth+1)
+            # buf += "\n" + istr
+        buf += "]"
+        return buf
+
+    def TextToJsonX(self, node:'Node', depth:int=0) -> str:
+        istr = self.indent * depth
+        return istr + '"%s"' % (escapeJsonStr(node.data))
+
+    def CDATAToJsonX(self, node:'Node', depth:int=0) -> str:
+        istr = self.indent * depth
+        return istr + '[ {"#name"="#cdata"}, "%s"]' % (escapeJsonStr(node.data))
+
+    def PIToJsonX(self, node:'Node', depth:int=0) -> str:
+        istr = self.indent * depth
+        return (istr + '[ { "#name":"#pi", "#target":"%s", "#data":"%s" } ]'
+             % (escapeJsonStr(node.target), escapeJsonStr(node.data)))
+
+    def CommentToJsonX(self, node:'Node', depth:int=0) -> str:
+        istr = self.indent * depth
+        return (istr + '[ { "#name":"#comment", "#data":"%s" } ]'
+            % (escapeJsonStr(node.data)))
+
+    def EntRefToJsonX(self, node:'Node', depth:int=0) -> str:
+        istr = self.indent * depth
+        return istr + '[ { "#name":"#entref, "#ref":"%s" } ]' % (
+            escapeJsonStr(node.data))
+
+    def attrToJson(self, anode:'Attr', listAttrs:bool=False) -> str:
+        """This uses JSON non-string types iff the value is actually
+        of that type, or somebody declared the attr that way.
+        Not if it's a string that just looks like it (say, "99").
+        """
+        buf = f' "{anode.name}":'
+        avalue = anode.value
+        if isinstance(avalue, float): buf += "%f" % (avalue)
+        elif isinstance(avalue, int): buf += "%d" % (avalue)
+        elif avalue is True: buf += "true"
+        elif avalue is False: buf += "false"
+        elif avalue is None: buf += "nil"
+        elif isinstance(avalue, str): buf += f'"{escapeJsonStr(avalue)}"'
+        elif isinstance(avalue, list):  # Only for tokenized attrs
+            if listAttrs:
+                buf += "[ %s ]" % (
+                    ", ".join([  escapeJsonStr(str(x)) for x in avalue ]))
+            else:
+                buf += '"%s"' % (
+                    escapeJsonStr(" ".join([ str(x) for x in avalue ])))
+        else:
+            raise SyntaxError(
+                f"attrToJson got unsupported type {type(avalue)}.")
+        return buf

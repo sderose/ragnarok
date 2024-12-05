@@ -9,14 +9,13 @@
 import os
 import re
 import codecs
-from typing import Dict, Any, Union,  IO
+from typing import Any, Union, IO, Callable  # Dict,
 import logging
 
-from xml.parsers import expat
-from saxplayer import SaxEvent
-from basedomtypes import (NMTOKEN_t, NCName_t, QName_t, XMLParser_P,
+from basedomtypes import (NMTOKEN_t, NCName_t, XMLParser_P, NodeType,
     DOMImplementation_P)
 from domenums import RWord
+from xmlstrings import XmlStrings as XStr
 
 lg = logging.getLogger("dombuilder")
 #logging.basicConfig(level=logging.INFO)
@@ -35,11 +34,103 @@ __metadata__ = {
 __version__ = __metadata__["modified"]
 
 descr = """
-=Usage=
+=Description=
 
-This is a version of the "glue" that connects an HTML, XML, or other parser
-to a DOM implementation to create a Document.
-It responds to parser events, and constructs the corresponding DOM as it goes.
+This is the "glue" that connects an HTML, XML, or other parser
+to an implementation of docment structures. The parsers and structure
+implementations are swappable, and many pre-existing calling sequences can
+be used with little or no change.
+
+
+==Usage==
+
+First, to just get things up and running:
+
+You might have your XML in a literal or variable:
+    xmlText = "<p>Hello</p>"
+
+or in a file:
+    xmlPath = "myFile.xml"
+
+===ElementTree style===
+
+    from dombuilder import DomBuilder
+    ...
+    theDocument = DomBuilder(xmlText)
+        OR
+    theDocument = DomBuilder.fromstring(xmlText)
+        OR
+    with open(xmlPath, "rb", encoding="utf-8") as ifh:
+        theDocument = DomBuilder(ifh)
+
+You can also specify a different parser, for example like:
+    theDocument = DomBuilder(xmlText, parser=someOtherParser)
+
+
+===Traditional DOM style===
+
+    from dombuilder import DomBuilder
+    theDocument = DomBuilder.parsestring(xmlText)
+        OR
+    theDocument = DomBuilder.parse(xmlPath)
+        OR
+    with open("myFile.xml", "rb", encoding="utf-8") as ifh:
+        impl.parse(ifh)
+
+Or you can be even more explicit:
+
+    from dombuilder import DomBuilder
+    from basedom import getDOMImplementation
+    ...
+    impl = basedom.getDOMImplementation()
+    impl.parse_string(xmlText)
+        OR
+    impl.parse("myFile.xml")
+        OR
+    with open("myFile.xml", "rb", encoding="utf-8") as ifh:
+        impl.parse(ifh)
+
+
+===DIY style===
+
+    from xml.parsers import expat
+    from basedom import getDOMImplementation
+    from dombuilder import DomBuilder
+    theDocument = DomBuilder(
+        domImpl=getDOMImplementation(), parserCreator=expat.ParserCreate)
+    theDocument.parse(xmlPath)
+
+Or you can override the built-in expat event handlers to do other stuff.
+
+
+==The rest==
+
+The library includes its own XML parser, which can (at option) read DTDs.
+It also has a variety of extensions that can be turned on via the API or
+via flags inserted in the XML declaration (that's desirable because an XML
+parser that doesn't know about them will stop rather than doing the wrong
+thing).
+
+That parser can do regular DTDs (internal and external) and documents.
+The extensions include allowing all built-in XSD datatypes as attributes
+types -- and if you declare them, they'll show up as the right Python types
+in the DOM, with default values, etc. It also adds {m,n} to the usual
+[*+?] operators in content models.
+
+I expect also to add support for
+loading XSDs (the parsing, of course, is easy), and making both look largely
+the same inside.
+
+The parser also includes a (still experimental) validator. Or you can create
+part or all of a schema via API (for example, just declaring a bunch of ATTLISTs
+to get defaulting and typed values, or (with one call) turning on HTML named
+special characters.
+
+There are also a few simple shorthand markup syntax options, most
+obviously </> and unquoted (or curly-quoted) attributes.
+
+Finally, there is round-trippable JSON export, that handles all XML Node types
+and structures.
 
 
 =Related Commands=
@@ -86,6 +177,9 @@ or [http://github.com/sderose].
 =Options=
 """
 
+def showInvisibles(s:str) -> str:
+    return re.sub(r"[\x00-\x20]", lambda m: chr(ord(m.group()) + 0x2400), s)
+
 
 ###############################################################################
 #
@@ -102,32 +196,54 @@ class DomBuilder():
 
     def __init__(
         self,
-        domImpl:DOMImplementation_P,
+        parserCreator:Callable=None,
+        domImpl:DOMImplementation_P=None,
         wsn:bool=False,
         verbose:int=1,
         nsSep:str=":"
         ):
-        """Set up to parse an XML file(s) and have SAX callbacks create a DOM.
+        """Set up an XML parser and a DOM implementation, and provide
+        methods to parse XML and return DOM documents.
 
+        Defaults to:
+            parserCreator: expat.ParserCreate()
+                Whatever you pass needs to have a ParserCreate method.
+           domImpl:  minidom.getD
+
+        I'd prefer a friendlier approach....
+
+        @param parserCreator: A callable that returns an XML parser.
         @param domImpl: a DOM implementation instance to use.
         @param wsn: Discard whitespace-only text nodes.
         @param verbose: Trace some stuff.
+        @param nsSep: Change the namespace prefix separator.
+
+        # TODO Switch to take getDOMImplementation instead of module?
         """
-        self.IdIndex = {}       # Keep index of ID attributes
-        self.nodeStack = []     # Open Element objects
+        if not parserCreator:
+            from xml.parsers import expat
+            self.parserCreator = expat.ParserCreate
+        else:
+            self.parserCreator = parserCreator
+        assert callable(self.parserCreator)
+
+        if not domImpl:
+            from xml.dom import minidom
+            self.domImpl = minidom.getDOMImplementation()
+        else:
+            self.domImpl = domImpl
+        assert callable(self.domImpl.createDocument)
+
         self.wsn = wsn          # Include whitespace-only nodes?
         self.verbose = verbose
         self.nsSep = nsSep
 
-        # The first start tag event will construct a Document().
-        self.domImpl = domImpl
+        self.parser = None
         self.domDoc = None
-        self.domDocType = None
-        self.theParser = None
+        self.domDocumentType = None
 
-        self.encoding = 'utf-8'
-        self.version = "1.1"
-        self.standalone = None
+        self.nodeStack = []     # Open Nodes, incl. Document
+        self.IdIndex = {}       # Keep index to validate ID attributes  # TODO Drop?
 
     def parse(self, path_or_fh:Union[IO, str]) -> 'Document':
         """Actually run the parser.
@@ -140,71 +256,65 @@ class DomBuilder():
         if isinstance(path_or_fh, str):
             if not os.path.isfile(path_or_fh):
                 raise IOError("'%s' is not a regular file." % (path_or_fh))
-            fh = codecs.open(path_or_fh, "rb")
+            fh = codecs.open(path_or_fh, "rb")  # No encoding for expat
         elif isinstance(path_or_fh, (_io.TextIOWrapper, _io.BufferedWriter)):
             fh = path_or_fh
         else:
             raise ValueError(
                 "Not a path or file handle, but %s." % (type(path_or_fh)))
-
-        self.parser_setup()
-        self.theParser.ParseFile(fh)
-        if not isinstance(path_or_fh, str): fh.close()
+        self.parser_setup(encoding="utf-8", dcls=True)
+        self.domDoc = self.domImpl.createDocument(None, None, None)
+        self.nodeStack = [ ]
+        self.parser.ParseFile(fh)
+        if isinstance(path_or_fh, str): fh.close()
         return self.domDoc
 
     def parse_string(self, s:str) -> 'Document':
-        if not isinstance(s, str):
-            raise ValueError("Not a string.")
-        self.theParser = self.parser_setup()
-        self.theParser.Parse(s)
+        assert isinstance(s, str)
+        self.parser_setup(encoding="utf-8", dcls=True)
+        self.domDoc = self.domImpl.createDocument(None, None, None)
+        assert self.domDoc is not None
+        #print(f"\nFor Document from {self.domImpl.__module__}:\n{dir(self.domDoc)}")
+        self.nodeStack = [ ]
+        self.parser.Parse(s)
         return self.domDoc
 
-    def dom_setup(self, namespaceURI:str=None, qualifiedName:QName_t=None,
-        docType:'DocumentType'=None):
-        self.domDoc = self.domImpl.createDocument(
-            namespaceURI=namespaceURI, qualifiedName=qualifiedName,
-            docType=docType)
-        self.domDoc.encoding = self.encoding
-        self.domDoc.version = self.version
-        self.domDoc.standalone = self.standalone
-
     def parser_setup(self, encoding:str="utf-8", dcls:bool=True) -> XMLParser_P:
-        """Construct a parser instance and hook up SAX events handlers.
+        """Construct a parser instance and hook up SAX event handlers.
         """
-        self.theParser = expat.ParserCreate(
+        p = self.parser = self.parserCreator(
             encoding=encoding, namespace_separator=self.nsSep)
-        p = self.theParser
 
-        # Init and Final
+        # Element Handlers
+        p.StartElementHandler = self.StartElementHandler
+        p.EndElementHandler = self.EndElementHandler
+        p.StartNamespaceDeclHandler = None  #self.StartNSDeclHandler  # TODO
+        p.EndNamespaceDeclHandler = None  #self.EndNSDeclHandler  # TODO
 
-    def getHandlerDict(self, dcls:bool=False) -> Dict:
-        """Return a dict of the SAX event handlers.
-        """
-        h = {}
-        #h[SaxEvent.INIT]         =
-        h[SaxEvent.DOCTYPE]      = self.StartDoctypeDeclHandler
-        h[SaxEvent.DOCTYPEFIN]   = self.EndDoctypeDeclHandler
-        h[SaxEvent.START]        = self.StartElementHandler
-        h[SaxEvent.END]          = self.EndElementHandler
-        h[SaxEvent.CHAR]         = self.CharacterDataHandler
-        h[SaxEvent.PROC]         = self.ProcessingInstructionHandler
-        h[SaxEvent.COMMENT]      = self.CommentHandler
-        #h[SaxEvent.CDATASTART]   =
-        #h[SaxEvent.CDATAEND]     =
-        #h[SaxEvent.DEFAULT]      =
-        #h[SaxEvent.FINAL]        =
+        # Leaf node Handlers
+        p.CharacterDataHandler = self.CharacterDataHandler
+        #p.CdataSectionHandler = self.CdataSectionHandler  # No such in expat?
+        p.ProcessingInstructionHandler = self.ProcessingInstructionHandler
+        p.CommentHandler = self.CommentHandler
 
-        if dcls:
-            h[SaxEvent.XMLDCL]      = self.XmlDeclHandler
-            h[SaxEvent.ELEMENTDCL]  = self.ElementDeclHandler
-            h[SaxEvent.ATTLISTDCL]  = self.AttlistDeclHandler
-            h[SaxEvent.ENTITYDCL]   = self.EntityDeclHandler
-            h[SaxEvent.PENTITYDCL]  = self.EntityDeclHandler
-            h[SaxEvent.SENTITYDCL]  = self.SDATAEntityDeclHandler
-            h[SaxEvent.UENTITYDCL]  = self.UnparsedEntityDeclHandler
-            h[SaxEvent.NOTATIONDCL] = self.NotationDeclHandler
+        # Special Cases
+        p.DefaultHandler = None  # self.DefaultHandler
+        p.DefaultHandlerExpand = None  #self.DefaultHandlerExpand
 
-        return h
+        # DTD Handlers
+        p.StartDoctypeDeclHandler = self.StartDoctypeDeclHandler
+        p.EndDoctypeDeclHandler = self.EndDoctypeDeclHandler
+        #p.ExternalEntityRefHandler = self.EntityDeclHandler
+        p.EntityDeclHandler = self.EntityDeclHandler
+        p.UnparsedEntityDeclHandler = self.UnparsedEntityDeclHandler
+        p.NotationDeclHandler = self.NotationDeclHandler
+        p.ElementDeclHandler = self.ElementDeclHandler
+        p.AttlistDeclHandler = self.AttlistDeclHandler
+
+        p.NotStandaloneHandler = None  #self.NotStandaloneHandler
+        p.SkippedEntityHandler = None  #self.SkippedEntityHandler
+
+        return p
 
     def tostring(self) -> str:
         #lg.info("DomBuilder, domDoc is a %s." , type(self.domDoc))
@@ -228,47 +338,63 @@ class DomBuilder():
         """
         return("    " * len(self.nodeStack))
 
-
     ### Handlers ##############################################################
+    # Different parsers use different event names, and slightly different
+    # event definitions -- for example, CDATA may result in:
+    #     * one CDATA event with the text
+    #     * one Text event with the text
+    #     * CDATA-start, zero or more text, CDATA-end
+    # TODO Find a good way to abstract away from those diffs. Or at least
+    # Provide glue layers for the common parsers.
     #
-    def StartElementHandler(self, name:NMTOKEN_t, attributes:Dict=None) -> None:
-        if self.domDoc is None:
-            lg.info("Creating Document via {self.domImpl.__name__}.")
-            self.dom_setup(
-                namespaceURI=None, qualifiedName=name, docType=None)
-        else:
-            lg.info("Appending %s to a %s (depth %d, nChildren %d).",
-                name, self.nodeStack[-1].nodeName,
-                len(self.nodeStack), len(self.nodeStack[-1].childNodes))
+    def StartElementHandler(self, name:NMTOKEN_t, *args) -> None:
+        """Create a new element and append to the currently-open element.
+        Attributes can be done 3 ways:
+            * Pass a dict
+            * Pass varargs with alternating names and values
+            * Don't pass here at all, but generate a separate event for
+              each attribute, immediatey following this event (see AttrHandler).
+        The DOM Document itself, but no documentElement, must already be there.
+        """
+        lg.info("StartElement for '%s' (depth %d).", name, len(self.nodeStack))
+        #el.startLoc = self.parser.CurrentByteIndex
 
-        lg.info("StartElement: '%s'", name)
         el = self.domDoc.createElement(name)
-        #el.startLoc = self.theParser.CurrentByteIndex
-        if attributes:
+
+        if len(args) > 0:  # Deal with attributes
+            if isinstance(args[0], dict):
+                assert len(args) == 1
+                attrDict = args[0]
+            else:
+                assert len(args) % 2 == 0
+                attrDict = {}
+                for i in range(0, len(args), 2):
+                    attrDict[args[i]] = args[i+1]
+
             nsp = RWord.NS_PREFIX+":"
-            for n, v in attributes.items():
+            for n, v in attrDict.items():
                 if n.startswith(nsp):
                     if el.declaredNS is None: el.declaredNS = {}
                     lName = n[len(nsp):]
                     el.declaredNS[lName] = v
                     continue
+                assert XStr.isXmlName(n)
                 el.setAttribute(n, v)
-                # TODO factor out indexing
-                if "*@"+n in self.IdIndex or el.nodeName+"@"+n in self.IdIndex:
-                    #if self.theParser.theMLD.caseInsensitive: v = v.lower()
-                    if v in self.IdIndex:
-                        raise ValueError("Duplicate ID value '%s' @ %s." %
-                            (v, self.theParser.CurrentByteIndex))
-                    else:
-                        self.IdIndex[v] = el
 
-        if self.nodeStack: self.nodeStack[-1].appendChild(el)
-        else: self.domDoc.appendChild(el)
+        if self.domDoc.documentElement is None:
+            assert len(self.nodeStack) == 0
+            self.domDoc.appendChild(el)
+        else:
+            assert len(self.nodeStack) > 0
+            self.nodeStack[-1].appendChild(el)
         self.nodeStack.append(el)
+
         return
 
     def AttrHandler(self, aname:NMTOKEN_t, avalue:str) -> None:
         """Support option of parser returning attributes as separate events.
+        SAX parsers generally bundle them in with start-tags, which means fewer
+        events but an unbounded number of args per event. Take your pick.
         """
         curElement = self.nodeStack[-1]
         if curElement.hasAttribute(aname):
@@ -276,47 +402,50 @@ class DomBuilder():
         curElement.setAttribute(aname, avalue)
 
     def EndElementHandler(self, name:NMTOKEN_t) -> None:
-        lg.info("EndElement: '%s'", name)
+        lg.info("EndElement '%s'.", name)
         if not self.nodeStack:
             raise IndexError(
-                f"EndElementHandler: closing '{name}' but empty nodeStack.")
+                f"EndElement '{name}' but no elements open.")
 
         if self.nodeStack[-1].nodeName != name:
             raise ValueError(
-                "EndElementHandler: closing '%s' but open element is: %s" %
+                "EndElement '%s' but open element is '%s'" %
                 (name, self.nodeStack[-1].nodeName))
 
         self.nodeStack.pop()
         return
 
     def EmptyElementHandler(self, name:NMTOKEN_t, attributes) -> None:
-        assert(False)
-        lg.info("EmptyElement: got '%s'", name)
+        """Sax generally uses a start/end pair for this instead.
+        """
+        lg.info("EmptyElement '%s'", name)
         self.StartElementHandler(name, attributes)
         self.EndElementHandler(name)
         return
 
     def CharacterDataHandler(self, data:str) -> None:
-        lg.info("CharacterData: got '%s'", data.strip())
+        """Not to be confused with the minidom class which is a superclass
+        of several nodeTypes.
+        expat seems to hand back newlines and spaces separately, so we coalesce.
+        """
+        lg.info("CharacterData '%s'", showInvisibles(data))
         if not re.match(r"\S", data):  # whitespace-only
             if not self.wsn: return
         else:
             if not self.nodeStack:
-                raise("Found data outside any element: '%s'." % (data))
-        tn = self.domDoc.createTextNode(data)
-        self.nodeStack[-1].appendChild(tn)
+                raise("CharacterData outside any element: '%s'." % (data))
+        if (self.nodeStack[-1].childNodes and
+            self.nodeStack[-1].childNodes[-1].nodeType == NodeType.TEXT_NODE):
+            self.nodeStack[-1].childNodes[-1].data += data
+        else:
+            tn = self.domDoc.createTextNode(data)
+            self.nodeStack[-1].appendChild(tn)
         return
 
     def CommentHandler(self, data:str) -> None:
-        lg.info("Comment: got '%s'", data)
+        lg.info("Comment '%s'", data)
         newCom = self.domDoc.createComment(data)
         self.nodeStack[-1].appendChild(newCom)
-        return
-
-    def DeclHandler(self, data:str) -> None:
-        lg.info("Decl: ignoring '%s'", data)
-        #newDcl = self.domDoc.create(data)
-        #self.nodeStack[-1].appendChild(newDcl)
         return
 
     def ProcessingInstructionHandler(self, target:NCName_t, data:str) -> None:
@@ -325,60 +454,69 @@ class DomBuilder():
         self.nodeStack[-1].appendChild(newPI)
         return
 
-    def Unknown_declHandler(self, data:Any) -> None:
+    def UnknownDeclHandler(self, data:Any) -> None:
         lg.warning("Unknown_decl: got '%s'", data)
         # raise ValueError("Unknown markup declaration: '%s'" % (data))
         newDcl = self.domDoc.createComment(data)
         self.nodeStack[-1].appendChild(newDcl)
         return
 
-
     ### Markup declaration handlers
     #
+    def DeclHandler(self, data:str) -> None:
+        """This shouldn't happen (see specific dcls following).
+        """
+        lg.info("Decl '%s'", data)
+        #newDcl = self.domDoc.create(data)
+        #self.nodeStack[-1].appendChild(newDcl)
+        return
+
     def XmlDeclHandler(self,
         version:str="", encoding:str="", standalone:str="") -> None:
         if version in [ "1.0", "1.1" ]:
-            self.version = version
+            self.domDoc.version = version
         else:
             raise ValueError(f"Unexpected xml version '{version}'.")
         if encoding in [ "utf-8", "utf8" ]:
-            self.encoding = "utf-8"
+            self.domDoc.encoding = "utf-8"
         elif encoding:
             raise ValueError(f"Unexpected encoding '{encoding}'.")
         if standalone in [ "yes", "no" ]:
-            self.standalone = standalone
+            self.domDoc.standalone = standalone
         elif standalone in [ -1, None, "" ]:  # expat seems to like -1
             pass
         else:
             raise ValueError(f"Unexpected standalone '{standalone}'.")
-        # TODO Store them
+        self.domDoc.version = version
+        self.domDoc.encoding = encoding
+        self.domDoc.standalone = standalone
 
     def StartDoctypeDeclHandler(self, name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
-        #self.domDocType = DocType(name, literal, publicId, systemId)
+        #self.domDocumentType = DocType(name, literal, publicId, systemId)
         pass
 
     def EndDoctypeDeclHandler(self) -> None:
         pass
 
     def ElementDeclHandler(self, name:NMTOKEN_t, model:str="ANY") -> None:
-        self.domDocType.ElementDef(name, aliasFor=None, model=model)
+        self.domDocumentType.ElementDef(name, aliasFor=None, model=model)
 
     def AttlistDeclHandler(self, ename:NMTOKEN_t,
         aname:NMTOKEN_t, atype:str, adefault:str) -> None:
-        self.domDocType.AttributeDef(ename, aname, atype, adefault)
+        self.domDocumentType.AttributeDef(ename, aname, atype, adefault)
 
     def EntityDeclHandler(self, name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
-        self.domDocType.EntityDef(name, literal, publicId, systemId)
+        self.domDocumentType.EntityDef(name, literal, publicId, systemId)
 
     def UnparsedEntityDeclHandler(self, name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
-        self.domDocType.EntityDef(name, literal, publicId, systemId)
+        self.domDocumentType.EntityDef(name, literal, publicId, systemId)
 
     def SDATAEntityDeclHandler(self, name:NMTOKEN_t, literal:str=None) -> None:
-        self.domDocType.EntityDef(name, literal)
+        self.domDocumentType.EntityDef(name, literal)
 
     def NotationDeclHandler(self, name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
-        self.domDocType.NotationDef(name, literal, publicId, systemId)
+        self.domDocumentType.NotationDef(name, literal, publicId, systemId)

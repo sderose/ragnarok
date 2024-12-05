@@ -5,7 +5,7 @@
 from pudb.var_view import default_stringifier
 
 from basedom import Node, Attr
-from domenums import NodeType
+from basedomtypes import NodeType
 
 descr = """
 Goals:
