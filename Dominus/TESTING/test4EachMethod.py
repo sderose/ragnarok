@@ -15,7 +15,6 @@ from basedomtypes import *
 #from basedomtypes import HierarchyRequestError
 #from basedomtypes import NotFoundError
 
-from domenums import NodeType
 from xmlstrings import XmlStrings as XStr
 
 from basedom import DOMImplementation
@@ -749,8 +748,6 @@ class testText(unittest.TestCase):
         self.assertTrue(tx.isText)
         self.assertEqual(tx.nodeValue, txText)
         self.assertEqual(tx.outerXML, txText)
-        #txTextJ = BaseDom.escapeJsonStr(txText)
-        #self.assertEqual(tx.outerJSON(), f'"{txTextJ}"')
         self.assertEqual(tx.tostring(), txText)
 
         tx2 = tx.cloneNode()
@@ -783,9 +780,6 @@ class testCDATASection(unittest.TestCase):
         self.assertTrue(cd.isCDATA)
         self.assertEqual(cd.nodeValue, cdText)
         self.assertEqual(cd.outerXML, f"<![CDATA[{cdText}]]>")
-        #cdTextJ = BaseDom.escapeJsonStr(cdText)
-        #self.assertEqual(cd.outerJSON(indent="  "),
-        #    f"""[ \{"#name":"#cdata"\}, "{cdTextJ}" ]""")
         self.assertEqual(cd.tostring(), cdText)
 
         cd.nodeValue = ""
@@ -814,9 +808,6 @@ class testProcessingInstruction(unittest.TestCase):
         self.assertEqual(pi.nodeValue, piData)
         expect = f"<?{piTarget} {piData}?>"
         self.assertEqual(pi.outerXML, expect)
-        #piDataJ = BaseDom.escapeJsonStr(piData)
-        #self.assertEqual(pi.outerJSON(indent="  "),
-        #    """[ \{"#name":"#pi", "#target":"{piTarget}"\}, "{piDataJ}" ]""")
         self.assertEqual(pi.tostring(), piData)
 
         pi2 = pi.cloneNode()
@@ -855,9 +846,6 @@ class testComment(unittest.TestCase):
         self.assertFalse(com.isEqualNode(self.n.docEl))
 
         self.assertEqual(com.nodeValue, comText)
-        self.assertEqual(com.outerXML, f"<!--{comText}-->")
-        self.assertEqual(com.outerJSON(indent="  "),
-            """[ { "#name":"#comment", "#data":"%s" } ]""" % (comText))
         self.assertEqual(com.tostring(), comText)
 
         com.nodeValue = ""
@@ -915,8 +903,6 @@ class testAttr(unittest.TestCase):
 
         #self.assertTrue(attrExpr, attr1.outerXML)
         #self.assertTrue(re.match(attrExpr, attr1.tostring()))
-        #el.outerJSON(indent="  ", depth=0)
-        #el.attrToJson()
 
         if (0):
             self.assertRaises(HierarchyRequestError, anode3.getChildIndex)

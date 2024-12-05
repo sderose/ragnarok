@@ -3,10 +3,14 @@
 import sys
 #import unittest
 #import logging
+import re
+import html
 import random
 import math
 from types import SimpleNamespace
 import logging
+
+from xml.dom import minidom
 
 from xmlstrings import XmlStrings as XStr
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation, Document, Node, Element
@@ -24,6 +28,64 @@ nameChars = nameStartChars + XStr.allNameChars()
 
 firstSetup = True
 
+
+###############################################################################
+# Some general testing helpers.
+#
+def packXml(s:str) -> str:
+    """Make 2 xml strings more comparable (doesn't deal with attribute order).
+    TODO: Canonicalize.
+    """
+    s = re.sub(r"""<\?xml .*?\?>""", "", s)
+    s = re.sub(r"\s*<", "\n<", s).strip()
+    s = html.unescape(s)
+    return "\n\n" + s
+
+def checkXmlEqual(xml:str, xml2:str):
+    p1 = packXml(xml)
+    p2 = packXml(xml2)
+    if (p1 == p2): return
+
+    p1Lines = p1.splitlines()
+    p2Lines = p2.splitlines()
+
+    print("Mismatch:")
+    for i in range(len(p1Lines)):
+        if p1Lines[i] == p2Lines[i]: continue
+        print("Line %3d: " % (i) + p1Lines[i])
+        print("          " + p2Lines[i])
+
+def isEqualNode(n1, n2) -> bool:
+    """Provide equivalent of the DOM 3 method, since minidom lacks it
+    and I want to be able to test with either that or basedom.
+    TODO Anything special for Document, DocFrag, EntRef?
+    """
+    if n2 is n1: return True
+    if n2 is None: return False
+    if n1.nodeType != n2.nodeType: return False
+    if n1.nodeName != n2.nodeName: return False
+    if n1.nodeValue != n2.nodeValue: return False
+    if isinstance(n1, minidom.Attr):
+        return n1.name == n2.name and n1.value == n2.value
+    elif isinstance(n1, minidom.CharacterData):
+        if isinstance(n1, minidom.ProcessingInstruction):
+            if n1.target != n2.target: return False
+        return n1.data == n2.data
+    elif (isinstance(n1, minidom.Element)):
+        sAts = n1.attributes or {}
+        nAts = n2.attributes or {}
+        # Can't just compare, b/c the values are Attr Nodes.
+        sKeys = set(list(sAts.keys()))
+        nKeys = set(list(nAts.keys()))
+        if sKeys != nKeys: return False
+        for k in sKeys:
+            if n1.getAttribute(k) != n2.getAttribute(k): return False
+        if len(n1.childNodes) != len(n2.childNodes): return False
+        for i in range(len(n1.childNodes)):
+            if not isEqualNode(n1.childNodes[i], n2.childNodes[i]): return False
+    return True
+
+
 ###############################################################################
 #
 class DBG:
@@ -35,12 +97,12 @@ class DBG:
 
     @staticmethod
     def dumpNode(node:Node, msg:str=""):
-        lg.warning("\n#######" + msg)
+        lg.warning("\n####### %s",  msg)
         node.writexml(sys.stderr, indent='    ', addindent='  ', newl='\n')
 
     @staticmethod
     def dumpNodeData(node:Node, msg:str=""):
-        lg.warning("\n####### " + msg)
+        lg.warning("\n####### %s", msg)
         if node.parentNode is None:
             pname = lname = rname = "None"
             cnum = cof = -1
@@ -84,12 +146,12 @@ class DBG:
             lg.warning("\n####### %s [ %s ]\n", msg, ", ".join(
                 [ "%s[%x]" % (x.nodeName, id(x)) for x in node.childNodes ]))
         else:
-            lg.warning("%s [ %s ]\n",
-                msg, ", ".join([ x.nodeName for x in node.childNodes ]))
+            chList = ", ".join([ x.nodeName for x in node.childNodes ])
+            lg.warning("%s [ %s ]\n", msg, chList)
 
     @staticmethod
     def dumpNodeAsJsonX(node:Node, msg:str=""):
-        lg.warning("\n####### " + msg)
+        lg.warning("\n####### %s", msg)
         try:
             getattr(Node, "toJsonX")
             lg.warning("\n####### %s: %s\n", msg, node.toJsonX(indent='  '))
@@ -102,7 +164,7 @@ class DBG:
 class DAT:
     """Element names and other consts used in the sample document.
     """
-    sampleXmlPath = "docForTestEachMethod_testDI.xml"
+    sampleXmlPath = "sample01.xml"
     ns_uri = "https://example.com/namespaces/foo"
 
     root_name = 'html'

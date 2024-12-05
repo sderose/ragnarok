@@ -13,7 +13,7 @@ from basedomtypes import InvalidCharacterError
 from basedomtypes import NotSupportedError
 #from basedomtypes import NotFoundError
 from domenums import NodeType
-from xmlstrings import NameTest, WSDef, WSHandler, CaseHandler, UNormHandler
+from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
 from xmlstrings import XmlStrings as XStr
 
 import basedom
@@ -126,19 +126,15 @@ class testByMethod(MyTestCase):
         sigmai = f"UC {SIGMA} fin {final} lc {sigma} lun {lunat} LUN {LUNAT}"
 
         s = "aBcDeF #$_- " + sigmai
-        ch = CaseHandler(how="NONE")
-        self.EQ(ch.normalize(s), s)
-        ch = CaseHandler(how="LOWER")
-        self.EQ(ch.normalize(s), s.lower())
-        ch = CaseHandler(how="UPPER")
-        self.EQ(ch.normalize(s), s.upper())
-        ch = CaseHandler(how="FOLD")
-        self.EQ(ch.normalize(s), s.casefold())
+        self.EQ(CaseHandler.NONE.normalize(s), s)
+        self.EQ(CaseHandler.LOWER.normalize(s), s.lower())
+        self.EQ(CaseHandler.LOWER.normalize(s), s.upper())
+        self.EQ(CaseHandler.FOLD.normalize(s), s.casefold())
 
     def testWSDef(self):
         """Check that the whitespace variants are right.
         """
-        which = {
+        testOptions = {
             "XML":         4,   # space, tab, lf, cr
             "WHATWG":      5,   # Adds U+0C (form feed)
             "CPP":         6,   # Adds U+0B (vertical tab)
@@ -146,9 +142,9 @@ class testByMethod(MyTestCase):
             "PY_ISSPACE":  25,
             "JAVASCRIPT":  25,
         }
-        for wh, expectedLen in which.items():
-            ws = WSDef(wh)
-            spaceChars = ws.spaces
+        for wh, expectedLen in testOptions.items():
+            wsh = WSHandler(wh)
+            spaceChars = wsh.spaces
             visChars = ", ".join("U+%04x" % (ord(c)) for c in spaceChars)
             self.FA(re.search(r"(.).*\1", spaceChars)) # No dups, please.
             #msg=f"{wh} has dup: [ {visChars} ]")
@@ -156,11 +152,11 @@ class testByMethod(MyTestCase):
             #msg=f"{wh}, sp='{visChars}'.")
             for c in spaceChars:                       # All spaces?
                 self.TR(unicodedata.category(c)[0] in "CZ")
-            self.TR(ws.isSpace(spaceChars*3))
-            self.FA(ws.isSpace(""))
-            self.FA(ws.isSpace("\x2022"))  # BULLET
-            self.FA(ws.isSpace(None))
-            self.FA(ws.isSpace("\u200B   \t\r\n"))
+            self.TR(wsh.isSpace(spaceChars*3))
+            self.FA(wsh.isSpace(""))
+            self.FA(wsh.isSpace("\x2022"))  # BULLET
+            self.FA(wsh.isSpace(None))
+            self.FA(wsh.isSpace("\u200B   \t\r\n"))
 
     def testNameTest(self):
         from string import ascii_letters, digits
@@ -227,12 +223,23 @@ class testByMethod(MyTestCase):
         self.EQ(XStr.escapeAttribute(
             'Alfred <"E"> Neuman.', quoteChar='"'),
             'Alfred &lt;&quot;E&quot;> Neuman.')
+
         self.EQ(XStr.escapeText(
-            'abc<tag>x&#x2022;y&#8226;z]]>zz', escapeAllGT=False),
-            'abc&lt;tag>x&#x2022;y&amp;#8226;z]]&gt;zz')
+            'abc<tag> AT&T xyz'),
+            'abc&lt;tag> AT&amp;T xyz')
         self.EQ(XStr.escapeText(
-            'abc<tag&gt;x&#x2022;y&#8226;z]]>zz', escapeAllGT=True),
-            'abc&lt;tag>x&#x2022;y&amp;#8226;z]]&gt;zz')
+            'abc \u2022y AT&T zz', escapeAllPast=0x2000),
+            'abc &#x2022;y AT&amp;T zz')
+        self.EQ(XStr.escapeText(
+            'abc ]]> zz'),
+            'abc ]]&gt; zz')
+        self.EQ(XStr.escapeText(
+            'abc >>> zz'),
+            'abc >>> zz')
+        self.EQ(XStr.escapeText(
+            'abc >>> zz', escapeAllGT=True),
+            'abc &gt;&gt;&gt; zz')
+
         self.EQ(XStr.escapeCDATA(
             "1234<[!CDATA[m<n> AT&T]]>, right?"),
             "1234<[!CDATA[m<n> AT&T]]&gt;, right?")
@@ -242,25 +249,27 @@ class testByMethod(MyTestCase):
         self.EQ(XStr.escapeCDATA(
             "1234<[!CDATA[m<n> AT&T]]>, right?", replaceWith="\u2022"),
             "1234<[!CDATA[m<n> AT&T\u2022, right?")
+
         self.EQ(XStr.escapeComment(
             "some <p>s fr-om AT&T are -- well?> -- ok."),
             "some <p>s fr-om AT&T are -&#x2d; well?> -&#x2d; ok.")
         self.EQ(XStr.escapeComment(
             "some <p>s fr-om AT&T are -- well?> -- ok.", replaceWith="- -"),
             "some <p>s fr-om AT&T are - - well?> - - ok.")
+
         self.EQ(XStr.escapePI(
             "Pis should?> not have this?>", replaceWith="?&gt;"),
             "Pis should?&gt; not have this?&gt;")
         self.EQ(XStr.escapePI(
             "Pis should?> not have this?>", replaceWith=""),
             "Pis should not have this")
+
         self.EQ(XStr.escapeASCII(
             "abc\u2022xyz.\u278e.", width=6, base=16, htmlNames=True),
             "abc&bull;xyz.&#x00278e;.")
         self.EQ(XStr.escapeASCII(
             "abc\u2022xyz.\u278e.", width=2, base=10, htmlNames=False),
             "abc&#8226;xyz.&#10126;.")
-
         self.EQ(XStr.escapeASCII(
             "abc\u2022xyz.\u278e.", width=2, base=10, htmlNames=False),
             "abc&#8226;xyz.&#10126;.")

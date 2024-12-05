@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
-"http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
+<!DOCTYPE book SYSTEM "-//OASIS//DTD DocBook XML V4.5//EN" []>
 <book xmlns:foo="http://example.com/namespaces/foo">
   <bookinfo>
     <title>My Title</title>
   </bookinfo>
 
   <chapter id="chap1" class="important">
-    <foo:title>Introduction</foo:title>
+    <title>Introduction</title>
     <section>
       <title><i>What?</i> Section 1, on <i>Entities</i> with a 2nd text node!</title>
       <p>Hello, paragraph 1.</p>

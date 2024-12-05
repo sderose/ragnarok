@@ -5,13 +5,8 @@ import logging
 #from typing import Callable
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation,Element
-from domenums import NodeType
+from basedomtypes import NodeType
 
-#import DocumentType
-#import DomBuilder
-#import XmlStrings
-#import XMLRegexes
-#import BaseDOM
 #from basedom import Node
 
 from makeTestDoc import makeTestDoc0, DAT_DocBook, DBG

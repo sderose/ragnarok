@@ -28,12 +28,6 @@ class TestAttr(unittest.TestCase):
             Attr:       self.obj,
         }
 
-    def test_self_obj_attrToJson(self):
-        self.assertRaises(Exception, self.obj.attrToJson())
-        self.assertRaises(Exception, self.obj.attrToJson([1, 2, 3]))
-        self.assertTrue(isinstance(self.obj.attrToJson('test_string'), str))
-
-
     def test_self_obj_checkNode(self):
         self.assertRaises(Exception, self.obj.checkNode())
         self.assertRaises(Exception, self.obj.checkNode('test_string', True))
@@ -84,14 +78,6 @@ class TestAttr(unittest.TestCase):
         self.assertRaises(Exception, self.obj.isEqualNode([1, 2, 3], 'test_string'))
         self.assertRaises(Exception, self.obj.isEqualNode(True, 3.14))
         self.assertTrue(isinstance(self.obj.isEqualNode(42, 'test_string'), bool))
-
-
-    def test_self_obj_outerJSON(self):
-        #self.assertRaises(Exception, self.obj.outerJSON())
-        self.assertRaises(Exception, self.obj.outerJSON(True, '  ', 0))
-        self.assertRaises(Exception, self.obj.outerJSON(True, [1, 2, 3], 0))
-        self.assertRaises(Exception, self.obj.outerJSON(42, '  ', True))
-        self.assertTrue(isinstance(self.obj.outerJSON(3.14, '  ', 0), str))
 
 
     def test_outerXML_property(self):

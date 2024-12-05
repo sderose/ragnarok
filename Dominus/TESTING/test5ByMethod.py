@@ -4,6 +4,7 @@
 #
 # TODO: Group classes by source standard
 #
+#pylint: disable=W0401,W0611,W0621
 import sys
 #import os
 import unittest
@@ -14,12 +15,9 @@ import re
 #from collections import defaultdict
 #from typing import List
 
-#pylint: disable=W0401,W0611,W0621
-from basedomtypes import HierarchyRequestError, InvalidCharacterError, NotSupportedError
+from basedomtypes import HReqE, ICharE, NSuppE, NodeType
 #from basedomtypes import NotFoundError
-from domenums import NodeType
-from xmlstrings import NameTest, WSDef, WSHandler, CaseHandler, UNormHandler
-
+from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
 from xmlstrings import XmlStrings as XStr
 
 import basedom
@@ -27,10 +25,9 @@ from basedom import DOMImplementation, FormatOptions
 from basedom import PlainNode, Node, Document, Element, Attr
 from basedom import CharacterData, Text, NamedNodeMap, NodeList
 
-from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
+from documenttype import DocumentType
 
-HRE = HierarchyRequestError
-ICE = InvalidCharacterError
+from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
 
 s = "Lorem ipsum dolor sit amet"
 name = "some.Name"
@@ -97,7 +94,7 @@ Document
     clear N/A
     createDocumentFragment
     getXmlDcl w/ bad
-    docTypeDcl w/ doctype
+    doctypeDcl w/ doctype
     _buildIndex, _buildIdIndex
     getElementsByTagName &c
     getElementsByTagNameNS &c
@@ -115,7 +112,6 @@ Attr
     prefix, namespaceURI, nodeValue, textContent (and setters)
     nextSibling previousSibling next previous isFirstChild isLastChild
     getChildIndex compareDocumentPosition N/A
-    attrToJson w/ list or bad type
     isConnected
 
 NamedNodeMap
@@ -133,7 +129,6 @@ Serializers on all node types
     writexml
     tocanonicalxml
     toprettyxml
-    outerJSON
 
 Non-child, bad index, non-Node
     insertBefore
@@ -166,36 +161,10 @@ DomBuilder
 """
 
 
-class MyTestCase(unittest.TestCase):
+class testByMethod(unittest.TestCase):
     def XX(self, *_args, **_kwargs):
         return
 
-    def TR(self, expr):
-        return self.assertTrue(expr)
-
-    def FA(self, expr):
-        return self.assertFalse(expr)
-
-    def NONE(self, first):
-        return self.assertIsNone(first)
-
-    def EQ(self, first, second):
-        return self.assertEqual(first, second)
-
-    def NE(self, first, second):
-        return self.assertNotEqual(first, second)
-
-    def IS(self, first, second):
-        return self.assertIs(first, second)
-
-    def TY(self, first, second):
-        return self.assertIsInstance(first, second)
-
-    def RZ(self, first, fn, *args, **kwargs):
-        assert(issubclass(first, Exception))
-        return self.assertRaises(first, fn, *args, **kwargs)
-
-class testByMethod(MyTestCase):
     def setUp(self):
         """Should make:
         <html xmlns:html="https://example.com/namespaces/foo">
@@ -213,21 +182,26 @@ class testByMethod(MyTestCase):
         self.n = madeDocObj.n
 
     def testConstructors(self):
+        impl = self.n.impl
         doc = self.n.doc
 
-        self.TY(self.n.impl.createDocument(
+        self.assertIsInstance(self.n.impl.createDocument(
             self.dc.ns_uri, self.dc.root_name, doctype=None), Document)
 
-        #self.TY(doc.createDocumentFragment(self.n.ns_uri, qualifiedName="frag",
+        #self.assertIsInstance(
+        #    doc.createDocumentFragment(self.n.ns_uri, qualifiedName="frag",
         #        doctype=None), basedom.DocumentFragment)
-        #self.TY(doc.createDocumentType("html"), basedom.DocumentType)
-        self.TY(doc.createAttribute("style", "font-weight:bold;"), Attr)
-        self.TY(doc.createCDATASection("icky][&<stuff"), basedom.CDATASection)
-        self.TY(doc.createComment("this comment intentionally left blank"), basedom.Comment)
-        self.TY(doc.createElement("This_is.42."), Element)
-        self.TY(doc.createEntityReference("bull", "\u2022"), basedom.EntityReference)
-        self.TY(doc.createProcessingInstruction("piTarget", "p i d a t a "), basedom.PI)
-        self.TY(doc.createTextNode(" lorem ipsum"), basedom.Text)
+        self.assertIsInstance(impl.createDocumentType("html", None, None), DocumentType)
+        self.assertIsInstance(doc.createAttribute("style", "font-weight:bold;"), Attr)
+        self.assertIsInstance(doc.createCDATASection("icky][&<stuff"), basedom.CDATASection)
+        self.assertIsInstance(doc.createComment(
+            "this comment intentionally left blank"), basedom.Comment)
+        self.assertIsInstance(doc.createElement("This_is.42."), Element)
+        self.assertIsInstance(doc.createEntityReference(
+            "bull", "\u2022"), basedom.EntityReference)
+        self.assertIsInstance(doc.createProcessingInstruction(
+            "piTarget", "p i d a t a "), basedom.PI)
+        self.assertIsInstance(doc.createTextNode(" lorem ipsum"), basedom.Text)
 
         #with self.assertRaises(NotSupportedError): Node("self.dc.ns_uri", "abstraction")
 
@@ -235,23 +209,26 @@ class testByMethod(MyTestCase):
     def testWhatWGConstructors(self):
         from basedom import (CDATASection, Comment, ProcessingInstruction,
             EntityReference, NameSpaces)
-        self.TY(Document(), Document)
-        self.TY(Element("P27"), Element)
-        self.TY(Attr("alt", "A picture."), Attr)
-        self.TY(CharacterData("aardvark"), CharacterData)
+        self.assertIsInstance(Document(), Document)
+        self.assertIsInstance(Element("P27"), Element)
+        self.assertIsInstance(Attr("alt", "A picture."), Attr)
+        self.assertIsInstance(CharacterData("aardvark"), CharacterData)
 
-        self.TY(CDATASection(ownerDocument=self.n.doc, data="basilisk"), CDATASection)
-        self.TY(Text("catoblepas"), Text)
-        self.TY(Comment("dryad"), Comment)
-        self.TY(ProcessingInstruction("ettin", "fire giant"), ProcessingInstruction)
-        self.TY(EntityReference("chap1", "c:\\ents\\chapter1.xml"), EntityReference)
+        self.assertIsInstance(
+            CDATASection(ownerDocument=self.n.doc, data="basilisk"), CDATASection)
+        self.assertIsInstance(Text("catoblepas"), Text)
+        self.assertIsInstance(Comment("dryad"), Comment)
+        self.assertIsInstance(
+            ProcessingInstruction("ettin", "fire giant"), ProcessingInstruction)
+        self.assertIsInstance(
+            EntityReference("chap1", "c:\\ents\\chapter1.xml"), EntityReference)
 
-        self.TY(NodeList(), NodeList)
+        self.assertIsInstance(NodeList(), NodeList)
 
-        self.TY(DOMImplementation(), DOMImplementation)
-        self.TY(FormatOptions(), FormatOptions)
-        self.TY(NameSpaces(), NameSpaces)
-        self.TY(NamedNodeMap(), NamedNodeMap)
+        self.assertIsInstance(DOMImplementation(), DOMImplementation)
+        self.assertIsInstance(FormatOptions(), FormatOptions)
+        self.assertIsInstance(NameSpaces(), NameSpaces)
+        self.assertIsInstance(NamedNodeMap(), NamedNodeMap)
 
     def testListBuiltins(self):
         n0 = self.n.child0
@@ -262,35 +239,35 @@ class testByMethod(MyTestCase):
             ch = self.n.doc.createElement(f"P_{x}",
                 attributes={ ID_ATTR:"id_"+str(x), "width":"0.5" })
             n2.appendChild(ch)
-            self.EQ(ch.parentNode, n2)
-        self.EQ(n2.length, 10)
+            self.assertEqual(ch.parentNode, n2)
+        self.assertEqual(n2.length, 10)
         #DBG.dumpNode(n2, msg="Attrs on 10 ch?")
         ch3 = n2[3]
         ch5 = n2[5]
-        self.TR(ch3.isElement and ch5.isElement)
+        self.assertTrue(ch3.isElement and ch5.isElement)
 
-        self.TR(n2.bool())  # Empty element!
+        self.assertTrue(n2.bool())  # Empty element!
         self.n.docEl.sort(lambda x: x.nodeName, reverse=False)
-        self.EQ(n2[0].getAttribute(ID_ATTR), "id_0")
-        self.EQ(n2[0].getAttribute("width", castAs=float), 0.5)
+        self.assertEqual(n2[0].getAttribute(ID_ATTR), "id_0")
+        self.assertEqual(n2[0].getAttribute("width", castAs=float), 0.5)
 
-        self.FA(n0.__eq__(n1))
-        self.TR(n2.__eq__(n2))
-        self.TR(n1.__ne__(ch))
-        self.TR(ch3.__ne__(ch5))
-        self.FA(ch5.__le__(ch3))
-        self.TR(ch5.__ge__(ch3))
-        self.TR(ch5.__gt__(ch3))
-        self.FA(ch5.__gt__(ch5))
+        self.assertFalse(n0.__eq__(n1))
+        self.assertTrue(n2.__eq__(n2))
+        self.assertTrue(n1.__ne__(ch))
+        self.assertTrue(ch3.__ne__(ch5))
+        self.assertFalse(ch5.__le__(ch3))
+        self.assertTrue(ch5.__ge__(ch3))
+        self.assertTrue(ch5.__gt__(ch3))
+        self.assertFalse(ch5.__gt__(ch5))
 
-        self.FA(n0 == n1)
-        self.TR(n2 == n2)
-        self.TR(n1 != ch)
-        self.TR(ch3 != ch5)
-        self.TR(ch5 >= ch3)
-        self.FA(ch3 > ch3)
-        self.FA(ch5 <= ch3)
-        self.FA(ch5 < ch3)
+        self.assertFalse(n0 == n1)
+        self.assertTrue(n2 == n2)
+        self.assertTrue(n1 != ch)
+        self.assertTrue(ch3 != ch5)
+        self.assertTrue(ch5 >= ch3)
+        self.assertFalse(ch3 > ch3)
+        self.assertFalse(ch5 <= ch3)
+        self.assertFalse(ch5 < ch3)
 
         self.XX(n0.__reduce__())
         self.XX(n0.__reduce__ex__())
@@ -308,11 +285,11 @@ class testByMethod(MyTestCase):
         # add is not in-place, it constructs a new NodeList.
         n1len = len(n0)
         zork = n0.__add__(newList)
-        self.EQ(len(zork), n1len + len(newList))
-        self.TR(zork.__contains__(ch))
-        self.FA(n0.__contains__(ch))
+        self.assertEqual(len(zork), n1len + len(newList))
+        self.assertTrue(zork.__contains__(ch))
+        self.assertFalse(n0.__contains__(ch))
         zork.__delitem__(ch)
-        self.FA(zork.__contains__(ch))
+        self.assertFalse(zork.__contains__(ch))
 
         newList = NodeList()
         ch7 = None
@@ -323,16 +300,16 @@ class testByMethod(MyTestCase):
         preLen = len(n0)
 
         nPlus = n0.__iadd__(newList)
-        self.EQ(len(nPlus), preLen + len(newList))
-        self.EQ(nPlus.count("P_5"), 1)
+        self.assertEqual(len(nPlus), preLen + len(newList))
+        self.assertEqual(nPlus.count("P_5"), 1)
         with self.assertRaises(ValueError): nPlus.index("xyzzy", 2, -4)
         #DBG.dumpNode(nPlus, msg="nPlus")
-        self.EQ(nPlus.index("P_6", 1, -2), 7)
-        self.EQ(nPlus[2].nodeName, "P_1")
+        self.assertEqual(nPlus.index("P_6", 1, -2), 7)
+        self.assertEqual(nPlus[2].nodeName, "P_1")
 
         nch = len(n0)
         n0.__imul__(2)
-        self.EQ(len(n0), nch*2)
+        self.assertEqual(len(n0), nch*2)
 
         self.XX(n0.__mul__(2))
         self.XX(n0.__rmul__(2))
@@ -349,16 +326,15 @@ class testByMethod(MyTestCase):
         n2 = self.n.child2
         #prefix = "foo"
         #self.XX(n0.initOptions())
-        #self.XX(n0.NOTYET__getitem__())
         #self.XX(n0._addNamespace(prefix+"2", uri=self.dc.ns_uri))
-        #self.EQ(n0._expandChildArg(n1), (2, n1))
+        #self.assertEqual(n0._expandChildArg(n1), (2, n1))
 
         newChild = self.n.doc.createElement("p")
         self.XX(n0._filterOldInheritedNS(newChild))
         #self.XX(n0._findAttr(self.dc.ns_uri, tgtName))
-        self.EQ(self.n.doc._getXmlDcl(encoding="utf-8"),
-            """<?xml version="1.0" encoding="utf-8"?>\n""")
-        self.TR(n0._isOfValue(self.dc.child0_name))
+        self.assertEqual(self.n.doc._getXmlDcl(encoding="utf-8"),
+            """<?xml version="1.0" encoding="utf-8"?>""")
+        self.assertTrue(n0._isOfValue(self.dc.child0_name))
         #self.XX(n0._presetAttr(self.dc.at_name2, self.dc.at_value2))
         #self.XX(n0._resetinheritedNS())
         #self.XX(n0._startTag(empty=True, includeNS=False))
@@ -377,37 +353,37 @@ class testByMethod(MyTestCase):
         n1 = self.n.child1
         n2 = self.n.child2
         d = self.n.docEl
-        self.TR(n0.isElement and n1.isElement and n2.isElement and d.isElement)
+        self.assertTrue(n0.isElement and n1.isElement and n2.isElement and d.isElement)
 
         #self.RZ(AttributeError, n0.charset)
-        self.EQ(self.n.doc.charset, "utf-8")
-        self.EQ(len(n0.childNodes), 1)
-        self.EQ(self.n.doc.contentType, "text/XML")
-        #self.RZ(HRE, n0.documentURI)
-        self.FA(self.n.doc.documentURI)
+        self.assertEqual(self.n.doc.charset, "utf-8")
+        self.assertEqual(len(n0.childNodes), 1)
+        self.assertEqual(self.n.doc.contentType, "text/XML")
+        #self.RZ(HReqE, n0.documentURI)
+        self.assertFalse(self.n.doc.documentURI)
 
         self.XX(n0.cloneNode())
-        self.NE(n2, n2.cloneNode(deep=True))
+        self.assertNotEqual(n2, n2.cloneNode(deep=True))
         self.XX(n0.cloneNode(deep=False))
         #self.XX(n0.compareDocumentPosition(other))
         #self.XX(n0.domConfig())
         #self.XX(getImplementation())
-        self.IS(n0.getRootNode(), self.n.doc)
-        self.EQ(n0.ownerDocument.inputEncoding, "utf-8")
-        self.EQ(d.length, 3)
-        self.EQ(n0.localName, self.dc.child0_name)
+        self.assertIs(n0.getRootNode(), self.n.doc)
+        self.assertEqual(n0.ownerDocument.inputEncoding, "utf-8")
+        self.assertEqual(d.length, 3)
+        self.assertEqual(n0.localName, self.dc.child0_name)
         self.XX(n0.lookupNamespaceURI(prefix))
         self.XX(n0.lookupPrefix(uri))
         #self.XX(n0.name())
-        self.EQ(n0.namespaceURI, None)
-        self.EQ(n0.prefix, "")
+        self.assertEqual(n0.namespaceURI, None)
+        self.assertEqual(n0.prefix, "")
         self.XX(n0.nodeValue)
         try:
             n0.nodeValue = "SomeReplacementText"
-            self.EQ(n0, "Non-CharacterData don't take nodeValue assignment.")
+            self.assertEqual(n0, "Non-CharacterData don't take nodeValue assignment.")
         except AttributeError:
             pass
-        self.EQ(n0.tagName, self.dc.child0_name)
+        self.assertEqual(n0.tagName, self.dc.child0_name)
 
     def testObsoleteDOM(self):
         n0 = self.n.child0
@@ -416,9 +392,31 @@ class testByMethod(MyTestCase):
         udKey = "skeleton"
         udValue = "in the attrs"
         n0.setUserData(udKey, udValue, handler=None)
-        self.EQ(n0.getUserData(udKey), udValue)
+        self.assertEqual(n0.getUserData(udKey), udValue)
         #self.XX(n0.getInterface())
         #self.XX(n0.registerDOMImplementation(name, factory))
+
+    def testSlices(self):
+        n0 = self.n.child0
+        n1 = self.n.child1
+        n2 = self.n.child2
+        for i in range(len(self.n.docEl)):
+            self.assertEqual(self.n.docEl[i], self.n.docEl.childNodes[i])
+        self.assertEqual(self.n.docEl[-2], self.n.docEl.childNodes[-2])
+        self.assertEqual(self.n.docEl[0:2], self.n.docEl.childNodes[0:2])
+        self.assertEqual(self.n.docEl[0:-1], self.n.docEl.childNodes[0:-1])
+
+        # and __setitem__ -- which has to do all the right patching
+        nl = NodeList()
+        nnodes = 10
+        for i in range(nnodes):
+            nl.append(self.n.doc.createElement("newb"))
+        self.assertEqual(len(nl), nnodes)
+
+        self.n.docEl[1] = nl[0]
+        # TODO Add many more cases
+        self.assertFalse(n1.isConnected)
+        self.n.docEl.checkNode(deep=True)
 
     def testTreeMutators(self):
         n0 = self.n.child0
@@ -429,11 +427,11 @@ class testByMethod(MyTestCase):
         for x in range(10):
             ch = self.n.doc.createElement("P_{x}", attributes={ "seq":str(x) })
             newList.append(ch)
-        self.EQ(len(newList), 10)
+        self.assertEqual(len(newList), 10)
 
         n0.after(newList)
         n0.append(newChild)
-        with self.assertRaises(HRE): n0.append(newChild)
+        with self.assertRaises(HReqE): n0.append(newChild)
         newChild2 = newChild.cloneNode()
         n0.appendChild(newChild2)
 
@@ -445,10 +443,10 @@ class testByMethod(MyTestCase):
 
         otherDocument = self.n.impl.createDocument(self.dc.ns_uri, "html", None)
         n1Copy = n0.cloneNode(deep=True)
-        self.FA(n1Copy.isConnected)
+        self.assertFalse(n1Copy.isConnected)
         #n1Copy.changeOwnerDocument(otherDocument)
-        #self.EQ(n1Copy.ownerDocument, otherDocument)
-        #with self.assertRaises(HRE): n0.changeOwnerDocument(n2)
+        #self.assertEqual(n1Copy.ownerDocument, otherDocument)
+        #with self.assertRaises(HReqE): n0.changeOwnerDocument(n2)
 
         newChild = self.n.doc.createElement("p")
         n0.insert(3, newChild)
@@ -487,7 +485,7 @@ class testByMethod(MyTestCase):
         for x in range(10):
             ch = self.n.doc.createElement("P_{x}", attributes={ "seq":str(x) })
             newList.append(ch)
-        self.EQ(len(newList), 10)
+        self.assertEqual(len(newList), 10)
         newList2 = newList.copy()
         newList2.reverse()
         #self.XX(n0.replaceWith(newList2))
@@ -500,41 +498,41 @@ class testByMethod(MyTestCase):
         tx = self.n.doc.createTextNode(origText)
         n2.appendChild(tx)
         s = "[Extended Data]"
-        self.EQ(tx.data, origText)
-        self.EQ(tx.data, n2.textContent)
+        self.assertEqual(tx.data, origText)
+        self.assertEqual(tx.data, n2.textContent)
         tx.appendData(s)
-        self.EQ(tx.data, origText+s)
+        self.assertEqual(tx.data, origText+s)
         tx.insertData(0, "staht ")
-        self.EQ(tx.data[0:6], "staht ")
+        self.assertEqual(tx.data[0:6], "staht ")
         tx.deleteData(0, 3)
-        self.EQ(tx.data[0:3], "ht ")
+        self.assertEqual(tx.data[0:3], "ht ")
         tx.replaceData(0, 3, "ahting")
-        self.EQ(tx.data[0:9], "ahtingsom")
-        self.EQ(tx.substringData(4, 3), "ngs")
+        self.assertEqual(tx.data[0:9], "ahtingsom")
+        self.assertEqual(tx.substringData(4, 3), "ngs")
 
         origText = "  \tThe Quick\xA0\xA0Blue\rFox.  "
         expect = "The Quick\xA0\xA0Blue Fox."
         tx2 = self.n.doc.createTextNode(origText)
-        self.EQ(tx2.cleanText(), expect)
-        self.EQ(tx2.data, expect)
+        self.assertEqual(tx2.cleanText(), expect)
+        self.assertEqual(tx2.data, expect)
 
     def testTreeNeighbors(self):
         n0 = self.n.child0
         n1 = self.n.child1
         n2 = self.n.child2
         d = self.n.docEl
-        self.TR(d.contains(n1))
-        self.EQ(n0.depth, 2)
-        self.IS(d.firstChild, n0)
-        self.IS(d.lastChild, n2)
-        self.IS(n0.parentElement, d)
-        self.IS(n2.previousSibling, n1)
-        self.IS(n0.nextSibling.nextSibling, n2)
-        self.IS(n2.nextSibling, None)
-        self.IS(d.leftmost, n0.childNodes[0])
-        self.IS(d.rightmost, n2)
-        self.IS(n2.previous, n1.rightmost)
-        self.IS(n0.next, n0.firstChild)
+        self.assertTrue(d.contains(n1))
+        self.assertEqual(n0.depth, 2)
+        self.assertIs(d.firstChild, n0)
+        self.assertIs(d.lastChild, n2)
+        self.assertIs(n0.parentElement, d)
+        self.assertIs(n2.previousSibling, n1)
+        self.assertIs(n0.nextSibling.nextSibling, n2)
+        self.assertIs(n2.nextSibling, None)
+        self.assertIs(d.leftmost, n0.childNodes[0])
+        self.assertIs(d.rightmost, n2)
+        self.assertIs(n2.previous, n1.rightmost)
+        self.assertIs(n0.next, n0.firstChild)
 
     def testSearchers(self):
         n0 = self.n.child0
@@ -554,30 +552,92 @@ class testByMethod(MyTestCase):
         doc.idHandler.addAttrChoice("##any", "*", "##any", "id")
         doc.idHandler.addAttrChoice("https://docbook.com", "chap", "##any", "idThing")
         doc.idHandler.delAttrChoice("https://docbook.com", "chap", "##any", "idThing")
+
         doc.idHandler.buildIdIndex()
-        self.IS(doc.getElementById(id1), n1)
-        self.IS(doc.getElementById(id2), n2)
 
-        self.IS(doc.getElementById("##any:"+id2), n2)
-        self.NONE(doc.getElementById("no_ns:id"))
-        self.NONE(doc.getElementById("no_such_id_value"))
+        self.assertIs(doc.getElementById(id1), n1)
+        self.assertIs(doc.getElementById(id2), n2)
 
-        self.TY(doc.getElementsByClassName("big"), NodeList)
+        self.assertIsInstance(doc.getElementsByClassName("big"), NodeList)
 
-        self.TY(doc.getElementsByTagName("p"), NodeList)
-        self.TY(doc.getElementsByTagNameNS("##any", "p"), NodeList)
+        self.assertIsInstance(doc.getElementsByTagName("p"), NodeList)
+        self.assertIsInstance(doc.getElementsByTagNameNS("##any", "p"), NodeList)
 
         self.XX(d.eachChild(excludeNodeNames=["p"]))
         #self.XX(eachNode(self))
+
+    def testIdStuff(self):
+        doc = self.n.doc
+        docEl = self.n.docEl
+
+        # Add a bunch of nodes with ids
+        idDiv = doc.createElement("idDiv")
+        docEl.appendChild(idDiv)
+        fan = 10
+        for i in range(fan):
+            idHolder = doc.createElement("p")
+            if i < 5:
+                idHolder.setAttribute("xml:id", f"idVal_{i}")
+            else:
+                idHolder.setAttribute("id", f"idVal_{i}")
+            idDiv.appendChild(idHolder)
+            txt = doc.createTextNode("hello.")
+            idHolder.appendChild(txt)
+        DBG.msg("\nDOC:\n" + doc.toprettyxml(newl="\n", indent="  "))
+
+        # Traverse the doc and make an id:node dict
+        idSec = self
+        idMap = {}
+        elementsFound = 0
+        for n in docEl.eachNode():
+            if not n.isElement: continue
+            elementsFound += 1
+            idValue = n.getAttribute("id")
+            if not idValue: continue
+            self.assertFalse(idValue in idMap)
+            idMap[idValue] = n
+        self.assertEqual(elementsFound, fan+6)
+        self.assertEqual(len(idMap), fan+1)
+
+        # Update the index
+        doc.buildIndex()
+        #doc.idHandler.addAttrChoice(ens="##any", ename="*", ans="##any", aname="id")
+        #doc.idHandler.buildIdIndex()
+
+        # Check that getElementById() can see them all
+        self.assertIsInstance(doc.idHandler.theIndex, dict)
+        self.assertGreater(len(doc.idHandler.theIndex), 100)
+        idsFound = 0
+        for idVal, theNode in idMap.items():
+            self.assertFalse(idVal is None or theNode is None)
+            if doc.getElementById(idVal) is theNode:
+                idsFound += 1
+            elif doc.getElementById(idVal) is not None:
+                self.assertFalse(f"Id '{idVal}' points to wrong element.")
+            else:
+                self.assertFalse(f"Id '{idVal}' not found.")
+        self.assertEqual(idsFound, len(idMap))
+
+        # NS complications
+        #self.assertIs(doc.getElementById("##any:"+id2), n2)
+        #self.assertIsNone(doc.getElementById("no_ns:id"))
+        #self.assertIsNone(doc.getElementById("no_such_id_value"))
+
+        # TODO: Test IDs with other names, namespaces.
+        # xml:id
+        # self.doctype.
 
     def testTreeLoaders(self):
         n0 = self.n.child0
         n1 = self.n.child1
         n2 = self.n.child2
         filename_or_file = self.dc.sampleXmlPath
+        #DBG.msg("Parsing file {filename_or_file}")
         self.n.impl.parse(filename_or_file, bufsize=5000)
-        self.n.impl.parse(filename_or_file)  # And with alt parser?
+        #self.n.impl.parse(filename_or_file)  # And with alt parser?
+        #DBG.msg("Parsing string")
         self.n.impl.parse_string(self.dc.xml)
+        #DBG.msg("Past parsing")
 
     def testSerializers(self):
         n0 = self.n.child0
@@ -585,15 +645,15 @@ class testByMethod(MyTestCase):
         n2 = self.n.child2
 
         #self.RZ(AttributeError, n0.xmlDcl)
-        self.EQ(n0.ownerDocument.xmlDcl,
-            """<?xml version="1.0" encoding="utf-8"?>\n""")
-        #self.XX(n0.docTypeDcl)
+        self.assertEqual(n0.ownerDocument.xmlDcl,
+            """<?xml version="1.0" encoding="utf-8"?>""")
+        #self.XX(n0.doctypeDcl)
         st = n0.startTag
-        self.TR(st.startswith(f"<{self.dc.child0_name} "))
-        print(f"\nstartTag: {st}\n    an '{self.dc.at_name}' = av '{self.dc.at_value}'.")
-        self.TR(re.search(r" %s=\"%s\"" % (self.dc.at_name, self.dc.at_value), st))
-        self.TR(re.search(r" %s=\"%s\"" % (self.dc.at_name2, self.dc.at_value2), st))
-        self.TR(re.search(r" %s=\"%s\"" % (self.dc.at_name3, self.dc.at_value3), st))
+        self.assertTrue(st.startswith(f"<{self.dc.child0_name} "))
+        #print(f"\nstartTag: {st}\n    an '{self.dc.at_name}' = av '{self.dc.at_value}'.")
+        self.assertTrue(re.search(r" %s=\"%s\"" % (self.dc.at_name, self.dc.at_value), st))
+        self.assertTrue(re.search(r" %s=\"%s\"" % (self.dc.at_name2, self.dc.at_value2), st))
+        self.assertTrue(re.search(r" %s=\"%s\"" % (self.dc.at_name3, self.dc.at_value3), st))
         self.XX(n0.endTag, "</%s>" % (self.dc.child0_name))
 
         #self.XX(n0.innerXML)
@@ -603,7 +663,7 @@ class testByMethod(MyTestCase):
         self.XX(n0.textContent)
         newData = "Just the text, ma'am."
         n0.textContent = newData
-        self.EQ(n0.textContent, newData)
+        self.assertEqual(n0.textContent, newData)
         self.XX(n0.tostring())
         self.XX(n0.collectAllXml())
         self.XX(n0.toxml())
@@ -612,33 +672,12 @@ class testByMethod(MyTestCase):
         fo.setInlines(None)
         self.XX(self.n.docEl.toprettyxml(foptions=fo))
         self.XX(self.n.docEl.toprettyxml(foptions=FormatOptions.canonicalFO()))
-        # TODO Add a serious test of canonicity
-        self.XX(n0.writexml(sys.stderr, indent="   ", addindent="   ", newl="\n"))
 
-    def testJSON(self):
-        exp = """
-[ { "#name":"#document", "#format":"JSONX",
-    "#version":"1.0", "#encoding":"utf-8", "#standalone":"yes",
-    "#doctype":"html", "#systemId":"http://w3.org/html" },
-  [ { "#name": "html", "xmlns:html":"http://www.w3.org/1999/xhtml" },
-    [ { "#name": "head" },
-      [ { "#name": "title" },
-        "My document" ]
-    ],
-    [ { "#name": "body" },
-      [ { "#name": "p", "id":"stuff" },
-        "This is a ",
-        [ { "#name": "i" }, "very" ],
-        " short document."
-      ]
-    ],
-    [ { "#name": "hr" } ]
-  ]
-]
-"""
-        # TODO normalize attr order
-        #self.EQ(self.n.docEl.outerJSON().strip(), exp.strip())
-        print("\n" + self.n.docEl.outerJSON())
+        # TODO Add a serious test of canonicity
+
+        print("\n\n" + "="*79
+            + "\n####### writexml output (test5ByMethod testSerializers):")
+        self.XX(n0.writexml(sys.stderr, indent="   ", addindent="   ", newl="\n"))
 
     def testPointers(self):
         n0 = self.n.child0
@@ -648,8 +687,8 @@ class testByMethod(MyTestCase):
         self.XX(self.n.doc.idHandler.buildIdIndex())
         #self.XX(n0.getNodePath(useId, attrOk=False))
         #self.XX(n0.getNodeSteps(useId, attrOk=False, wsn=True))
-        self.TY(doc.useNodePath("1/1"), Text)
-        self.EQ(doc.useNodeSteps([ 1, 1 ]).nodeName, "#text")
+        self.assertIsInstance(doc.useNodePath("1/1"), Text)
+        self.assertEqual(doc.useNodeSteps([ 1, 1 ]).nodeName, "#text")
 
     def randChars(self, chars:str, nc:int, n:int=5):
         buf = ""
@@ -664,17 +703,17 @@ class testByMethod(MyTestCase):
         nAttrs = 257
         nameChars = XStr.allNameChars()
         nnc = len(nameChars)
-        self.EQ(nnc, 54128)
+        self.assertEqual(nnc, 54128)
 
         for i in range(nAttrs):
             val = "zyz"+self.randChars(nameChars, nnc)
             n1.setAttribute(f"attr_{i}", val)
             n2.setAttributeNS("http://derose.net/namespaces/test", f"attr_{i}", val)
-        self.EQ(len(n1.attributes), nAttrs)
+        self.assertEqual(len(n1.attributes), nAttrs)
 
-        self.TR(n1.hasAttributes)
-        self.TR(n0.hasAttribute(self.dc.at_name2))
-        self.FA(n0.hasAttribute("notMyAttributeFerSure"))
+        self.assertTrue(n1.hasAttributes)
+        self.assertTrue(n0.hasAttribute(self.dc.at_name2))
+        self.assertFalse(n0.hasAttribute("notMyAttributeFerSure"))
         self.XX(n0.hasAttributeNS(self.dc.ns_uri, self.dc.at_name2))
 
         self.XX(n0.setAttribute(self.dc.at_name2, self.dc.at_value2))
@@ -694,15 +733,15 @@ class testByMethod(MyTestCase):
         self.XX(n0.getAttributeNodeNS(self.dc.ns_uri, self.dc.at_name2))
 
         attrs = n0.attributes
-        self.TY(attrs, NamedNodeMap)
+        self.assertIsInstance(attrs, NamedNodeMap)
         #DBG.dumpNode(n0, msg="attrs for getIndex")
-        self.EQ(attrs.getIndexOf("alist"), 2)
+        self.assertEqual(attrs.getIndexOf("alist"), 2)
 
         aname2 = self.dc.at_name2
         avalue2 = "aardvarks"
         self.XX(attrs.setNamedItem(aname2, avalue2))  # avalueAny,atype=str))
         self.XX(attrs.getNamedItem(aname2))
-        self.EQ(attrs.getNamedValue(aname2), avalue2)
+        self.assertEqual(attrs.getNamedValue(aname2), avalue2)
         self.XX(attrs.removeNamedItem(aname2))
 
         #self.XX(attrs.setNamedItemNS(self.dc.ns_uri, self.dc.at_name2, self.dc.at_value2))
@@ -716,48 +755,48 @@ class testByMethod(MyTestCase):
         n2 = self.n.child2
         d = self.n.docEl
         #self.XX(n0.hasChildNodes)
-        self.FA(n0.hasDescendant(n2))
-        self.TR(d.hasSubElements)
-        self.TR(n0.hasTextNodes)
-        self.TR(n0.isConnected)
-        self.TR(n0.hasAttributes())
-        self.TR(n0.hasAttribute(self.dc.at_name2))
-        self.TR(n0.hasAttributeNS("", self.dc.at_name2))
+        self.assertFalse(n0.hasDescendant(n2))
+        self.assertTrue(d.hasSubElements)
+        self.assertTrue(n0.hasTextNodes)
+        self.assertTrue(n0.isConnected)
+        self.assertTrue(n0.hasAttributes())
+        self.assertTrue(n0.hasAttribute(self.dc.at_name2))
+        self.assertTrue(n0.hasAttributeNS("", self.dc.at_name2))
 
     def testNodeTypePredicates(self):  # HERE
         n0 = self.n.child0
         n1 = self.n.child1
         n2 = self.n.child2
-        self.FA(n0.isAttribute)
-        self.FA(n0.isCDATA)
-        self.FA(n0.isComment)
-        self.FA(n0.isDocument)
-        self.FA(n0.isDocumentType)
-        self.TR(n0.isElement)
-        self.FA(n0.isEntRef)
-        self.FA(n0.isFragment)
-        self.FA(n0.isNotation)
-        self.FA(n0.isPI)
-        self.FA(n0.isText)
+        self.assertFalse(n0.isAttribute)
+        self.assertFalse(n0.isCDATA)
+        self.assertFalse(n0.isComment)
+        self.assertFalse(n0.isDocument)
+        self.assertFalse(n0.isDocumentType)
+        self.assertTrue(n0.isElement)
+        self.assertFalse(n0.isEntRef)
+        self.assertFalse(n0.isFragment)
+        self.assertFalse(n0.isNotation)
+        self.assertFalse(n0.isPI)
+        self.assertFalse(n0.isText)
 
-        self.TR(n0.getAttributeNode(self.dc.at_name2).isAttribute)
-        self.TR(n0.childNodes[0].isTextNode)
+        self.assertTrue(n0.getAttributeNode(self.dc.at_name2).isAttribute)
+        self.assertTrue(n0.childNodes[0].isTextNode)
 
-        self.FA(n0.isWSN)
-        self.FA(n0.isWhitespaceInElementContent)
+        self.assertFalse(n0.isWSN)
+        self.assertFalse(n0.isWhitespaceInElementContent)
 
-        self.TR(n0.isDefaultNamespace(uri))
+        self.assertFalse(n0.isEqualNode(n1))
+        self.assertFalse(n0.isSameNode(n2))
 
-        self.FA(n0.isEqualNode(n1))
-        self.FA(n0.isSameNode(n2))
+        self.assertTrue(n0.isFirstChild)
+        self.assertTrue(n2.isLastChild)
+        self.assertFalse(n2.isFirstChild)
+        self.assertFalse(n0.isLastChild)
 
-        self.TR(n0.isFirstChild())
-        self.TR(n2.isLastChild())
-        self.FA(n2.isFirstChild())
-        self.FA(n0.isLastChild())
-
-        #self.TR(isNamespaceURI(self.dc.ns_uri))
+        #self.assertTrue(isNamespaceURI(self.dc.ns_uri))
         #self.XX(n0.isSupported())
+
+        #self.assertTrue(n0.isDefaultNamespace(uri))
 
     def testWonkyAttrs(self):  # HERE
         cur = self.n.child2
@@ -768,11 +807,11 @@ class testByMethod(MyTestCase):
             stackBuf += f"/idval_{i}"
             cur.appendChild(ch)
             cur = ch
-        self.EQ(cur.getStackedAttribute("id"), stackBuf)
-        self.EQ(cur.getStackedAttribute("id", sep="%%%"), re.sub(r"/", "%%%", stackBuf))
+        self.assertEqual(cur.getStackedAttribute("id"), stackBuf)
+        self.assertEqual(cur.getStackedAttribute("id", sep="%%%"), re.sub(r"/", "%%%", stackBuf))
 
-        self.EQ(cur.getInheritedAttribute("id"), "idval_4")
-        self.EQ(cur.getInheritedAttribute("no-such-id", default="x"), "x")
+        self.assertEqual(cur.getInheritedAttribute("id"), "idval_4")
+        self.assertEqual(cur.getInheritedAttribute("no-such-id", default="x"), "x")
         self.XX(cur.getInheritedAttributeNS( self.dc.ns_uri, self.dc.at_name2))
 
     def testBadNames(self):
@@ -786,21 +825,21 @@ class testByMethod(MyTestCase):
         rbd = badChars[random.randrange(0, len(badChars))]
         badName = f"oops{rbd}ie"
 
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             self.n.impl.createDocument(self.dc.ns_uri, badName, None)
+
         try:
             doc.createElement(badName)
-        except ICE:
+        except ICharE:
             pass
-        with self.assertRaises(ICE):
+
+        with self.assertRaises(ICharE):
             doc.createAttribute(badName, "999")
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             doc.createDocumentFragment(self.dc.ns_uri, badName)
-        with self.assertRaises(ICE):
-            doc.createDocumentType(badName, "", "")
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             doc.createEntityReference(badName, "\u2022")
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             doc.createProcessingInstruction(badName, "p i d a t a ")
 
         self.XX(n0._addNamespace(name, uri=""))
@@ -812,51 +851,51 @@ class testByMethod(MyTestCase):
         self.XX(n0.lookupNamespaceURI(prefix))
         self.XX(n0.getElementById(badName))  # ???
         fo = FormatOptions(indent="____", quoteChar="'", newl="\r\n")
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             fo.setInlines([ badName ])
 
        #DBG.dumpNode(n1, "n1 got attrs?")
-        self.FA(n1.hasAttributes())
-        with self.assertRaises(ICE):
+        self.assertFalse(n1.hasAttributes())
+        with self.assertRaises(ICharE):
             n0.hasAttribute(badName)
-        #with self.assertRaises(ICE): n0.hasAttributeNS(self.dc.ns_uri, badName)
+        #with self.assertRaises(ICharE): n0.hasAttributeNS(self.dc.ns_uri, badName)
 
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             n0.setAttribute(badName, self.dc.at_value2)
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             n0.getAttribute(badName, castAs=str)
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             n0.removeAttribute(badName)
 
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             n0.setAttributeNS(self.dc.ns_uri, badName, self.dc.at_value2)
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             n0.getAttributeNS(self.dc.ns_uri, badName)
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             n0.removeAttributeNS(self.dc.ns_uri, badName)
 
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             self.n.doc.createAttribute(badName, "1")
-        #with self.assertRaises(ICE): n0.setAttributeNode(anode)
-        #with self.assertRaises(ICE): n0.getAttributeNode(badName)
-        #with self.assertRaises(ICE): n0.removeAttributeNode(anode)
-        #with self.assertRaises(ICE): n0.setAttributeNodeNS(self.dc.ns_uri, anode)
-        with self.assertRaises(ICE):
+        #with self.assertRaises(ICharE): n0.setAttributeNode(anode)
+        #with self.assertRaises(ICharE): n0.getAttributeNode(badName)
+        #with self.assertRaises(ICharE): n0.removeAttributeNode(anode)
+        #with self.assertRaises(ICharE): n0.setAttributeNodeNS(self.dc.ns_uri, anode)
+        with self.assertRaises(ICharE):
             n0.getAttributeNodeNS(self.dc.ns_uri, badName)
 
         nnm = NamedNodeMap()
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             nnm.setNamedItem(badName, "999")
-        with self.assertRaises(ICE):
+        with self.assertRaises(ICharE):
             nnm.setNamedItemNS(self.dc.ns_uri, badName, self.dc.at_value2)
 
-        #self.NONE(nnm.getNamedItem, badName)
-        #self.NONE(nnm.getNamedItemNS(self.dc.ns_uri, badName))  # TODO Finish/enable
-        self.NONE(nnm.getNamedValue(badName))
-        #self.NONE(nnm.getNamedValueNS(self.dc.ns_uri, badName))
+        #self.assertIsNone(nnm.getNamedItem, badName)
+        #self.assertIsNone(nnm.getNamedItemNS(self.dc.ns_uri, badName))  # TODO Finish/enable
+        self.assertIsNone(nnm.getNamedValue(badName))
+        #self.assertIsNone(nnm.getNamedValueNS(self.dc.ns_uri, badName))
         with self.assertRaises(KeyError):
             nnm.removeNamedItem(badName)
-        #with self.assertRaises(ICE): nnm.removeNamedItemNS(self.dc.ns_uri, badName)
+        #with self.assertRaises(ICharE): nnm.removeNamedItemNS(self.dc.ns_uri, badName)
 
     @unittest.skip
     def testgetitem(self):
@@ -885,15 +924,15 @@ class testByMethod(MyTestCase):
             pi._startTag
         with self.assertRaises(AttributeError):
             pi._endTag
-        self.TR(pi.hasChildNodes is False)
-        self.TR(pi.hasAttributes() is False)
-        self.TR(pi.hasAttribute("id") is False)
-        self.TR(pi.count("P") == 0)
-        self.TR(pi.index("P") is None)
-        self.TR(pi.clear() is None)
-        with self.assertRaises(HRE):
+        self.assertTrue(pi.hasChildNodes is False)
+        self.assertTrue(pi.hasAttributes() is False)
+        self.assertTrue(pi.hasAttribute("id") is False)
+        self.assertTrue(pi.count("P") == 0)
+        self.assertTrue(pi.index("P") is None)
+        self.assertTrue(pi.clear() is None)
+        with self.assertRaises(HReqE):
             pi.firstChild  # TODO Huh?
-        with self.assertRaises(HRE):
+        with self.assertRaises(HReqE):
             pi.lastChild
         with self.assertRaises(AttributeError):
             pi.appendChild(el)
@@ -909,23 +948,23 @@ class testByMethod(MyTestCase):
             pi.append(el)
         with self.assertRaises(AttributeError):
             pi.__getitem__(0)
-        self.FA(pi.contains(el))
-        self.EQ(pi.length, 19)
-        self.EQ(pi.nodeValue, pi.data)
+        self.assertFalse(pi.contains(el))
+        self.assertEqual(pi.length, 19)
+        self.assertEqual(pi.nodeValue, pi.data)
 
         with self.assertRaises(AttributeError):
             comm._startTag
         with self.assertRaises(AttributeError):
             comm._endTag
-        self.TR(comm.hasChildNodes is False)
-        self.TR(comm.hasAttributes() is False)
-        self.TR(comm.hasAttribute("id") is False)
-        self.TR(comm.count("P") == 0)
-        self.TR(comm.index("P") is None)
-        self.TR(comm.clear() is None)
-        with self.assertRaises(HRE):
+        self.assertTrue(comm.hasChildNodes is False)
+        self.assertTrue(comm.hasAttributes() is False)
+        self.assertTrue(comm.hasAttribute("id") is False)
+        self.assertTrue(comm.count("P") == 0)
+        self.assertTrue(comm.index("P") is None)
+        self.assertTrue(comm.clear() is None)
+        with self.assertRaises(HReqE):
             comm.firstChild
-        with self.assertRaises(HRE):
+        with self.assertRaises(HReqE):
             comm.lastChild
         with self.assertRaises(AttributeError):
             comm.appendChild(el)
@@ -941,23 +980,23 @@ class testByMethod(MyTestCase):
             comm.append(el)
         with self.assertRaises(AttributeError):
             comm.__getitem__(0)
-        self.FA(comm.contains(el))
-        self.EQ(comm.length, 19)
-        self.EQ(comm.nodeValue, comm.data)
+        self.assertFalse(comm.contains(el))
+        self.assertEqual(comm.length, 19)
+        self.assertEqual(comm.nodeValue, comm.data)
 
         with self.assertRaises(AttributeError):
             text._startTag
         with self.assertRaises(AttributeError):
             text._endTag
-        self.TR(text.hasChildNodes is False)
-        self.TR(text.hasAttributes() is False)
-        self.TR(text.hasAttribute("id") is False)
-        self.TR(text.count("P") == 0)
-        self.TR(text.index("P") is None)
-        self.TR(text.clear() is None)
-        with self.assertRaises(HRE):
+        self.assertTrue(text.hasChildNodes is False)
+        self.assertTrue(text.hasAttributes() is False)
+        self.assertTrue(text.hasAttribute("id") is False)
+        self.assertTrue(text.count("P") == 0)
+        self.assertTrue(text.index("P") is None)
+        self.assertTrue(text.clear() is None)
+        with self.assertRaises(HReqE):
             text.firstChild
-        with self.assertRaises(HRE):
+        with self.assertRaises(HReqE):
             text.lastChild
         with self.assertRaises(AttributeError):
             text.appendChild(el)
@@ -973,23 +1012,23 @@ class testByMethod(MyTestCase):
             text.append(el)
         with self.assertRaises(AttributeError):
             text.__getitem__(0)
-        self.FA(text.contains(el))
-        self.EQ(text.length, 19)
-        self.EQ(text.nodeValue, text.data)
+        self.assertFalse(text.contains(el))
+        self.assertEqual(text.length, 19)
+        self.assertEqual(text.nodeValue, text.data)
 
         with self.assertRaises(AttributeError):
             cdata._startTag
         with self.assertRaises(AttributeError):
             cdata._endTag
-        self.TR(cdata.hasChildNodes is False)
-        self.TR(cdata.hasAttributes() is False)
-        self.TR(cdata.hasAttribute("id") is False)
-        self.TR(cdata.count("P") == 0)
-        self.TR(cdata.index("P") is None)
-        self.TR(cdata.clear() is None)
-        with self.assertRaises(HRE):
+        self.assertTrue(cdata.hasChildNodes is False)
+        self.assertTrue(cdata.hasAttributes() is False)
+        self.assertTrue(cdata.hasAttribute("id") is False)
+        self.assertTrue(cdata.count("P") == 0)
+        self.assertTrue(cdata.index("P") is None)
+        self.assertTrue(cdata.clear() is None)
+        with self.assertRaises(HReqE):
             cdata.firstChild
-        with self.assertRaises(HRE):
+        with self.assertRaises(HReqE):
             cdata.lastChild
         with self.assertRaises(AttributeError):
             cdata.appendChild(el)
@@ -1005,25 +1044,25 @@ class testByMethod(MyTestCase):
             cdata.append(el)
         with self.assertRaises(AttributeError):
             cdata.__getitem__(0)
-        self.FA(cdata.contains(el))
-        self.EQ(cdata.length, 19)
-        self.EQ(cdata.nodeValue, cdata.data)
+        self.assertFalse(cdata.contains(el))
+        self.assertEqual(cdata.length, 19)
+        self.assertEqual(cdata.nodeValue, cdata.data)
 
         #with self.assertRaises(AttributeError):
         #    chardata._startTag
         #with self.assertRaises(AttributeError):
         #    chardata._endTag
-        self.TR(chardata.hasChildNodes is False)
-        self.TR(chardata.hasAttributes() is False)
-        self.TR(chardata.hasAttribute("id") is False)
-        self.TR(chardata.count("P") == 0)
-        self.TR(chardata.index("P") is None)
-        self.TR(chardata.clear() is None)
+        self.assertTrue(chardata.hasChildNodes is False)
+        self.assertTrue(chardata.hasAttributes() is False)
+        self.assertTrue(chardata.hasAttribute("id") is False)
+        self.assertTrue(chardata.count("P") == 0)
+        self.assertTrue(chardata.index("P") is None)
+        self.assertTrue(chardata.clear() is None)
 
         newch = self.n.doc.createTextNode("Zoot")
-        with self.assertRaises(HRE):
+        with self.assertRaises(HReqE):
             chardata.firstChild
-        with self.assertRaises(HRE):
+        with self.assertRaises(HReqE):
             chardata.lastChild
         with self.assertRaises(AttributeError):
             chardata.appendChild(newch)
@@ -1039,9 +1078,9 @@ class testByMethod(MyTestCase):
             chardata.append(newch)
         with self.assertRaises(AttributeError):
             chardata.__getitem__(0)
-        self.FA(chardata.contains(el))
-        self.EQ(chardata.length, 0)
-        self.EQ(chardata.nodeValue, chardata.data)
+        self.assertFalse(chardata.contains(el))
+        self.assertEqual(chardata.length, 0)
+        self.assertEqual(chardata.nodeValue, chardata.data)
 
 
 if __name__ == '__main__':
