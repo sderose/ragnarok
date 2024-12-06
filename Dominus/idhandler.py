@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Any
 import re
 
 from basedomtypes import NMTOKEN_t
-from basedomtypes import HReqE
+from basedomtypes import HReqE, NSE
 from domenums import RWord
 from xmlstrings import XmlStrings as XStr, CaseHandler
 #from basedom import Node, Document, Element, Attr
@@ -85,7 +85,7 @@ class IdHandler:
             return 0
         nAdded = 0
         for aname, adef in ad.items():
-            if (adef.atype != "ID"): continue
+            if adef.atype != "ID": continue
             self.addAttrChoice(ens=NS_ANY, ename=adef.name,
                 ans=adef.ans, aname=aname)
             nAdded += 1
@@ -142,33 +142,55 @@ class IdHandler:
         print("Choices:\n" + self.choicestostring())
         return self.theIndex
 
-    def removeElementFromIndex(self, node:'Node') -> None:
+    def removeElementFromIndex(self, node:'Element') -> None:
         idKey = self.getIdKey(node)
         if idKey and idKey in self.theIndex: del self.theIndex[idKey]
 
-    def getIdKey(self, node:'Node') -> Any:
+    def getIdKey(self, node:'Element') -> Any:
         anode = self.getIdAttrNode(node)
         if anode is None: return None
         if self.valgen: val = self.valgen(anode)
-        else: val = anode.value.strip()
+        else: val = anode.nodeValue.strip()
         return val  # TODO Add case-fold support
 
-    def getIdAttrNode(self, node:'Node') -> 'Attr':
-        """Check all the AttrChoices to find the ID (if any) on an element.
+    def getIdAttrNode(self, node:'Element') -> 'Attr':
+        """Check all the attributes ofan element, against their type (if any)
+        and against all the active AttrChoices,
+        to find if any of them is actually an ID.
+        Returns the first ID found.
         TODO: In theory, we needn't stop at just one match....
         """
         if not node.isElement:
             raise HReqE("Looking for ID on non-Element.")
-        if not node.hasAttributes:
+        if not node.hasAttributes():
             return None
-        print("\nStart-tag (ns: %s): %s" % (node.namespaceURI, node.startTag))
-        for tup in self.attrChoices:
-            print(f"  Trying attrChoice {tup.tostring()}.")
-            if tup.ens != NS_ANY and tup.ens != node.namespaceURI: continue
-            if tup.ename != EL_ANY and tup.ename != node.nodeName: continue
-            anode = node.getAttributeNodeNS(tup.ans, tup.aname)
-            print("    AttrChoice {tup.tostring()} matches attr '{anode}'.")
-            if anode: return anode
+        print(f"\nStart-tag (ns: {node.namespaceURI}): {node.startTag}.")
+        if node.hasAttribute("xml:id"):
+            print("    Got xml:id")
+            return node.getAttributeNode("xml:id")
+        for _aname in node.attributes:
+            anode = node.getAttributeNode(_aname)
+            print(f"  Trying attr {anode}.")
+            if anode.attrType == "ID":
+                return anode
+            for acTup in self.attrChoices:
+                print(f"  Trying attrChoice {acTup.tostring()}.")
+                if acTup.aname != anode.nodeName:
+                    continue
+                if acTup.ans not in [ NS_ANY, None, "" ]:
+                    anodeNS = anode.namespaceURI
+                    if (anodeNS is None): raise NSE(
+                        "Cannot map attribute {anode.nodeName}'s ns prefix.")
+                    if acTup.ans != anodeNS: continue
+                if acTup.ename not in [ EL_ANY, None, "" ]:
+                    if acTup.ename != node.nodeName: continue
+                if acTup.ens not in [ NS_ANY, None, "" ]:
+                    elemNS = anode.ownerElement.namespaceURI
+                    if (elemNS is None): raise NSE(
+                        "Cannot map element {anode.ownerElement.nodeName}'s ns prefix.")
+                    if acTup.ens != elemNS: continue
+                print(f"    AttrChoice {acTup.tostring()} matches attr '{anode.name}'.")
+                return anode
         return None
 
     def getIndexedId(self, idval:str) -> 'Element':

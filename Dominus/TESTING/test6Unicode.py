@@ -8,13 +8,10 @@ import re
 import unicodedata
 
 #pylint: disable=W0401,W0611,W0621
-from basedomtypes import HierarchyRequestError
-from basedomtypes import InvalidCharacterError
-from basedomtypes import NotSupportedError
-#from basedomtypes import NotFoundError
-from domenums import NodeType
+from basedomtypes import HReqE, ICharE, NSuppE  # NotFoundError
+from basedomtypes import NodeType
+from xmlstrings import XmlStrings as XStr,
 from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
-from xmlstrings import XmlStrings as XStr
 
 import basedom
 from basedom import DOMImplementation, FormatOptions
@@ -22,9 +19,6 @@ from basedom import PlainNode, Node, Document, Element, Attr
 from basedom import CharacterData, Text, NamedNodeMap, NodeList
 
 from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
-
-HRE = HierarchyRequestError
-ICE = InvalidCharacterError
 
 
 class MyTestCase(unittest.TestCase):
@@ -300,7 +294,7 @@ class testByMethod(MyTestCase):
             if (not XStr.isXmlName(c+"restOfName")):
                 failed.append("U+%04x" % (ord(c)))
         if (failed):
-            self.RZ(ICE, print("Chars should be namestart but aren't: [ %s ]"
+            self.RZ(ICharE, print("Chars should be namestart but aren't: [ %s ]"
                 % (" ".join(failed))))
 
         failed = []
@@ -308,7 +302,7 @@ class testByMethod(MyTestCase):
             if (XStr.isXmlName(c+"restOfName")):
                 failed.append("U+%04x" % (ord(c)))
         if (failed):
-            self.RZ(ICE, print("Chars should not be namestart but are: [ %s ]"
+            self.RZ(ICharE, print("Chars should not be namestart but are: [ %s ]"
                 % (" ".join(failed))))
 
         self.TR(XStr.isXmlName(allNS*2))

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE book SYSTEM "-//OASIS//DTD DocBook XML V4.5//EN" []>
+<book
+    xmlns:foo="http://example.com/namespaces/foo"
+    xmlns:xml="http://www.w3.org/XML/1998/namespace"
+    xmlns:html="http://www.w3.org/1999/xhtml"
+>
+  <bookinfo>
+    <title>My Title</title>
+  </bookinfo>
+
+  <chapter class="important" xmlns=foo>
+    <title>Introduction</title>
+    <p xml:id="p_100">Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do</p>
+
+    <xml:p id="p_101">eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut</p>
+
+    <p foo:id="p_101">enim ad minim veniam, <i xml:id="p_101a">quis</i> nostrud
+    exercitation ullamco laboris</p>
+
+    <p xmlns="http://www.w3.org/XML/1998/namespace" id="p_103">nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in</p>
+
+    <p Id="p_104">reprehenderit in voluptate velit esse cillum dolore eu fugiat</p>
+
+    <p html:name="p_205" html:id="p_206">nulla pariatur. Excepteur sint occaecat cupidatat non proident,</p>
+
+    <sec xmlns="http://www.w3.org/1999/xhtml">
+        <p name="p_205" id="p_206">nulla pariatur. Excepteur sint occaecat cupidatat non proident,</p>
+
+    <sec xmlns="http://www.w3.org/1999/xhtml">
+        <p name="p_205" id="p_206">nulla pariatur. Excepteur sint occaecat cupidatat non proident,</p>
+
+    <sec xmlns:html2="http://www.w3.org/1999/xhtml">
+        <p html2:name="p_205" html:id="p_206">nulla pariatur. Excepteur sint occaecat cupidatat non proident,</p>
+
+    <p foo:id="p_106">sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+  </chapter>
+</book>

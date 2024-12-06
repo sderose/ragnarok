@@ -41,7 +41,7 @@ class TestDOMNode(unittest.TestCase):
         aname = "class"
         self.assertFalse(child.hasAttributes())
         child.setAttribute(aname, "x")
-        self.assertTrue(child.hasAttributes)
+        self.assertTrue(child.hasAttributes())
         child.setAttribute(aname, "y")
         self.assertTrue(child.hasAttribute(aname))
         self.assertEqual(child.getAttribute(aname), "y")

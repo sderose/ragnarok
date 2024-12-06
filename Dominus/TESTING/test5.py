@@ -606,7 +606,7 @@ class testByMethod(unittest.TestCase):
 
         # Check that getElementById() can see them all
         self.assertIsInstance(doc.idHandler.theIndex, dict)
-        self.assertGreater(len(doc.idHandler.theIndex), 100)
+        self.assertGreater(len(doc.idHandler.theIndex), fan)
         idsFound = 0
         for idVal, theNode in idMap.items():
             self.assertFalse(idVal is None or theNode is None)
@@ -711,7 +711,7 @@ class testByMethod(unittest.TestCase):
             n2.setAttributeNS("http://derose.net/namespaces/test", f"attr_{i}", val)
         self.assertEqual(len(n1.attributes), nAttrs)
 
-        self.assertTrue(n1.hasAttributes)
+        self.assertTrue(n1.hasAttributes())
         self.assertTrue(n0.hasAttribute(self.dc.at_name2))
         self.assertFalse(n0.hasAttribute("notMyAttributeFerSure"))
         self.XX(n0.hasAttributeNS(self.dc.ns_uri, self.dc.at_name2))

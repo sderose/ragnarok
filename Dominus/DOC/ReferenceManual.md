@@ -5,9 +5,9 @@
 This is a pure python implementation of several tools for XML, HTML, and
 related languages. It includes:
 
-    * A more Pythonic "DOM++" interface
+    * A more Pythonic/modern "DOM++" interface
     * An XML/HTML parser with support for DTDs, attribute defaults,
-internal and external entities, configrable case-folding, etc.
+internal and external entities, configurable case-folding, etc.
     * Convenience features like being able to turn on all the ISO/HTML
 named special characters in one step
     * DTD validation (plus some XSD additions)
@@ -21,8 +21,9 @@ including one that produces Canonical XML.
 This package focuses on a few main goals:
 
 * Pythonic -- for example, you can get at the children of any node
-with [] (and do the other Python list operations) and Enums and generators
-are available where appropriate.
+with [], and do the other Python list operations. Enums and generators
+are available where appropriate, everything is type-hinted and has unit-tests,
+and so on.
 
 * Fast -- my benchmarks show the DOM replacement about 40% faster than minidom.
 
@@ -51,8 +52,10 @@ Extensions typically sit inside one such method each, under one "if" to
 test if they are active. It's really easy to experiment, and with the test suite
 you're likely to catch it if something breaks.
 
-It also provides many separately-choosable extensions. All of them are
-off by default, so unless you specifically turn them on the package
+* Provides many separately-choosable extensions. All of them that affect
+what/how XML is parsed (as opposed, say, to added optional arguments
+to methods), are off by default.
+So unless you specifically turn them on the package
 follows all the normal rules. The mechanism for turning them on goes inside
 the document and ensures that an unaware XML processor will find a WF error
 and stop (rather than incorrectly processing a document that uses extensions).
@@ -60,23 +63,24 @@ and stop (rather than incorrectly processing a document that uses extensions).
 
 ===Extensions related to attributes===
 
-    * attribute datatypes (optionally, including all the XSD builtin types,
-whose names can also be specified in ATTLIST declarations). With XSD float,
+    * attribute datatypes (optionally including all the XSD builtin types,
+whose names can also be specified in ATTLIST declarations). With XSD floats,
 the IEEE special values such as NaN and -Inf are recognized.
     * Unquoted attributes where the value is an XML NAME or NUMBER.
     * Boolean attributes abbreviated to just +name or -name
     * The very first use of an attribute may use "!=" instead of "=", to
 make the given value the default thereafter.
-    * The API provides a notion of inherited attributes, so you can request
+    * The API supports a notion of inherited attributes, so you can request
 a named attribute and get the value from the nearest ancestor (or self) with it.
-    * Methods to get attributes can be passes a "default" argument, which is
+    * Methods to get attributes can be passed a "default" argument, which is
 returned if the requested attribute does not exist.
-    * Id attributes have additional features available throughout the system.
+    * Id attributes have optional features available throughout the system.
 In short:
     ** You can have multiple independent ID spaces.
     ** A few simple types of compound IDs are defined, such as IDs that
 are accumulated from the like-named attribute on all ancestors, and only
-need to be unique in that aggregate form.
+need to be unique in that aggregate form, and "COID"s, with the specific
+intent of support co-indexing of elements for overlapping and discontiguous markup.
     ** Flexible choice of attributes to be treated as IDs:
     AttrChoice = namedtuple("AttChoice", [
         "ens",     # Element's namespace URI, or "##any"
@@ -93,14 +97,15 @@ need to be unique in that aggregate form.
 and predefines DTD, XSD, RelaxNG, and Schematron.
     * There is a new validator that leverages Python regex processing.
     * The API suppports getting at schema/DTD info, and setting it up
-or changing it at will.
+or changing it at will (for example, even without a DTD you can tell the API
+that certain attributes are IDs, ints, have defaults, etc.).
     * Loaded doctypes retain the order of declarations so exports can mimic it.
     * ELEMENT and ATTLIST declarations allow name-groups, so you can declare
 multiple names at once.
     * Element declarations accept not just the keywords EMPTY and ANY, but
 also ANY_ELEMENTS (which is like ANY but does not include #PCDATA).
     * The usual *, +, and ? repetition operators in content models
-are joined by {min,max} (as in PCRE regexes and like XML Schema min/maxOccurs).
+are joined by {min,max} (like PCRE regexes and like XML Schema min/maxOccurs).
     * A new <!IDSPACE spaceName attrName> to declare what attribute
 name (other than the special xml:id case) holds IDs. 'spaceName' can be
 used to define multiple, non-interacting ID spaces (that is, IDs in one
@@ -122,6 +127,8 @@ make it much easier to map between XSD and DTD.
 names, entity names, and reserved words (like #PCDATA). There is a choice of
 folding to upper, to lower, or via case_fold, all of which have slightly
 different effects in Unicode edge cases.
+    * Whitespace can be switched between the definitions used in XML, HTML,
+WHATWG, etc.), so tokenizing and normalizing List attributes adjusts.
     * SYSTEM identifiers can have multiple following qlits, to be tried in
 order. This is because I constantly have to swap them out when sending
 documents back and forth with colleagues; this way we can both put our paths
@@ -134,8 +141,8 @@ character.
 
 A few accommodations may be provided for specialized applications involving
 markup overlap.
-    * You can choose "olist" mode, in which is it possible to close any
-element type that is open, not just the current element. The closed element
+    * You can switch the parser "olist" mode, in which is it possible to close
+any element type that is open, not just the current element. The closed element
 is removed from the list of open elements (hence the name), but the list
 is not popped back to there. This allows certain kinds of overlapping
 structures, discussed in various papers on the MECS system.
@@ -158,27 +165,25 @@ items (tbd).
 
 * If-conditions and return values not parenthesized; for and while usually are.
 
-* If there a bunch of inits together, I line up the values for readability.
+* If there is a bunch of inits together, I line up the values for readability.
 Yeah, I know I'm weird on that.
 
 
 ===Names===
 
-Files are all lower case, classes are camelcase with initial cap.
+Filenames are all lower case, classes are camelcase with initial cap.
 For example, class XmlStrings is found in xmlstrings.py.
 
 * Names with acronyms camelcase them (such as "XmlStrings" and "Id"), unless there's
 a preexisting one to follow (such as innerHTML going to innerXML, not innerXml).
 
-* Names I find too long (such as "createProcessingInstruction" normally
-have a synonym (such as "createPI").
+* Names I find too long (such as "createProcessingInstruction"
+have synonyms (such as "createPI").
 
 * Attr vs. Attribute
 
-* P...I.... vs. Proc vs. PI
-
 * Variables for character lists, syntactic constructs, etc.
-(such as namechars, spacechars, etc.,
+(such as namechars, spacechars, etc.:
 
 ** Plain lists of characters as strings end in "_list".
 
@@ -195,8 +200,7 @@ correspond to XSD built-in datatypes) end in "_t".
     DOMImplementation_P --> DOMImplementation
     XMLParser_P --> XMLParser
 
-TODO: I may switch PlainNode to be a protocol class (and rename it
-Node_P).
+TODO: I may switch PlainNode to be a protocol class or ABC.
 
 
 ===Types===
@@ -205,7 +209,7 @@ Node_P).
 
 * XSD types are defined as NewTypes (in typesForHints.py). They are named
 by the (casely-correct) XSD names, plus "_t" to be clear they're types.
-Regexes to match them (ending in "_re"), constraints, etc. are defined in documentType.py.
+Regexes to match them (ending in "_re"), constraints, etc. are defined in xmlstrings.py.
 
 
 ===Classes and subclasses===
@@ -217,12 +221,12 @@ this helpful for readability.
 * Methods that are not part of DOM proper, are tagged by a comment on their
 "def" lines, saying where they're from.
 
-    def isElement(self) -> bool:  # HERE
-    def innerXML(self) -> str:  # HTML (even though the name there is innerHTML)
-    def Text(text:str) -> TextNode:  # WHATWG
-    def checkNode(self):  # DBG
-    def tail(self) -> str:  # ET
-    def writexml(self): # MINIDOM
+    isElement(self) -> bool
+    innerXML(self) -> str
+    Text(text:str) -> TextNode
+    checkNode(self)
+    tail(self) -> str
+    writexml(self): # MINIDOM
 
 This is not done everywhere yet, and I'm debating how best to flag methods
 that are in (say) DOM but here added to other classes, methods that add new
@@ -240,81 +244,191 @@ same but with "_" added on the front.
 
 ===Enumerated options===
 
-* Keyword options are generally an Enum (defined in domenums.py except for
-some done locally where used). Methods that take them accept
-either an instance of the enum, or the equivalent string.
+* Keyword options that take reserved string values here use an Enum
+(defined in basedomtypes.py except for some done locally where used).
+They subclass from FlexibleEnu, so that methods that take them accept
+either an instance of the enum, or the equivalent string or value:
+E.A form, but also E("A"), E(E.A), and even E(value) for the value of E.A.
+Mainly this is so callers don't have to care which they use, while having
+backward compatibility.
 
 
+========================================================================
 ===Class overview: basedom.py===
 
-(standard DOM methods are not listed here)
-
+========================================================================
 ====class DOMImplementation(DOMImplementation_P)====
     name = "BaseDOM"
     version = "0.1"
 
+    createDocument(self, namespaceURI:str=None, qualifiedName:NMTOKEN_t=None,
+        doctype:'DocumentType'=None) -> 'Document':
+    createDocumentType(self, qualifiedName:QName_t,
+        publicId:str, systemId:str, htmlEntities:bool=False) -> 'DocumentType':
+    getImplementation() -> type:
+    parse(self, f:Union[str, IO], parser=None, bufsize:int=None) -> 'Document':
+    parse_string(self, s:str, parser=None) -> 'Document':
+
+
+========================================================================
 ====class FormatOptions====
 
     (see below)
 
 
+========================================================================
 ====class NodeList(list)====
 
-This is essentially just a list of Node. It is never the parent of those
+This is essentially just a list of Node objects. It is never the parent of those
 nodes. However, as with Node, __contains__() is non-recursive, while
-contains() is recursive, and synonymous with
+contains() is recursive, and synonymous with hasDescendant().
 
 
+========================================================================
 ====class PlainNode(list)====
 
-This is an abstract superclass for Node, which is limited to basic DOM
-functionality.
+This is an abstract superclass for Node, which is mostly limited to basic DOM
+functionality (not extensions). However, it does include some mainly-internal
+methods such as getChildIndex(), which it needs as infrastructure.
 
-    self.ownerDocument:Document
-    self.parentNode:Node
-    self.nodeType:NodeType = NodeType.NONE
-    self.nodeName:NmToken_t
-    self.inheritedNS:dict
-    self.userData:dict
-    self.prevError:str (really just for debugging)
+    ELEMENT_NODE, etc.
+    ABSTRACT_NODE (0) is used for PlainNode and Node instances)
 
-This has a few extra methods:
+    ownerDocument:Document
+    parentNode:Node
+    nodeType:NodeType = NodeType.NONE
+    nodeName:NmToken_t
+    inheritedNS:dict
+    userData:dict
+    prevError:str (really just for debugging)
+
+Note: There are no attributes or other Element-specific fields here.
+
+Constructor
+    __init__(self, ownerDocument=None, nodeName:NMTOKEN_t=None)
+
+Predicates
+    canHaveChildren(self) -> bool
+    __contains__(self, item:Node) -> bool
+    contains(self, other:Node) -> bool
+    hasDescendant(self, other:Node) -> bool
+    isSameNode(self, n2) -> bool
+    isEqualNode(self, n2) -> bool
+
+Properties
+    (property) prefix(self) -> str
+    (property) localName(self) -> str
+    (property) namespaceURI(self) -> str
+    (property) childNodes(self) -> Node (this just returns self!)
+    (property) isConnected(self) -> bool
+    (property) nodeValue(self) -> str
+    (property) nodeValue(self, newData:str="") -> str (always returns None for PlainNode)
+    (property) parentElement(self) -> Node
+
+Sibling properties -- Profiling found that it takes more time to maintain
+a doubly-linked list of siblings than to just look them up in the parent
+via getChildIndex() when needed, unless the tree gets extremely bushy.
+Also, a large share of nextSibling/previousSibling use is for iteration,
+which can be done easily and quickly via "for childNode in myNode" or
+"for i in range(len(self))" or similar.
+    (property) nextSibling(self) -> Node
+    (property) previousSibling(self) -> Node
+
+Changing to explicit sibling links should only require changing the constructors,
+insert(), and remove(). They could also use lazy setting (say,
+only setting them when insert() adds to a very wide node):
+    @property
+    nextSibling(self):
+        if hasattr(self, '_NSib'): return self._NSib
+        n = self.getChildIndex()
+        if n < len(self.parentNode)-1: return self.parentNode[n+1]
+        return None
+
+Child-list methods
+    __setitem__(self, picker:Union[int, slice], value: Node) -> None
+    __getitem__(self, picker:Any) -> Union[Node, 'NodeList']
+    __filter__(self, f:str) -> Any (see below)
+    getChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,noWSN:bool=False) -> int
+    getRChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,noWSN:bool=False) -> int
+    appendChild(self, newChild:Node) -> None
+    append(self, newChild:Node) -> None
+
+Several methods accept either an actual child Node, or a signed int position.
+    insertBefore(self, newChild:Node, oldChild:Union[Node, int]) -> None
+    insertAfter(self, newChild:Node, oldChild:Union[Node, int]) -> None
+    removeChild(self, oldChild:Union[Node, int]) -> Node
+    _expandChildArg(self, ch:Union[Node, int]) -> (int, Node)
+-- given either a child node or an int, this returns both.
+    _normalizeIntIndex(self, key:int)
+-- given a signed int index, this returns the non-negative form.
+
+    insert(self, i:int, newChild:Node) -> None
+    clear(self) -> None
+    pop(self, i:int=-1) -> Node
+    remove(self, x:Any=None) -> Node
+    reverse(self) -> None
+    sort(self, key:Callable=None, reverse:bool=False) -> None
+
+These are standard list methods, exceot that those which would have been
+in-place (the dunders) return NodeLists instead. This is because you can't
+put the identical node at multiple places in the same tree):
+    reversed(self) -> NodeList
+    sorted(self, key:Callable=None, reverse:bool=False) -> NodeList
+    __imul__(self, x) -> 'NodeList'
+    __rmul__(self, x) -> 'NodeList'
+    __add__(self, other) -> 'NodeList'
+    __iadd__(self, other) -> 'NodeList'
+
+Other mutators
+    cloneNode(self, deep:bool=False) -> Node
+    normalize(self) -> None
+    _resetinheritedNS(self) -> None
+-- this is an internal method to manage namespace inheritance when elements
+are moved to new contexts.
+    _filterOldInheritedNS(self, newChild:'Element') -> None
+
+Other
+    writexml(self, writer:IO,indent:str="", addindent:str="", newl:str="",encoding:str=None, standalone:bool=None) -> None
+    count(self, x:Any) -> int
+    index(self, x, start:int=None, end:int=None) -> int
+    _isOfValue(self, value:Any) -> bool
+    __mul__(self, x:int) -> 'NodeList'
+    getInterface(self) -> None (raises NotSupportedError)
+    isSupported(self) -> bool (raises NotSupportedError)
+    unlink(self, keepAttributes:bool=False) -> None
+
+Notes on [] support
 
     __setitem__() is overridden so it correctly updates the old and new
-nodes (for example, changing parentNode, siblings, etc.). Thus you can
-just do item/slice assignment to modify a nodes childNodes list.
-__setitem__ accepts signed integer indexes, or Python slice objects.
+nodes (for example, changing parentNode). Thus you can
+just do item/slice assignment to modify a node's childNodes list.
+__setitem__ accepts signed integer indexes or Python slice objects.
 It uses replaceChild(), removeChild(), and insert() to do the real work.
 
     __getitem__() is overridden as well. It doesn't have to mess with
-parentNode etc (because none of that changes), but does for adding extensions
-which allow other things inside the [].
-For example:
+parentNode, but does add extensions which allow other things besides integers
+and integer slices inside the [].
+For discussion of this approach see
+DeRose, Steven J. “JSOX: A Justly Simple Objectization for XML.”
+Balisage 2014, Washington, DC, August 5-8, 2014.
+https://doi.org/10.4242/BalisageVol13.DeRose02.
+
+Some examples:
 
     myNode["para"]         [ x for x in myNode if x.isElement and x.nodeName=="para" ]
     myNode["para":2:-1]    [ x for x in myNode if x.isElement and x.nodeName=="para" ][2:-1]
     myNode[2:-1:"para"]    [ x for x in myNode[2:-1] if x.isElement and x.nodeName=="para" ]
     myNode["*"]            [ x for x in myNode if x.isElement ]
-    myNode["#text"]        [ x for x in myNode if x.isText ]
+    myNode["#text"]        [ x for x in myNode if x.isText ] -- and #pi, etc.
     myNode["@class"]       myNode.getAttribute("class")
 
 CSS locators would want to include #id, but that would conflict with #text etc.
 For that any other cases, something would have to indicate the right interpretation.
-Many models are possible:
-    URI-like:  ["css:#chap1"] or ["css":"#chap1"] or ["css://#chap1"]
-    XPointer-like:  ["css(#chap1)"]
+For now I'm going with a URL-like scheme prefix, separated by a colon:
+    ["css:#chap1"]
+    ["xpath://para[@class='foo']
 
-
-Further generalization could be added, but would have to avoid syntax conflicts.
-One possibility is having a prefix, maybe like ["css(ul li[secret=0])"].
-It may also be feasible to allow
-registering a callback so users of the library can add their own method(s).
-As elsewhere, no extension (beyond the usual numeric indexes and slices)
-is on by default, and turning this extension on only gets you the cases
-exemplified above (for discussion of this approach see
-DeRose, Steven J. “JSOX: A Justly Simple Objectization for XML.”
-Balisage 2014, Washington, DC, August 5-8, 2014.
-https://doi.org/10.4242/BalisageVol13.DeRose02.
+Such scheme names and handlers can be registered via Document.registerFilterScheme().
 
     getChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,
         noWSN:bool=False) -> int
@@ -328,7 +442,7 @@ nodes in counting.
     getRChildIndex() -- just like getChildIndex() but counting back from
 the end and returning a negative index.
 
-    _expandChildArg(self, ch:Union['Node', int]) -> (int, 'Node' -- Called
+    _expandChildArg(self, ch:Union[Node, int]) -> (int, Node -- Called
 on a parent Node, it takes either a child Node per se (like removeChild()),
 or the (signed) integer index of the relevant child. It returns both, and is
 just a handy way for other methods to accept either and then use whichever they
@@ -337,65 +451,85 @@ for it among its sibling; but in most cases you probably had to do that
 anyway. If the caller happens to know and pass the int, the time is saved;
 plus it makes many normal list operations work fine on Node.
 
-    insertBefore()
-    insertAfter() -- added just for symmetry.
-    removeChild()
+    insertBefore(self, newChild:Node, oldChild:Union[Node, int]) -> None
+    insertAfter(self, newChild:Node, oldChild:Union[Node, int]) -> None -- added just for symmetry.
+    removeChild(self, oldChild:Union[Node, int]) -> Node
 
-All these can take the actual child Node (as if DOM), or the index. Indexes
-work as for regular Python lists. For example, although appendChild() is
-of course provided you never need it; you can just insert at any position
-greater than the length.
-
-The usual Python list operations work, and do the correct patching of
-siblings and such: count, index, append, insert, clear, pop, remove,
-reverse, reversed (which necessarily has to clone a copy), sort,
-__mul__, __rmul__, __add__, __iadd__
-
-    unlink() -- like minidom, and for the same reason.
+All these can take the actual child Node (as if DOM), or the index as
+described above. Thus although appendChild() is provided you never need it;
+you can just insert at any position greater than the length as with regular lists.
 
 
+========================================================================
 ====class Node(PlainNode)====
 
-This is the main (still abstract) Node class, from which other Node types
-classes are derived. Beyond PlainNode, it add the NodeType constant
-and adds lots of extensions.
+This is the main (still abstract) Node class, from which other Node type
+classes are derived. Beyond PlainNode, it adds lots of extensions.
+
+Properties
+    length(self) -> int:
+    depth(self) -> int:
+    previous(self) -> Node
+    next(self) -> Node
+    hasChildNodes(self) -> bool:
+
+Node status checks -- these properties make it shorter/more readable than
+saying things like "if myNode.nodeType == Node.ELEMENT_NODE...":
+    isElement(self) -> bool:
+    isAttribute(self) -> bool:
+    isText(self) -> bool:
+    isCDATA(self) -> bool:
+    isEntRef(self) -> bool:
+    isPI(self) -> bool:
+    isComment(self) -> bool:
+    isDocument(self) -> bool:
+    isDocumentType(self) -> bool:
+    isFragment(self) -> bool:
+    isNotation(self) -> bool:
+    isWSN(self) -> bool:
+    isWhitespaceInElementContent(self) -> bool:
+    isFirstChild(self) -> bool
+    isLastChild(self) -> bool
+    hasSubElements(self) -> bool
+    hasTextNodes(self) -> bool
+    firstChild(self) -> Node:
+    lastChild(self) -> Node:
+    leftmost(self) -> Node
+    rightmost(self) -> Node
 
     bool() -- Unlike typical Python lists, XML empty elements can have lots
-of data (type, attributes, context,...). So casting them to boolean False
-could be super confusing. Node overrides bool() to extant empty elements do
-not come out the same as None.
+of data (type, attributes, context,...). Empty ones are in principle not
+equivalent. So casting all empty elements to boolean as False (merely because
+they have no children) could be super confusing.
+Node overrides bool() so empty elements do not come out the same as None.
 
     __eq__() and the rest of the comparisons are provided, and use
 document order as the criterion. Since a node can only appear in one place
 in document order, eq and ne also amount to identity comparison.
 
-    __getitem__() is added here, to enable using [] much more flexibly.
-All the usual slicing already works, but this adds selecting child nodes
-by nodeName ("p", "#text", etc), selecting attributes by name ("@id"), etc.
-
-    next() and previous() -- return the specified nodes as defined in XPath.
-
+    nodeNameMatches(self, other) -> bool:
+    textContent(self) -> str
+    textContent(self, newData:str) -> None
     compareDocumentPosition() -- like DOM3
     getRootNode() -- like WHATWG
     isDefaultNamespace() -- like DOM3
+    lookupNamespaceURI(self, prefix:NMTOKEN_t) -> str:
+    lookupPrefix(self, uri:str) -> str:
     prependChild() -- for symmetry with appendChild()
-    removeNode() -- Nodes know where their parent is, so you can call them
-to remove themselves.
 
-    isElement etc. -- shorthand properties for all the NodeTypes
-    isWSN -- is the node a whitespace-only text node?
-    isWhitespaceInElementContent, isFirstChild, hasSubElements, hasTextNodes -- extensions
-    leftmost, rightmost -- return the further descendant along left/right tree edge
+    changeOwnerDocument(self, otherDocument:'Document') -> None:
+    replaceChild(self, newChild:Node, oldChild:Union[Node, int]) -> None:
+    getUserData(self, key:str) -> Any
+    setUserData(self, key:NMTOKEN_t, data:Any, handler:Callable=None) -> None:
+
+Serializers, which all eventually got to toprettyxml():
     outerXML (getter and setter) -- by analogy with HTML DOM
-
-    A variety of serializers, which all eventually got to toprettyxml():
-        collectAllXml(self) -> str
-        __reduce__(self) -> str
-        __reduce__ex__(self) -> str
-        tostring(self) -> str
-        toxml(self, indent
-        tocanonicalxml(self) -> str
-
+    collectAllXml(self) -> str
+    __reduce__(self) -> str
+    __reduce__ex__(self) -> str
+    tostring(self) -> str
+    toxml(self, indent
+    tocanonicalxml(self) -> str
     toprettyxml(self, foptions, **kwargs) -> str -- this takes a wide
 range of options, either as a FormatOptions object (see next) or
 individual keyword parameters.
@@ -415,29 +549,31 @@ getNodeSteps() to obtain an actual Node (or None on failure).
 
     before(), after(), replaceWith() -- per WHATWG
 
-    eachChild((self:'Node', excludeNodeNames:Union[List,str]=None) -> 'Node':
+Generators
+    eachChild((self:Node, excludeNodeNames:Union[List,str]=None) -> Node:
 Generate the children of the Node, in document order.
 If excludeNodeNames is set, skip childNodes
 whose names are list there (in str form, separated by spaces).
 
     eachNode(self, includeAttributes:bool=False,
-        excludeNodeNames:Union[List,str]=None) -> 'Node':
+        excludeNodeNames:Union[List,str]=None) -> Node:
 Like eachChild(), but all descendants. If 'includeAttributes' is set, also
 generate the attributes immediately after the start tag for their element.
 
-    eachSaxEvent(self:'Node', separateAttributes:bool=False,
+    eachSaxEvent(self:Node, separateAttributes:bool=False,
         excludeNodeNames:Union[List,str]=None) -> Tuple:
 Generate tuples that corresponds to the SAX events that would be returned from
-parsing the XML equivalent of the DOM subtree. If 'separateAttributes' is set,
-generate a separate events for each attribute rather than passing all the
-attributes as additional parameters on starttag events. The tuples
+parsing the XML equivalent of the DOM subtree. The tuples
 generated include a SaxEvent instance identifying the type, following by
-the usual data for that event type.
+the usual data for that event type. If 'separateAttributes' is set,
+generate a separate events for each attribute rather than passing all the
+attributes as additional parameters on starttag events.
 
     checkNode(depp:bool=True) -- run a fairly thorough check on the node.
 If 'deep' is set, recurse to check all descendants.
 
 
+========================================================================
 ====class FormatOptions====
 
 This is a big batch of options for how serialization of a DOM to XML happens.
@@ -477,54 +613,163 @@ Ones marked "TODO" are not yet implemented, though the names are known.
     self.translateTable:Mapping = {} # Let caller control escaping
 
 
+========================================================================
 ====class Document====
 
-        nodeType:NodeType
-        nodeName:NmToken_t
-        inheritedNS:Dict
-        doctype:Documenttype
-        documentElement:Node
-        documentElement:Node
+As you'd expect, this is the Document as a whole, not the root element.
+At the moment, the documentElement must be a single Node -- you cannot, for
+example, put comments or PIs before or after it. The XML declaration and Doctype
+are special, and owned by the Document object.
 
-        encoding:str
-        version:str
-        standalone:str
+    doctype:Documenttype
+    documentElement:Node
+    encoding:str
+    version:str
+    standalone:str
+    impl:str = 'BaseDOM'
+    implVersion:str
+    idHandler:IdHandler -- an Object to handler an index of ID values.
+    loadedFrom:str
+    uri:str
+    mimeType:str = 'text/XML'
 
-        impl:str = 'BaseDOM'
-        implVersion:str
-        options:SimpleNameSpace
-        idHandler:IdHandler
-        loadedFrom:str
-        uri:str
-        mimeType:str = 'text/XML'
+    options:SimpleNameSpace -- this controls all the optional features.
+-- They can be set by adding pseudo-addtributes in the XML declaration. This
+put them up front, easy to find; and means that a non-extended XML processor will
+stop immediately (upon seeing non-WF values in there), rather than processing
+the data incorrectly. For example:
+    <!xml version="1.1" encoding="utf=8" IdCase="UPPER" xsdTypes="1"?>
+
+    initOptions(self) -> SimpleNamespace
+    registerFilterScheme(self, name:NMTOKEN_t, handler:Callable)
+-- lets callers add a new scheme prefix for use in [] with elements.
+    domConfig(self) -> None:
+
+Node cconstructors. The usual DOM ones are provided.
+So are the WHATWG synonyms like Attr(), Text(), etc (those are just the normal
+constructors for those classes, or synonyms to them).
+
+    createElement(self, tagName:NMTOKEN_t, attributes:Dict=None, parent:Node=None,text:str=None           ) -> 'Element'
+    createDocumentFragment(self, namespaceURI:str=None, qualifiedName:str="frag", doctype:str=None, isFragment:bool=True) -> 'Document'
+    createAttribute(self, name:NMTOKEN_t, value=None, parentNode=None) -> 'Attr'
+    createTextNode(self, data:str) -> 'Text'
+    createComment(self, data:str) -> 'Comment'
+    createCDATASection(self, data:str) -> 'CDATASection'
+    createProcessingInstruction(self, target:NMTOKEN_t, data:str) -> 'ProcessingInstruction':
+    createEntityReference(self, name:NMTOKEN_t, value:str=None) -> 'EntityReference':
+    writexml(self, writer:IO, indent:str="", addindent:str="", newl:str="", encoding:str=None, standalone:bool=None) -> None
+
+    _getXmlDcl(self, encoding:str="utf-8", standalone:str=None) -> str
+    @property
+    xmlDcl(self) -> str
+    @property
+    doctypeDcl(self) -> str
+    toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str
+    buildIndex(self, enames:List=None, aname:NMTOKEN_t=None) -> None
+
+Tree searches
+    getElementById(self, idValue:str) -> Node
+    getElementsByTagName(self, name:str) -> Node
+    getElementsByClassName(self, name:str, attrName:str="class") -> Node
 
 
+========================================================================
 ====class Element(Node)====
-
-In addition to the usual createElement() etc., has the WHATWG synonyms
-like Attr(), Text(), etc.
 
     xmDcl -- this property returns the text of the XML declaration.
     doctypeDcl -- this property returns the text of the doctype declaration.
-    _buildIndex()
+    _buildIndex() -- forwards to the Document
+
     getElementById()
     getElementsByTagName()
     getElementsByClassName()
 
+    _addNamespace(self, name:str, uri:str="") -> None:
 
+    @property
+    tagName(self) -> NMTOKEN_t: return self.nodeName
+
+    _presetAttr(self, aname:str, avalue:str) -> None -- internal helper
+
+Attribute first appear here (because only Element can have attributes)
+
+DOM needs a range of forms due to the distinction between attribute names,
+values, and objects, and attribute's unusual relationship to namespaces.
+
+    hasAttributes(self) -> bool
+
+    hasAttribute(self, aname:NMTOKEN_t) -> bool
+    setAttribute(self, aname:NMTOKEN_t, avalue:Any) -> None
+    getAttribute(self, aname:NMTOKEN_t, castAs:type=str, default:Any=None) -> str
+    removeAttribute(self, aname:NMTOKEN_t) -> None
+
+    setAttributeNode(self, anode:'Attr') -> 'Attr'
+    getAttributeNode(self, aname:NMTOKEN_t) -> 'Attr'
+    removeAttributeNode(self, anode:'Attr') -> 'Attr'
+
+    hasAttributeNS(self, ns:str, aname:NMTOKEN_t) -> bool
+    setAttributeNS(self, ns:str, aname:NMTOKEN_t, avalue:str) -> None
+    getAttributeNS(self, ns:str, aname:NMTOKEN_t, castAs:type=str, default:Any=None) -> str
+    removeAttributeNS(self, ns, aname:NMTOKEN_t) -> None
+
+    setAttributeNodeNS(self, ns, anode:'Attr') -> 'Attr'
+    getAttributeNodeNS(self, ns:str, aname:NMTOKEN_t) -> 'Attr'
+
+Support for a few extended kinds of attributes. Main
+    getInheritedAttribute(self:Node, aname:NMTOKEN_t, default:Any=None) -> str
+    getInheritedAttributeNS(self:Node,ns:str, aname:NMTOKEN_t, default:Any=None) -> 'Attr'
+    getStackedAttribute(self:Node, aname:NMTOKEN_t, sep:str="/") -> str
+    getElementById(self, IdValue:str) -> 'Element'
+
+Serializing and loading XML
+
+There are setters and getters for inner and outer XML, similar to the HTML DOM.
+The getters are overridden on the various other Node subclasses, so they generate
+the correct syntax for those constructs.
+The setters use _string2doc() to parse the XML string, first wrapping it so that
+it works ok even for just text.
+
+    insertAdjacentXML(self, position:RelPosition, xml:str) -> None
+    outerXML(self) -> str
+    outerXML(self, xml:str) -> None
+    innerXML(self) -> str
+    innerXML(self, xml:str) -> None
+    _string2doc(self, xml:str) -> Document
+
+Roundtrippable mapping to and from JSON is also available, implement in jsonx.py,
+which can be hooked to this or another DOM implementation. This is a mapping
+for XML structure and semantics -- it supports all the node types. JSONX is a
+set of conventions for the mapping, so XML always becomes valid JSON using those
+conventions, and can be reloaded -- but not
+just *any* JSON fulfills those conventions. There are other tools that can do
+arbitrary JSON-to-XML conversion (essentially tunneling JSON in XML); such a tool
+could be used to move JSON to XML, after which JSONX could be used to roundtrip
+if desired.
+
+Convenience functions create the correct start or end tag for Elements. If you
+want options (including FormatOptions options that apply), use _startTag instead
+of the startTag propety:
+    startTag(self) -> str
+    _startTag(self, empty:bool=False, includeNS:bool=False, foptions=None, **kwargs) -> str
+    endTag(self) -> str
+
+
+========================================================================
 ====class CharacterData(Node)====
 
 A cover class for Node sub-types that can only occur as leaf nodes
-(and not including Attr). These all have a string value as .dat
-(plus .target for PIs).
+(and not including Attr). WHATWG (?) added a number of string operations
+for the .data, which are included.
 
+    data -- a string value
+    target -- (only for ProcessingInstruction)
     deleteData(self, offset:int, count:int) -> None
     insertData(self, offset:int, s:str) -> None
     remove(self, x:Any=None)
     replaceData(self, offset:int, count:int, s:str) -> None
     substringData(self, offset:int, count:int) -> str
 
-This also overrides several inapplicable methods:
+This also overrides several inapplicable methods
 
     Always return False: contains, hasChildNodes, hasAttributes, hasAttribute
     Always return 0: count
@@ -532,56 +777,110 @@ This also overrides several inapplicable methods:
     Aways raise HReqE: firstChild, lastChild, __getitem__, append, appendChild, insertBefore, prependChild, removeChild, replaceChild
 
 
+========================================================================
 ====class Text(CharacterData)====
 
-    cleanText
+    cleanText(self, unorm:str=None, normSpace:bool=True) -> str
 
 
+========================================================================
 ====class CDATASection(CharacterData)====
 
 
+========================================================================
 ====class ProcessingInstruction(CharacterData)====
 
 
+========================================================================
 ====class Comment(CharacterData)====
 
 
+========================================================================
 ====class EntityReference(CharacterData)====
 
 Present but not used or fully implemented.
 
+
+========================================================================
 ====class Attr(Node)====
 
 This represents an attribute Node, which has the usual trappings
-of Node, except that attributes have no siblings or children
+of Node -- but not of Element (no attributes, siblings, or children.
     name
     value
     ownerElement
 
-so these raise:
-    def compareDocumentPosition(self, other:'Node') -> int:  # Attr
-    def getChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,
-    def isFirstChild(self) -> bool:
-    def isLastChild(self) -> bool:
-    def next(self) -> 'Node':  # XPATH
-    def nextSibling(self) -> 'Node':
-    def previous(self) -> 'Node':  # XPATH
-    def previousSibling(self) -> 'Node':
+Many methods inherited from Node do not apply, and raise Exceptions if used:
+    compareDocumentPosition(self, other:Node) -> int
+    getChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,
+    isFirstChild(self) -> bool
+    isLastChild(self) -> bool
+    next(self) -> Node
+    nextSibling(self) -> Node
+    previous(self) -> Node
+    previousSibling(self) -> Node
+
+    clear(self) -> None
+    name(self) -> str
+    prefix(self) -> str
+    localName(self) -> str
+    namespaceURI(self) -> str
+    nodeValue(self) -> str
+    nodeValue(self, newData:str="") -> None
+    isConnected(self) -> bool
+    textContent(self) -> None
+    textContent(self, newData:str) -> None
+    nextSibling(self) -> Node
+    previousSibling(self) -> Node
+    next(self) -> Node
+    previous(self) -> Node
+    isFirstChild(self) -> bool
+    isLastChild(self) -> bool
+    getChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,noWSN:bool=False) -> int
+
+compareDocumentPosition() also raises an Exception, though one could use the
+ownerElement's position fairly sensibly instead:
+    compareDocumentPosition(self, other:Node) -> int
+
+    toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str
+-- this returns the attribute as it would appear in a start tag (including
+escaping as needed).
+
+    tostring(self) -> str
+-- this returns *just* the value literally cast to str, and not escaped.
+Attributes which do not have an assigned type will already be strings.
 
 
+========================================================================
 ====class NamedNodeMap(OrderedDict)====
 
+    __eq__(self, other) -> bool
+    __ne__(self, other) -> bool
 
+    setNamedItem(self, attrNodeOrName:Union[str, Attr], avalue:Any=None,atype:str="string") -> None
+    getNamedItem(self, name:NMTOKEN_t) -> Attr
+    getNamedValue(self, name:NMTOKEN_t) -> Any
+    removeNamedItem(self, name:NMTOKEN_t) -> Attr
+
+    setNamedItemNS(self, ns:str, aname:NMTOKEN_t, avalue:Any) -> None
+    getNamedItemNS(self, ns:str, name:NMTOKEN_t) -> Any
+    getNamedValueNS(self, ns:str, name:NMTOKEN_t) -> Any
+    removeNamedItemNS(self, ns:str, name:NMTOKEN_t) -> None
+
+    item(self, index:int) -> Attr
+    clone(self) -> 'NamedNodeMap'
+    getIndexOf(self, name:NMTOKEN_t) -> int
+    clear(self) -> None
+    writexml(self, writer:IO,indent:str="", addindent:str="", newl:str="", encoding:str=None, standalone:bool=None) -> None: # MINIDOM
+    tostring(self) -> str
+
+
+========================================================================
 ====class NameSpaces(Dict)====
 
-
-
-========
-
-========
-
-========
-
-========
-
-========
+    __setitem__(self, prefix:str, uri:str) -> None
+    __delitem__(self, prefix:str) -> None
+    @staticmethod
+    isNamespaceURI(ns:str, require:bool=False) -> bool
+    @staticmethod
+    nameMatch(node:Node, target:str, ns:str=None) -> bool

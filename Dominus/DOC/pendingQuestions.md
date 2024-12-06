@@ -211,3 +211,15 @@ or InvalidModificationError or TypeError or InvalidNodeTypeError?
 * Vector attrs (maybe just float{3,3}?)
 
 * JsonX mapping for DTDs?
+
+
+==Other==
+
+* Should I add back sibling threading as an option? Say,
+    @property
+    def nextSibling:
+        return self._NSib if hasattr(self, '_NSib') else self.findNSib()
+        getattr(self, '_NSib', self.findNSib())
+    @nextSibling.setter:
+    def nextSibling(self, theSib:Node):
+        if hasattr(self, '_NSib'): self._NSib = theSib

@@ -9,16 +9,15 @@ import unittest
 #from typing import List
 
 from xmlstrings import CaseHandler
-
 #from basedomtypes import HierarchyRequestError
 #from basedomtypes import NotFoundError
 
+from xsdtypes import facetCheck, XsdFacet, DateTimeFrag
 from documenttype import (
-    facetCheck, XsdFacet, SimpleType, ComplexType,
-    DateTimeFrag, SeqType, RepType, ModelGroup, ModelItem, Model)
+    SimpleType, ComplexType, SeqType, RepType, ModelGroup, ModelItem, Model)
 
-from makeTestDoc import DBG  #makeTestDoc0, makeTestDoc2, DAT,
-from test4EachMethod import K, makeTestDocEachMethod
+from makeTestDoc import DBG  #makeTestDoc0, makeTestDoc2, DAT
+from test4 import K, makeTestDocEachMethod
 
 
 ###############################################################################

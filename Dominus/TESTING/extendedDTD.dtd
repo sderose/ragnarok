@@ -1,0 +1,119 @@
+<!DOCTYPE test [
+
+<!ELEMENT (a, b, c)  (p*)>
+
+<!ELEMENT p          (p*, p?, p+, p{2,4})>
+<!ELEMENT q          EMPTY>
+<!ELEMENT r          ANY>
+<!ELEMENT s          (#PCDATA)>
+<!ELEMENT q          ((a&b), (q,r,s), (q|r*|s)*)>
+
+<!ATTLIST (a, b, c)
+    a_01 base64Binary_t       = ""
+    a_02 hexBinary_t          = ""
+
+    a_03 boolean_t            = ""
+
+    a_04 byte_t               = ""
+    a_05 short_t              = ""
+    a_06 int_t                = ""
+    a_07 integer_t            = ""
+    a_08 long_t               = ""
+    a_09 nonPositiveInteger_t = ""
+    a_10 negativeInteger_t    = ""
+    a_11 nonNegativeInteger   = ""
+    a_12 positiveInteger_t    = ""
+    a_13 unsignedByte_t       = ""
+    a_14 unsignedShort_t      = ""
+    a_15 unsignedInt_t        = ""
+    a_16 unsignedLong_t       = ""
+
+    a_17 decimal_t            = ""
+    a_18 double_t             = ""
+    a_19 float_t              = ""
+
+    a_20 gDay_t               = ""
+    a_21 gMonth_t             = ""
+    a_22 gMonthDay_t          = ""
+    a_23 gYear_t              = ""
+    a_24 gYearMonth_t         = ""
+    a_25 date_t               = ""
+    a_26 dateTime_t           = ""
+    a_27 time_t               = ""
+    a_28 duration_t           = ""
+
+    a_29 language_t           = ""
+    a_30 normalizedString_t   = ""
+    a_31 string_t             = ""
+    a_32 token_t              = ""
+    a_33 anyURI_t             = ""
+
+    a_34 Name_t               = ""
+    a_35 NCName_t             = ""
+    a_36 QName_t              = ""
+
+    a_37 ID_t                 = ""
+    a_38 IDREF_t              = ""
+    a_39 NMTOKEN_t            = ""
+    a_40 ENTITY_t             = ""
+
+    a_41 IDREFS_t             = ""
+    a_42 NMTOKENS_t           = ""
+    a_43 ENTITIES_t           = ""
+>
+]>
+<p>
+<a
+    a_01 = ""
+    a_02 = ""
+
+    a_03 = "yes"
+
+    a_04 = "127"
+    a_05 = "65535"
+    a_06 = "999999"
+    a_07 = "-999999"
+    a_08 = "-999999"
+    a_09 = "-999999"
+    a_10 = "-999999"
+    a_11 = "999999"
+    a_12 = "999999"
+    a_13 = "99"
+    a_14 = "+000000000000000009999"
+    a_15 = "999999"
+    a_16 = "999999"
+
+    a_17 = "-3.141592653589793238462643383"
+    a_18 = "9876.54321"
+    a_19 = "9876.54321"
+
+    a_20 = "31"
+    a_21 = "12"
+    a_22 = "12-31"
+    a_23 = "2024"
+    a_24 = "2024-01"
+    a_25 = "2024-02-29"
+    a_26 = "2024-02-29T11:59:59.214Z"
+    a_27 = "11:59:59.214Z"
+    a_28 = ""
+
+    a_29 = "EN:UK"
+    a_30 = "a   b   c"
+    a_31 = "aard%VARK"
+    a_32 = "noSpaces"
+    a_33 = "https://example.com/docs/foo.xml#chap1"
+
+    a_34 = "Sub-Para_3"
+    a_35 = "xyzzy"
+    a_36 = "foo:xyzzy"
+
+    a_37 = "an_ID_VALUE"
+    a_38 = "an_ID_VALUE"
+    a_39 = "blockquote"
+    a_40 = "bull"
+
+    a_41 = "thing1 thing2"
+    a_42 = "ul ol dl"
+    a_43 = "chap1 chap2 chap3 chap4"
+>
+</p>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+"http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
+<book xmlns:foo="http://example.com/namespaces/foo">
+  <bookinfo>
+    <title>My Title</title>
+  </bookinfo>
+
+  <chapter id="chap1" class="important">
+    <foo:title>Introduction</foo:title>
+    <section>
+      <title><i>What?</i> Section 1, on <i>Entities</i> with a 2nd text node!</title>
+      <p>Hello, paragraph 1.</p>
+      <p>Hello, paragraph 2.</p>
+      <p>Hello, paragraph <i>3</i>.</p>
+      <p>Character references can be &#x68;exadecimal, &#100;ecimal, or named &lt;</p>
+      <p>Nested <p> and/or <empty/> elements</p> can happen, too.</p>
+      <p><![CDATA[ Marked <sections> can contain literal pointies & stuff.]]></p>
+    </section>
+  </chapter>
+  <!-- a comment - with a hyphen - and a >, too. -->
+  <?foo pi=True foo='bar' punct='?' ?>
+</book>

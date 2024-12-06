@@ -2,12 +2,12 @@
 #
 import unittest
 import logging
-#from typing import Callable
+from typing import Any
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation,Element
-from basedomtypes import NodeType
+from basedomtypes import NodeType, HReqE
 
-#from basedom import Node
+from basedom import NodeList, Element
 
 from makeTestDoc import makeTestDoc0, DAT_DocBook, DBG
 
@@ -16,7 +16,13 @@ logging.basicConfig(level=logging.INFO)
 
 nsURI = "https://example.com/namespaces/foo"
 
+
+###############################################################################
+#
 class TestDOMNode(unittest.TestCase):
+    """This focuses on testing basic creation and properties of Elements.
+    It isn't all that adversarial.
+    """
     alreadyShowedSetup = False
 
     def setUp(self):
@@ -61,6 +67,45 @@ class TestDOMNode(unittest.TestCase):
             self.assertEqual(cur.previousSibling, prv)
             self.assertEqual(cur.parentNode, self.n.docEl)
             self.assertEqual(cur.ownerDocument, self.n.doc)
+
+    def test_checkNode(self):
+        docEl = self.n.docEl
+        self.makeDocObj.addFullTree(node=docEl, n=10, depth=3, withText=True)
+        docEl.checkNode(deep=True)
+
+    def testAttrStatus(self):
+        """A lot of tree mutators get basic testing just by making the tree
+        in the first place. Here, make sure Attrs can be inserted as children.
+        """
+        def tryInsertions(self, tgt:Element, badThing:Any) -> None:
+            with self.assertRaises(HReqE):
+                tgt.appendChild(badThing)
+                tgt.prependChild(badThing)
+                tgt.insert(0, badThing)
+                tgt.append(badThing)
+                tgt.extend([badThing])
+                self.n.docEl.insertBefore(badThing, tgt)
+                self.n.docEl.insertAfter(badThing, tgt)
+
+        doc = self.n.doc
+        docEl = self.n.docEl
+        self.assertFalse(docEl.hasChildNodes)
+        self.makeDocObj.addChildren(node=docEl, n=10, withText=True)
+        self.assertTrue(docEl.hasChildNodes)
+        ch = docEl.childNodes[5]
+
+        tryInsertions(self, tgt=ch, badThing=doc.createAttribute("alt", "hello"))
+        tryInsertions(self, tgt=ch, badThing=NodeList())
+        tryInsertions(self, tgt=ch, badThing=self)
+        tryInsertions(self, tgt=ch, badThing=ch)
+        #tryInsertions(self, tgt=ch, badThing=doc)
+        #tryInsertions(self, tgt=ch, badThing=docEl)
+        tryInsertions(self, tgt=ch, badThing=None)
+        tryInsertions(self, tgt=ch, badThing=8)
+        tryInsertions(self, tgt=ch, badThing=3.14+1j)
+        tryInsertions(self, tgt=ch, badThing=False)
+        tryInsertions(self, tgt=ch, badThing="nope")
+        tryInsertions(self, tgt=ch, badThing=[ ])
 
     def test_allNodeTypes(self):
         """At least try creating one of everything.

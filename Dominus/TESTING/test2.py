@@ -144,7 +144,7 @@ class TestDOMNode(unittest.TestCase):
 
     def test_attributes(self):
         self.assertIsNotNone(self.n.child0.attributes)
-        self.assertEqual(self.n.child0.attributes[DAT.at_name].value, DAT.at_value)
+        self.assertEqual(self.n.child0.attributes[DAT.at_name].nodeValue, DAT.at_value)
 
     def test_owner_document(self):
         self.assertEqual(self.n.docEl.ownerDocument, self.n.doc)

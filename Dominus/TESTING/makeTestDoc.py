@@ -301,11 +301,17 @@ class makeTestDoc0:
             return
         makeTestDoc0.addChildren(node, n, types, withText)
         for ch in node.childNodes:
+            if ch.isText: continue
             makeTestDoc0.addFullTree(ch, n, depth-1, types, withText)
         return node
 
     @staticmethod
     def addChildren(node:Node, n:int=10, types:list=None, withText:bool=False):
+        """Add n children to the node, alternating among the given types,
+        and optionally with some (merely constant) text.
+        """
+        if not isinstance(node, Element):
+            raise TypeError(f"addChildren requires an Element, not {type(node)}.")
         if not types: types = [ "p", "bq" ]
         d = node.ownerDocument
         for i in range(n):

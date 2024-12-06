@@ -75,7 +75,7 @@ NSuppE = NotSupportedError
 ### Legacy DOM Exception names
 #
 legacyExceptions = True
-if (legacyExceptions):
+if legacyExceptions:
     INDEX_SIZE_ERR = DOMException                   # 1 (GENERIC)
     DOMSTRING_SIZE_ERR = DOMException               # 2 (GENERIC)
     HIERARCHY_REQUEST_ERR = HierarchyRequestError   # 3
@@ -165,19 +165,19 @@ class OpenEnum(Enum):
 ###############################################################################
 #
 class NodeType(FlexibleEnum):
-    NONE                         = 0  # Not in DOM
+    ABSTRACT_NODE                = 0  # (PLainNode ABC) Not in DOM
     ELEMENT_NODE                 = 1
     ATTRIBUTE_NODE               = 2
     TEXT_NODE                    = 3
     CDATA_SECTION_NODE           = 4
-    ENTITY_REFERENCE_NODE        = 5  # Not in DOM
-    ENTITY_NODE                  = 6  # Not in DOM
+    ENTITY_REFERENCE_NODE        = 5  # Not in current DOM
+    ENTITY_NODE                  = 6  # Not in current DOM
     PROCESSING_INSTRUCTION_NODE  = 7
     COMMENT_NODE                 = 8
     DOCUMENT_NODE                = 9
     DOCUMENT_TYPE_NODE           = 10
     DOCUMENT_FRAGMENT_NODE       = 11
-    NOTATION_NODE                = 12 # Not in DOM
+    NOTATION_NODE                = 12 # Not in current DOM
 
     @staticmethod
     def okNodeType(nt:Union[int, 'NodeType'], die:bool=True) -> 'NodeType':
@@ -185,18 +185,18 @@ class NodeType(FlexibleEnum):
         (so people who remember the ints and just test are still ok).
         Returns the actual NodeType.x (or None on fail).
         """
-        if (isinstance(nt, NodeType)): return nt
+        if isinstance(nt, NodeType): return nt
         try:
             _nt = NodeType(nt)
         except ValueError:
-            if (not die): return None
+            if not die: return None
             assert False, "nodeType %s is a %s, not int or NodeType." % (
                 nt, type(nt))
         return _nt
 
     @staticmethod
     def tostring(value:Union[int, 'NodeType']) -> str:  # NodeType
-        if (isinstance(value, NodeType)): return value.name
+        if isinstance(value, NodeType): return value.name
         try:
             return NodeType(int(value))
         except ValueError:

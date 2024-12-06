@@ -10,7 +10,8 @@ import json
 
 from xmlstrings import XmlStrings as XStr
 #from dombuilder import DomBuilder
-from domenums import FlexibleEnum, RWord #, NodeType
+from basedomtypes import FlexibleEnum
+from domenums import RWord #, NodeType
 
 # DOMImplementation
 
@@ -125,7 +126,7 @@ def getNodeName(jnode:List) -> str:
     if not isinstance(jnode, List):
         raise SyntaxError(f"That's not a JsonX node, but a '{type(jnode)}'.")
     if len(jnode) < 1:
-        raise SyntaxError(f"That's not a JsonX node, no property dict.")
+        raise SyntaxError("That's not a JsonX node, no property dict.")
     try:
         return jnode[0][JKeys.J_NAME_KEY]
     except (TypeError, AttributeError, IndexError, KeyError) as e:
@@ -360,7 +361,7 @@ class Saver:
         Not if it's a string that just looks like it (say, "99").
         """
         buf = f' "{anode.name}":'
-        avalue = anode.value
+        avalue = anode.nodeValue
         if isinstance(avalue, float): buf += "%f" % (avalue)
         elif isinstance(avalue, int): buf += "%d" % (avalue)
         elif avalue is True: buf += "true"

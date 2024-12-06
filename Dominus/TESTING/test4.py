@@ -375,7 +375,7 @@ class testNode(unittest.TestCase):
 
         self.assertIs(el8.getRootNode(), self.n.doc)
 
-        self.assertTrue(node.hasAttributes)
+        self.assertFalse(node.hasAttributes())
         self.assertFalse(node.isSameNode(el8))
         self.assertTrue(node.isSameNode(node))
 
@@ -447,7 +447,7 @@ class testNodeType_Predicates(unittest.TestCase):
     def tests(self):
         el = self.n.docEl.childNodes[5]
         for ch in self.n.docEl.childNodes:
-            if (ch.nodeType == NodeType.NONE):
+            if (ch.nodeType == NodeType.ABSTRACT_NODE):
                 self.allPreds(ch, [ ])
             elif (ch.nodeType == NodeType.ELEMENT_NODE):
                 self.allPreds(ch, [ el.isElement ])
@@ -475,17 +475,17 @@ class testNodeType_Predicates(unittest.TestCase):
                 assert ValueError, "Unexpected nodeType %d." % (ch.nodeType)
 
     def allPreds(self, el, ok:List):
-        self.assertEqual(el.isElement,   el.isElement in ok)
-        self.assertEqual(el.isAttribute, el.isAttribute in ok)
-        self.assertEqual(el.isText,      el.isText in ok)
-        self.assertEqual(el.isCDATA,     el.isCDATA in ok)
-        self.assertEqual(el.isEntRef,    el.isEntRef in ok)
-        self.assertEqual(el.isPI,        el.isPI in ok)
-        self.assertEqual(el.isComment,   el.isComment in ok)
-        self.assertEqual(el.isDocument,  el.isDocument in ok)
+        self.assertEqual(el.isElement,      el.isElement in ok)
+        self.assertEqual(el.isAttribute,    el.isAttribute in ok)
+        self.assertEqual(el.isText,         el.isText in ok)
+        self.assertEqual(el.isCDATA,        el.isCDATA in ok)
+        self.assertEqual(el.isEntRef,       el.isEntRef in ok)
+        self.assertEqual(el.isPI,           el.isPI in ok)
+        self.assertEqual(el.isComment,      el.isComment in ok)
+        self.assertEqual(el.isDocument,     el.isDocument in ok)
         self.assertEqual(el.isDocumentType, el.isDocumentType in ok)
-        self.assertEqual(el.isFragment,  el.isFragment in ok)
-        self.assertEqual(el.isNotation,  el.isNotation in ok)
+        self.assertEqual(el.isFragment,     el.isFragment in ok)
+        self.assertEqual(el.isNotation,     el.isNotation in ok)
 
 
 ###############################################################################
@@ -935,7 +935,7 @@ class testNamedNodeMap(unittest.TestCase):
         anAttr = nnm.getNamedItem("class")
         self.assertIsInstance(anAttr, Attr)
         self.assertEqual(anAttr.nodeName, "class")
-        self.assertEqual(anAttr.value, "classy")
+        self.assertEqual(anAttr.nodeValue, "classy")
 
         self.assertEqual(nnm.tostring().strip(), "class=\"classy\"")
         nnm.removeNamedItem("class")
