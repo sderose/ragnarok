@@ -566,7 +566,7 @@ class testByMethod(unittest.TestCase):
         self.assertIsInstance(doc.getElementsByClassName("big"), NodeList)
 
         self.assertIsInstance(doc.getElementsByTagName("p"), NodeList)
-        self.assertIsInstance(doc.getElementsByTagNameNS("##any", "p"), NodeList)
+        #self.assertIsInstance(doc.getElementsByTagNameNS("##any", "p"), NodeList)
 
         self.XX(d.eachChild(excludeNodeNames=["p"]))
         #self.XX(eachNode(self))

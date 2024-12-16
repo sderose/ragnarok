@@ -4,7 +4,7 @@
 from typing import Callable, Dict, List, Any
 import re
 
-from basedomtypes import NMTOKEN_t
+from basedomtypes import NMTOKEN_t, dtr
 from basedomtypes import HReqE, NSE
 from domenums import RWord
 from xmlstrings import XmlStrings as XStr, CaseHandler
@@ -38,10 +38,19 @@ class AttrChoice:
         self.valgen = valgen  # A callback to calculate an ID string for a node
         self.caseH  = caseH   # CaseHandler -- TODO
 
-    def tostring(self) -> str:
-        return f"{self.ens}:{self.ename}/{self.ans}:{self.aname}"
+    def __eq__(self, other:'AttrChoice') -> bool:
+        if self.ens    != other.ens:    return False
+        if self.ename  != other.ename:  return False
+        if self.ans    != other.ans:    return False
+        if self.aname  != other.aname:  return False
+        if self.valgen != other.valgen: return False
+        if self.caseH  != other.caseH:  return False
+        return True
 
-    def isOkNsChoice(self, ns:str):
+    def tostring(self) -> str:
+        return f"[{self.ens}]:{self.ename} / [{self.ans}]:{self.aname}"
+
+    def isOkNsChoice(self, ns:str) -> bool:
         """TODO Should we allow "" or None?
         """
         if ns == RWord.NS_ANY: return True
@@ -107,15 +116,17 @@ class IdHandler:
 
     def delAttrChoice(self, ens:str, ename:NMTOKEN_t, ans:str, aname:NMTOKEN_t) -> None:
         ac = AttrChoice(ens, ename, ans, aname, None)
-        try:
-            x = self.attrChoices.index(ac)
-            del self.attrChoices[x]
-        except ValueError as e:
-            raise KeyError(f"AttrChoice not found: {ac}.") from e
+        for i, curAC in enumerate(self.attrChoices):
+            if ac != curAC: continue
+            del self.attrChoices[i]
+            return
+        buf = f"AttrChoice not found:\n--> {ac.tostring()}" + self.choicestostring()
+        raise ValueError(buf)
 
-    def choicestostring(self):
+    def choicestostring(self) -> str:
+        if not self.attrChoices: return " [none found]"
         buf = ""
-        for ac in self.attrChoices: buf += repr(ac) + "\n"
+        for curAC in self.attrChoices: buf += "\n    " + curAC.tostring()
         return buf
 
     def clearIndex(self) -> None:
@@ -167,17 +178,17 @@ class IdHandler:
             raise HReqE("Looking for ID on non-Element.")
         if not node.hasAttributes():
             return None
-        print(f"\nStart-tag (ns: {node.namespaceURI}): {node.startTag}.")
+        dtr.msg(f"\nStart-tag (ns: {node.namespaceURI}): {node.startTag}.")
         if node.hasAttribute("xml:id"):
-            print("    Got xml:id")
+            dtr.msg("    Got xml:id")
             return node.getAttributeNode("xml:id")
         for _aname in node.attributes:
             anode = node.getAttributeNode(_aname)
-            print(f"  Trying attr {anode}.")
+            dtr.msg(f"  Trying attr {anode}.")
             if anode.attrType == "ID":
                 return anode
             for acTup in self.attrChoices:
-                print(f"  Trying attrChoice {acTup.tostring()}.")
+                dtr.msg(f"  Trying attrChoice {acTup.tostring()}.")
                 if acTup.aname != anode.nodeName:
                     continue
                 if acTup.ans not in [ NS_ANY, None, "" ]:
@@ -192,7 +203,7 @@ class IdHandler:
                     if (elemNS is None): raise NSE(
                         "Cannot map element {anode.ownerElement.nodeName}'s ns prefix.")
                     if acTup.ens != elemNS: continue
-                print(f"    AttrChoice {acTup.tostring()} matches attr '{anode.name}'.")
+                dtr.msg(f"    AttrChoice {acTup.tostring()} matches attr '{anode.name}'.")
                 return anode
         return None
 

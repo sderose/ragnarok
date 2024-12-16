@@ -81,7 +81,7 @@ class Duration:
         #    | (duMinuteFrag duSecondFrag?) | duSecondFrag)
         #self.duDayTimeFrag = (duDayFrag duTimeFrag?) | duTimeFrag
 
-    def tostring(self):
+    def tostring(self) -> str:
         """Turn the object back into XSD lexical/text form.
         """
         buf = ""
@@ -100,7 +100,7 @@ class Duration:
             buf += "%fS"
         return buf
 
-    def gettimedeltaobject(self):
+    def gettimedeltaobject(self) -> timedelta:
         # where does the sign go?
         td = timedelta(
             years   = self.duYearFrag,
@@ -136,7 +136,7 @@ class DateTimeFrag:
         self.annotation:Any = None
         if timestring: self.set_any(timestring)
 
-    def check(self):
+    def check(self) -> bool:
         """Check by self-assigning, since the property-setters check.
         """
         if self._year is not None: self.year = self.year
@@ -148,7 +148,7 @@ class DateTimeFrag:
         if self._zone is not None: self.zone = self.zone
         return True
 
-    def getdatetimeobject(self):
+    def getdatetimeobject(self) -> datetime:
         """Convert to a standard Python datetime object.
         """
         if self._zone:
@@ -169,7 +169,7 @@ class DateTimeFrag:
         )
         return dt
 
-    def setfromdatetimeobject(self, dto:datetime):
+    def setfromdatetimeobject(self, dto:datetime) -> None:
         """Set to the equivalent of a Python datetime object.
         NOTE: Python timezones allow fractional minutes, and offsets
         up to 24 hours, unlike max 12 hours here. There can also be rounding
@@ -186,17 +186,17 @@ class DateTimeFrag:
             self._zone = tzdelta.minutes
 
     @property
-    def includesDate(self):
+    def includesDate(self) -> bool:
         return self.year is not None
 
     @property
-    def includesTime(self):
+    def includesTime(self) -> bool:
         return self.hour is not None
 
     # Item setters and getters
     #
     @property
-    def year(self):
+    def year(self) -> int:
         return self._year
     @year.setter
     def year(self, y:int):
@@ -205,7 +205,7 @@ class DateTimeFrag:
         self._year = y
 
     @property
-    def month(self):
+    def month(self) -> int:
         return self._month
     @month.setter
     def month(self, m:int):
@@ -214,7 +214,7 @@ class DateTimeFrag:
         self._month = m
 
     @property
-    def day(self):
+    def day(self) -> int:
         return self._day
     @day.setter
     def day(self, d:int):
@@ -228,7 +228,7 @@ class DateTimeFrag:
         self._day = d
 
     @property
-    def hour(self):
+    def hour(self) -> int:
         return self._hour
     @hour.setter
     def hour(self, h:int):
@@ -237,7 +237,7 @@ class DateTimeFrag:
         self._hour = h
 
     @property
-    def minute(self):
+    def minute(self) -> int:
         return self._minute
     @minute.setter
     def minute(self, m:int):
@@ -246,7 +246,7 @@ class DateTimeFrag:
         self._minute = m
 
     @property
-    def second(self):
+    def second(self) -> float:
         return self._second
     @second.setter
     def second(self, s:float):
@@ -257,7 +257,7 @@ class DateTimeFrag:
         self._second = s
 
     @property
-    def zone(self):
+    def zone(self) -> str:
         return self._zone
     @zone.setter
     def zone(self, z:int):
@@ -267,13 +267,13 @@ class DateTimeFrag:
         self._zone = z
 
     @property
-    def microsecond(self):
+    def microsecond(self) -> int:
         if not self.second: return self.second
         return (self.second - int(self.second)) * 1000000
 
     # Convert to the usual Python objects.
     #
-    def get_datetime(self):
+    def get_datetime(self) -> datetime:
         """Incomplete data just gets passed along to the constructor.
         What it *means* is not entirely clear, e.g. if there's no year.
         TODO: If only date fields are set, should it return just yyyy-mm-dd
@@ -282,27 +282,27 @@ class DateTimeFrag:
         """
         return self.get_date(includeZone=False) + "T" + self.get_time()
 
-    def get_date(self, includeZone:bool=True):
+    def get_date(self, includeZone:bool=True) -> datetime.date:
         if not self.includesDate: raise ValueError("No date info.")
         buf = datetime.date(self.year, self.month, self.day)
         if includeZone and self._zone: buf += self.get_tzinfo()
         return buf
 
-    def get_time(self, includeZone:bool=True):
+    def get_time(self, includeZone:bool=True) -> datetime.time:
         if not self.includesTime: raise ValueError("No time info.")
         buf = datetime.time(self.hour, self.minute, self.second,
             int(self.microsecond))
         if includeZone and self._zone: buf += self.get_tzinfo()
         return buf
 
-    def get_tzinfo(self):
+    def get_tzinfo(self) -> str:
         zinfo = None
         if self.zone:
             tdelta = datetime.timedelta(minutes=self.zone)
             zinfo = datetime.tzinfo.utcoffset(tdelta)
         return zinfo
 
-    def shiftToUTC(self):
+    def shiftToUTC(self) -> None:
         """If the object has a time zone attached, move the time by that much
         and set zone offset to 0. Of course this can carry into the date, and
         dates are not totally ordered without consistent zones....

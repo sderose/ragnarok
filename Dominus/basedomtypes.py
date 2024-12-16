@@ -104,6 +104,30 @@ if legacyExceptions:
 
 ###############################################################################
 #
+class DTrace:
+    """Some simple debug tracing.
+    State:  0 = do nothing; 1 = log; 2 = display.
+    """
+    def __init__(self, state:int=0):
+        self.state = 0
+        self.msgLog = []
+
+    def msg(self, m:str) -> None:
+        if self.state == 0: return
+        elif self.state == 1: self.msgLog.push(m)
+        else: print(m)
+
+    def clear(self) -> None:
+        self.msgLog = []
+
+    def printAll(self) -> None:
+        print("\nDTrace log:\n  ", "\n  ".join(self.msgLog))
+
+dtr = DTrace(0)
+
+
+###############################################################################
+#
 class FlexibleEnum(Enum):
     """Subclass from this to make enums that can construct from any of:
         E.XYZ       -- the usual enumclass.name form,
@@ -132,7 +156,7 @@ class FlexibleEnum(Enum):
                     if member.value == value: return member
         return None
 
-    def tostring(self):
+    def tostring(self) -> str:
         return self.name
 
 

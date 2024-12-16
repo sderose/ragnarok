@@ -20,7 +20,7 @@ from textwrap import wrap
 
 from basedomtypes import DOMException, HReqE, ICharE, NSuppE, FlexibleEnum
 from basedomtypes import NamespaceError, NotFoundError, OperationError
-from basedomtypes import DOMImplementation_P, NMTOKEN_t, QName_t, NodeType
+from basedomtypes import DOMImplementation_P, NMTOKEN_t, QName_t, NodeType, dtr
 
 from saxplayer import SaxEvent
 from domenums import RWord
@@ -44,27 +44,6 @@ __metadata__ = {
 __version__ = __metadata__['modified']
 
 descr = """See BaseDom.md"""
-
-class DTrace:
-    """Some simple debug tracing.
-    State:  0 = do nothing; 1 = log; 2 = display.
-    """
-    def __init__(self, state:int=0):
-        self.state = 0
-        self.msgLog = []
-
-    def msg(self, m:str):
-        if self.state == 0: return
-        elif self.state == 1: self.msgLog.push(m)
-        else: print(m)
-
-    def clear(self):
-        self.msgLog = []
-
-    def printAll(self):
-        print("\nDTrace log:\n  ", "\n  ".join(self.msgLog))
-
-dtr = DTrace(0)
 
 def hidden(func):
     """Define "@hidden" decorator to signal that a method is hiding
@@ -704,7 +683,8 @@ class PlainNode(list):
     def insert(self, i:int, newChild:'Node') -> None:  # PlainNode
         """Note: Argument order is different than (say) insertBefore.
         This implementation does not link siblings, b/c tests showed
-        the overhead wasn't worth it. To change that, update those links here.
+        the overhead wasn't worth it.
+        NOTE: All insertions end up here.
         """
         if not self.canHaveChildren:
             raise HReqE(f"node type {type(self).__name__} cannot have children.")
@@ -796,8 +776,9 @@ class PlainNode(list):
         """
         self.ownerDocument    = None
         self.parentNode       = None
-        if hasattr(self, "previousSibling"): self.previousSibling = None
-        if hasattr(self, "nextSibling"): self.nextSibling = None
+        #if linkSibs:
+        #    self._previousSibling = None
+        #    self._nextSibling = None
 
 
     def writexml(self, writer:IO,
@@ -1784,7 +1765,7 @@ class Document(Node):
             # Syntax extensions -- see xsparser
         })
 
-    def registerFilterScheme(self, name:NMTOKEN_t, handler:Callable):
+    def registerFilterScheme(self, name:NMTOKEN_t, handler:Callable) -> None:
         """Add a named scheme to be supported within []. The handler
         must take a Node and return a NodeList of selected child nodes,
         based on some selector string defined per sheme.
@@ -2311,6 +2292,7 @@ class Element(Node):
         if self.hasAttribute(attrName) and name in self.getAttribute(attrName).split():
             nodeList.append(self)
         for ch in self.childNodes:
+            if not ch.isElement: continue
             ch.getElementsByClassName(name, attrName=attrName, nodeList=nodeList)
         return nodeList
 
@@ -2323,6 +2305,7 @@ class Element(Node):
         if NameSpaces.nameMatch(self, tagName, ns=None):
             nodeList.append(self)
         for ch in self.childNodes:
+            if not ch.isElement: continue
             ch.getElementsByTagName(tagName, nodeList)
         return nodeList
 
