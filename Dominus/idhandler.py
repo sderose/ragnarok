@@ -133,25 +133,28 @@ class IdHandler:
             if not node.isElement: continue
             nElements += 1
             #print(node.startTag)
-            idKey = self.getIdKey(node)
-            if idKey is not None:
+            idVal = self.getIdVal(node)
+            if idVal is not None:
+                if self.caseHandler: idVal = self.caseHandler.normalize(idVal)
                 nIds += 1
-                self.theIndex[idKey] = node
+                self.theIndex[idVal] = node
 
         print(f"\nFound {nNodes} nodes, {nElements} elements, {nIds} Ids.")
         print("Choices:\n" + self.choicestostring())
         return self.theIndex
 
     def removeElementFromIndex(self, node:'Element') -> None:
-        idKey = self.getIdKey(node)
-        if idKey and idKey in self.theIndex: del self.theIndex[idKey]
+        idVal = self.getIdVal(node)
+        if self.caseHandler: idVal = self.caseHandler.normalize(idVal)
+        if idVal and idVal in self.theIndex: del self.theIndex[idVal]
 
-    def getIdKey(self, node:'Element') -> Any:
+    def getIdVal(self, node:'Element') -> Any:
         anode = self.getIdAttrNode(node)
         if anode is None: return None
         if self.valgen: val = self.valgen(anode)
         else: val = anode.nodeValue.strip()
-        return val  # TODO Add case-fold support
+        if (self.caseHandler): val = self.caseHandler.normalize(val)
+        return val
 
     def getIdAttrNode(self, node:'Element') -> 'Attr':
         """Check all the attributes ofan element, against their type (if any)
@@ -193,6 +196,7 @@ class IdHandler:
                 return anode
         return None
 
-    def getIndexedId(self, idval:str) -> 'Element':
-        if idval in self.theIndex: return self.theIndex[idval]
+    def getIndexedId(self, idVal:str) -> 'Element':
+        if self.caseHandler: idVal = self.caseHandler.normalize(idVal)
+        if idVal in self.theIndex: return self.theIndex[idVal]
         return None

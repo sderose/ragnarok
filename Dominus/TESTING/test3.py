@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation,Element
-from basedomtypes import NodeType, HReqE
+from basedomtypes import NodeType, HReqE, ICharE, NamespaceError
 
 from basedom import NodeList, Element
 
@@ -69,9 +69,10 @@ class TestDOMNode(unittest.TestCase):
             self.assertEqual(cur.ownerDocument, self.n.doc)
 
     def test_checkNode(self):
+        doc = self.n.doc
         docEl = self.n.docEl
         self.makeDocObj.addFullTree(node=docEl, n=10, depth=3, withText=True)
-        docEl.checkNode(deep=True)
+        doc.checkNode(deep=True)
 
     def testAttrStatus(self):
         """A lot of tree mutators get basic testing just by making the tree
@@ -128,6 +129,12 @@ class TestDOMNode(unittest.TestCase):
 
         nat = self.n.doc.createAttribute("class", "someClass", parentNode=None)
         self.tryAllIsA(nat, NodeType.ATTRIBUTE_NODE)
+
+        with self.assertRaises(ICharE):
+            self.n.impl.createDocument(qualifiedName="abc\xb6")
+        with self.assertRaises(NamespaceError):
+            self.n.impl.createDocument(namespaceURI="not the XML namespace",
+                qualifiedName="xml:somdoc")
 
         #ndf = createDocumentFragment()
         #self.tryAllIsA(ndf, NodeType.FRAGMENT_NODE)
@@ -187,9 +194,14 @@ class TestDOMNode(unittest.TestCase):
         del
         slice assignment
         """
-        for _i in range(10):
+        ch5 = None
+        for i in range(10):
             nn = self.n.doc.createElement("newb")
+            if i == 5: ch5 = nn
             self.n.docEl.append(nn)
+
+        self.assertTrue(ch5 in self.n.docEl)
+        self.assertFalse(self.n.docEl in ch5)
 
         _nch = len(self.n.docEl.childNodes)
         self.makeDocObj.addChildren(self.n.docEl, n=10)

@@ -1,0 +1,135 @@
+# A list of HTML tags, with the display value usual for each.
+#
+# Seems to me:
+#     html, body, div, main, nav, section summary are a different group.
+#     u/ol/dl likewise.
+
+################ block
+address, block
+article, block
+aside, block
+blockquote, block
+body, block
+canvas, block
+dd, block
+details, block
+dialog, block
+dir, block
+div, block
+dl, block
+dt, block
+fieldset, block
+figcaption, block
+figure, block
+footer, block
+form, block
+h1, block
+h2, block
+h3, block
+h4, block
+h5, block
+h6, block
+header, block
+hgroup, block
+hr, block
+html, block
+main, block
+nav, block
+noframes, block
+noscript, block
+ol, block
+p, block
+pre, block
+section, block
+summary, block
+table, block
+tfoot, block
+ul, block
+video, block
+
+################ none
+applet, none
+area, none
+audio, none
+base, none
+basefont, none
+datalist, none
+head, none
+link, none
+menu, none
+menuitem, none
+meta, none
+param, none
+script, none
+source, none
+style, none
+template, none
+title, none
+track, none
+wbr, none
+
+################ inline-block
+br, inline-block
+iframe, inline-block
+input, inline-block
+img, inline-block
+select, inline-block
+textarea, inline-block
+button, inline-block
+embed, inline-block
+object, inline-block
+progress, inline-block
+
+################ inline
+a, inline
+abbr, inline
+acronym, inline
+b, inline
+bdi, inline
+bdo, inline
+big, inline
+cite, inline
+code, inline
+data, inline
+del, inline
+dfn, inline
+em, inline
+font, inline
+i, inline
+ins, inline
+kbd, inline
+label, inline
+mark, inline
+meter, inline
+output, inline
+picture, inline
+q, inline
+rp, inline
+rt, inline
+ruby, inline
+s, inline
+samp, inline
+small, inline
+span, inline
+strike, inline
+strong, inline
+sub, inline
+sup, inline
+time, inline
+tt, inline
+u, inline
+var, inline
+xmp, inline
+
+#################### list-item
+li, list-item
+
+################ table stuff
+caption, table-caption
+col, table-column
+colgroup, table-column-group
+tbody, table-row-group
+td, table-cell
+th, table-cell
+thead, table-header-group
+tr, table-row

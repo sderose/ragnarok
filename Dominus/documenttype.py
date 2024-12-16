@@ -243,6 +243,7 @@ class ContentType(FlexibleEnum):  # For elements
     ANY       = "ANY"
     EMPTY     = "EMPTY"
     PCDATA    = "#PCDATA"
+    # TODO: Are these better names X_, or just plain?
     X_MODEL   = "X_MODEL"     # Has content model, not one of the above
     X_ELEMENT = "X_ELEMENT"   # HERE -- for element-only content
 
@@ -325,8 +326,10 @@ class ModelGroup:
     """
     def __init__(self, childItems:List[Union['ModelGroup', ModelItem]]=None,
         seq:SeqType=None, rep:RepType=None):
-        self.seq = SeqType(seq) or SeqType.NOSEQ
-        self.rep = RepType(rep) or RepType.NOREP
+        if not seq: self.seq = SeqType.NOSEQ
+        else: self.seq = SeqType(seq) or SeqType.NOSEQ
+        if not rep: self.rep = RepType.NOREP
+        else: self.rep = RepType(rep) or RepType.NOREP
         self.childItems = childItems or []
 
     def getNames(self) -> Set:
@@ -335,9 +338,11 @@ class ModelGroup:
         names = set()
         for childItem in self.childItems:
             if isinstance(childItem, ModelItem):
-                names = names.union([childItem.name])
+                names = names.add(childItem.name)
             elif isinstance(childItem, ModelGroup):
                 names = names.union(childItem.getNames())
+            else:
+                raise NSuppE(f"Unexpected type '{type(childItem)}' in ModelGroup.")
         return names
 
     def tostring(self, indent:str=None) -> str:
@@ -362,50 +367,68 @@ class Model(ModelGroup):
     def __init__(self, tokens:List[str]=None, seq:SeqType=None, rep:RepType=None,
         contentType:ContentType=None):
         super(). __init__(None, None, None)
-        self.contentType = None if not contentType else ContentType(contentType)
-        if not tokens: return
+        if contentType is None:
+            self.contentType = ContentType.X_MODEL
+        else:
+            self.contentType = ContentType(contentType)
+            if self.contentType is None: raise ValueError(
+                f"Unrecognized declared content type '{contentType}')")
+
+        if tokens is None: return
 
         # Model, not declared content
         #
+        if not isinstance(tokens, Iterable): raise TypeError(
+            f"token list is a {type(tokens)}, not Iterable.")
+        if self.contentType != ContentType.X_MODEL: raise TypeError(
+            f"Token list incompatible w/ dcl content '{self.contentType}'.")
+
         if seq or rep: raise DOMException(
             "Don't pass seq or rep to Model, only to ModelGroup or ModelItem.")
-        if contentType != ContentType.X_MODEL: raise SyntaxError(
-            f"Expected contentType X_MODEL (not {contentType}) with tokens = {tokens}")
+        if self.contentType != ContentType.X_MODEL: raise SyntaxError(
+            f"Expected contentType X_MODEL (not {self.contentType}) with tokens = {tokens}")
         if not isinstance(tokens, Iterable): raise SyntaxError(
             f"Model tokens arg is not Iterable, but {type(tokens)}.")
 
         # Make a proper AST from the model tokens
+        #   TODO What does tokens get for {1:2}?
         #   (super() already set .childItems = [])
         #
-        MGStack = [ self.childItems ]
-        for i in range(len(tokens)):
+        #print("\nToken processing:")
+        MGStack = [ self ]
+        i = 0
+        while i < len(tokens):
             t = tokens[i]
+            #print("\Tokens %2d: '%s'" % (i, t))
             if t == "(":
                 newMG = ModelGroup()
                 if MGStack: MGStack[-1].childItems.append(newMG)
                 MGStack.append(newMG)
             elif t == ")":
-                if len(MGStack) == 0: raise SyntaxError(
-                    "Extra ')' at token {i} in model: %s." % (tokens))
-                if i+1 < len(tokens) and isinstance(tokens[i+1], RepType):
-                    MGStack[-1].rep = tokens[i+1]
-                    MGStack.pop()
+                if i+1 < len(tokens) and tokens[i+1] in "+?*":
+                    MGStack[-1].rep = RepType(tokens[i+1])
                     i += 1
+                MGStack.pop()
+                if len(MGStack) == 0: raise SyntaxError(
+                    "Extra ')' at token %d in model: %s." % (i, tokens))
             elif t in "|&,":  # Sequence type
-                if MGStack[-1].seq is SeqType.NOSEQ:
+                if MGStack[-1].seq == SeqType.NOSEQ:
                     MGStack[-1].seq = SeqType(t)
                 elif MGStack[-1].seq != SeqType(t): raise SyntaxError(
-                    f"Inconsistent connector (token {i} '{t}' vs. {MGStack[-1].seq}.")
+                    "Inconsistent connector token %d '%s' vs. '%s'."
+                    % (i, t, MGStack[-1].seq))
             elif t == ContentType.PCDATA.value or XStr.isXmlName(t):
                 newMI = ModelItem(t)
                 MGStack[-1].childItems.append(newMI)
-                if i+1 < len(tokens) and isinstance(tokens[i+1], RepType):
-                    newMI.rep = RepType(tokens[i+1])  # TODO Map to enum
+                if i+1 < len(tokens) and tokens[i+1] in "+?*":
+                    #print("Seeking rep, next token is '%s'." % (tokens[i+1]))
+                    newMI.rep = RepType(tokens[i+1])
                     i += 1
             else:
-                raise SyntaxError(f"Unexpected model token #{i}: '{t}'.")
-        if len(MGStack) != 0:
-            raise SyntaxError(f"Unclosed () group in model: {tokens}.")
+                raise SyntaxError("Unexpected model token %d: '%s' in %s." % (i, t, tokens))
+            i += 1
+        if len(MGStack) != 1:
+            raise SyntaxError("Unclosed () group in model: %s." % (tokens))
 
     def tostring(self, indent:str=None) -> str:
         if self.contentType != ContentType.X_MODEL:
@@ -467,6 +490,8 @@ class EntityParseType(FlexibleEnum):  # Includes extras...
 
 class DataSource:
     """PUBLIC and/or SYSTEM identifier or (for ENTITY but not NOTATION) QLit.
+
+    TODO: Distinguish non-local resources?
     """
     def __init__(self,
         literal:str=None,
@@ -694,7 +719,7 @@ class DocumentType(Node):
 
     def isEqualNode(self, n2) -> bool:  # DocumentType
         if self.nodeType != n2.nodeType: return False
-        #if (self.nodeName != n2.nodeName or
+        #if (self.nodeName != n2.nodeName or  # TODO use nodeNameMatches
         #    self.publicId != n2.publicId or
         #    self.systemId != n2.systemId): return False
         docel1 = self.ownerDocument.documentElement

@@ -21,7 +21,7 @@ from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
 from xmlstrings import XmlStrings as XStr
 
 import basedom
-from basedom import DOMImplementation, FormatOptions
+from basedom import DOMImplementation, FormatOptions, _CanonicalFO
 from basedom import PlainNode, Node, Document, Element, Attr
 from basedom import CharacterData, Text, NamedNodeMap, NodeList
 
@@ -86,7 +86,7 @@ Node
     after last item
     replaceWith                             LOTS
     eachChild                               LOTS
-    eachNode w/ includeAttributes=True
+    eachNode w/ separateAttributes=True
     eachSaxEvent, incl. separateAttributes  LOTS
 
 Document
@@ -246,7 +246,7 @@ class testByMethod(unittest.TestCase):
         ch5 = n2[5]
         self.assertTrue(ch3.isElement and ch5.isElement)
 
-        self.assertTrue(n2.bool())  # Empty element!
+        self.assertTrue(bool(n2))  # Empty element!
         self.n.docEl.sort(lambda x: x.nodeName, reverse=False)
         self.assertEqual(n2[0].getAttribute(ID_ATTR), "id_0")
         self.assertEqual(n2[0].getAttribute("width", castAs=float), 0.5)
@@ -344,7 +344,7 @@ class testByMethod(unittest.TestCase):
         self.XX(n0.getChildIndex(onlyElements=False, ofNodeName=False, noWSN=False))
         self.XX(n0.getRChildIndex(onlyElements=False, ofNodeName=False, noWSN=False))
         #self.XX(nameMatch(n2, self.dc.target_name, self.dc.ns_uri))
-        #self.XX(n0.nodeNameMatches(other))
+        #self.XX(n0._nodeNameMatches(other))
         #self.XX(n0.unlink(keepAttributes=False))
         #self.XX(wrapper(*args, **kwargs)
 
@@ -510,6 +510,11 @@ class testByMethod(unittest.TestCase):
         self.assertEqual(tx.data[0:9], "ahtingsom")
         self.assertEqual(tx.substringData(4, 3), "ngs")
 
+        with self.assertRaises(IndexError):
+            tx.insertData(65537, "staht ")
+            tx.deleteData(-35, 32767)
+            tx.replaceData(999, 3, "ahting")
+
         origText = "  \tThe Quick\xA0\xA0Blue\rFox.  "
         expect = "The Quick\xA0\xA0Blue Fox."
         tx2 = self.n.doc.createTextNode(origText)
@@ -583,7 +588,7 @@ class testByMethod(unittest.TestCase):
             idDiv.appendChild(idHolder)
             txt = doc.createTextNode("hello.")
             idHolder.appendChild(txt)
-        DBG.msg("\nDOC:\n" + doc.toprettyxml(newl="\n", indent="  "))
+        DBG.msg("\nDOC:\n" + doc.toprettyxml())
 
         # Traverse the doc and make an id:node dict
         idSec = self
@@ -596,7 +601,7 @@ class testByMethod(unittest.TestCase):
             if not idValue: continue
             self.assertFalse(idValue in idMap)
             idMap[idValue] = n
-        self.assertEqual(elementsFound, fan+6)
+        self.assertEqual(elementsFound, fan+5)
         self.assertEqual(len(idMap), fan+1)
 
         # Update the index
@@ -671,7 +676,7 @@ class testByMethod(unittest.TestCase):
         fo = FormatOptions(indent="____", quoteChar="'", newl="\r\n")
         fo.setInlines(None)
         self.XX(self.n.docEl.toprettyxml(foptions=fo))
-        self.XX(self.n.docEl.toprettyxml(foptions=FormatOptions.canonicalFO()))
+        self.XX(self.n.docEl.toprettyxml(foptions=_CanonicalFO))
 
         # TODO Add a serious test of canonicity
 
@@ -847,7 +852,7 @@ class testByMethod(unittest.TestCase):
         #self.XX(n0._presetAttr(self.dc.at_name2, self.dc.at_value2))
         #self.XX(n0._string2doc(self.dc.xml))
         #self.XX(nameMatch(n2, self.dc.target_name, self.dc.ns_uri))
-        #self.XX(n0.nodeNameMatches(other))
+        #self.XX(n0._nodeNameMatches(other))
         self.XX(n0.lookupNamespaceURI(prefix))
         self.XX(n0.getElementById(badName))  # ???
         fo = FormatOptions(indent="____", quoteChar="'", newl="\r\n")

@@ -37,7 +37,7 @@ class TestDOMNode(unittest.TestCase):
         self.n.docEl.appendChild(self.n.mixedNode)
 
     def test_child2(self):
-        #DBG.dumpNode(self.n.child2, "Empty node:")
+        DBG.dumpNode(self.n.child2, "Empty node:")
         self.assertFalse(self.n.child2.hasChildNodes)
         #sys.stderr.write("%s" % (dir(Element)))
 

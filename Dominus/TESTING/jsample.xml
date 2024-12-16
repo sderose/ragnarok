@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!DOCTYPE html SYSTEM "http://w3.org/html">
+  <html xmlns:html="http://www.w3.org/1999/xhtml">
+    <head>
+      <title>My document</title>
+    </head>
+    <body>
+      <p id="stuff" class="lead">
+        This is a <i>very</i> short document.
+      </p>
+      <![CDATA[This is some <real> & <legit/> cdata.]]>
+      <?troff .ss;.b?>
+      <!--This is some <real> & <legit/> cdata.-->
+    </body>
+    <hr/>
+  </html>

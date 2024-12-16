@@ -1,0 +1,21 @@
+[ { "#name":"#document", "#format":"JSONX",
+    "#version":"1.0", "#encoding":"utf-8", "#standalone":"yes",
+    "#doctype":"html", "#systemId":"http://w3.org/html" },
+  [ { "#name": "html", "xmlns:html":"http://www.w3.org/1999/xhtml" },
+    [ { "#name": "head" },
+      [ { "#name": "title" },
+        "My document" ]
+    ],
+    [ { "#name": "body" },
+      [ { "#name": "p", "id":"stuff", "class":"lead" },
+        "This is a ",
+        [ { "#name": "i" }, "very" ],
+        " short document."
+      ],
+      [ { "#name": "#cdata" }, "This is some <real> & <legit/> cdata." ],
+      [ { "#name": "#pi", "#target": "troff" }, ".ss;.b" ],
+      [ { "#name": "#comment" }, "This is some <real> & <legit/> cdata." ]
+    ],
+    [ { "#name": "hr" } ]
+  ]
+]

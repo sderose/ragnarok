@@ -60,5 +60,31 @@ class TestXSP(unittest.TestCase):
             options={ "emptyEnd": True, "elementFold": True, "xsdType": True })
         print(repr(sr))
         sr.isOpen(space=EntSpace.GENERAL, name="chap1")
+
+    def test_doc(self):
+        StackReader(rootPath="./sample.dtd",
+            options={ "emptyEnd": True, "elementFold": True, "xsdType": True })
+
+class TestWholeDocument(unittest.TestCase):
+    def setup(self):
+        pass
+
+    def testdoc(self):
+        tdoc = """<html>
+<head><title>Eine Kleine NachtSchrift</title>
+</head>
+<body>
+<h1>Here <i>it</i> is.</h1>
+<p>For what it's worth &amp; costs.</p>
+<p id="zork" class="big blue" />
+<!-- comments, too? -->
+<?and a PI?>
+<p>-30</p>
+</body>
+</html>
+"""
+        StackReader(tdoc)
+        #sp.parseDocument(tdoc)
+
 if __name__ == '__main__':
     unittest.main()

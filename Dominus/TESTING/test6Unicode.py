@@ -1,54 +1,33 @@
 #!/usr/bin/env python3
 #
-#pylint: disable=W0201, C2801, W0612, W0212
-#
 import unittest
 import random
 import re
 import unicodedata
 
-#pylint: disable=W0401,W0611,W0621
-from basedomtypes import HReqE, ICharE, NSuppE  # NotFoundError
-from basedomtypes import NodeType
-from xmlstrings import XmlStrings as XStr,
+#from basedomtypes import HReqE, ICharE, NSuppE  # NotFoundError
+#from basedomtypes import NodeType
+from xmlstrings import XmlStrings as XStr
 from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
 
-import basedom
-from basedom import DOMImplementation, FormatOptions
-from basedom import PlainNode, Node, Document, Element, Attr
-from basedom import CharacterData, Text, NamedNodeMap, NodeList
+#import basedom
+#from basedom import DOMImplementation, PlainNode, Node
+#from basedom import FormatOptions, Document, Element, Attr
+#from basedom import CharacterData, Text, NamedNodeMap, NodeList
 
-from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
+from makeTestDoc import makeTestDoc2, DAT  #, DBG
 
 
 class MyTestCase(unittest.TestCase):
-    def XX(self, *_args, **_kwargs):
-        return
-
     def TR(self, expr):
         return self.assertTrue(expr)
 
     def FA(self, expr):
         return self.assertFalse(expr)
 
-    def NONE(self, first):
-        return self.assertIsNone(first)
-
     def EQ(self, first, second):
         return self.assertEqual(first, second)
 
-    def NE(self, first, second):
-        return self.assertNotEqual(first, second)
-
-    def IS(self, first, second):
-        return self.assertIs(first, second)
-
-    def TY(self, first, second):
-        return self.assertIsInstance(first, second)
-
-    def RZ(self, first, fn, *args, **kwargs):
-        assert(issubclass(first, Exception))
-        return self.assertRaises(first, fn, *args, **kwargs)
 
 class testByMethod(MyTestCase):
     def setUp(self):
@@ -103,7 +82,7 @@ class testByMethod(MyTestCase):
         nonorm = UNormHandler("NONE")
         for k, v in textPairs.items():
             self.EQ("NONE"+nonorm.normalize(v[0]), "NONE"+v[0])
-            self.NE("NONE"+nonorm.normalize(v[0]), "NONE"+v[1])
+            self.assertNotEqual("NONE"+nonorm.normalize(v[0]), "NONE"+v[1])
             un = UNormHandler(k)
             normed = un.normalize(v[0])
             if normed != v[1]:
@@ -122,7 +101,7 @@ class testByMethod(MyTestCase):
         s = "aBcDeF #$_- " + sigmai
         self.EQ(CaseHandler.NONE.normalize(s), s)
         self.EQ(CaseHandler.LOWER.normalize(s), s.lower())
-        self.EQ(CaseHandler.LOWER.normalize(s), s.upper())
+        self.EQ(CaseHandler.UPPER.normalize(s), s.upper())
         self.EQ(CaseHandler.FOLD.normalize(s), s.casefold())
 
     def testWSDef(self):
@@ -139,7 +118,7 @@ class testByMethod(MyTestCase):
         for wh, expectedLen in testOptions.items():
             wsh = WSHandler(wh)
             spaceChars = wsh.spaces
-            visChars = ", ".join("U+%04x" % (ord(c)) for c in spaceChars)
+            #visChars = ", ".join("U+%04x" % (ord(c)) for c in spaceChars)
             self.FA(re.search(r"(.).*\1", spaceChars)) # No dups, please.
             #msg=f"{wh} has dup: [ {visChars} ]")
             self.EQ(len(spaceChars), expectedLen)      # Right count?
@@ -170,7 +149,7 @@ class testByMethod(MyTestCase):
 
         # Sample the Unicode "L" category (could add Mn and a few others)
         randName = "eh_"
-        for i in range(20):
+        for _i in range(20):
             cp = random.randrange(0, 0xDFFF)
             if unicodedata.category(chr(cp)).startswith("L"):
                 randName += chr(cp)
@@ -215,7 +194,7 @@ class testByMethod(MyTestCase):
         self.FA(XStr.isXmlNumber("{45}"))
 
         self.EQ(XStr.escapeAttribute(
-            'Alfred <"E"> Neuman.', quoteChar='"'),
+            'Alfred <"E"> Neuman.', quoteChar='"', addQuotes=False),
             'Alfred &lt;&quot;E&quot;> Neuman.')
 
         self.EQ(XStr.escapeText(
@@ -271,10 +250,14 @@ class testByMethod(MyTestCase):
         self.EQ(XStr.dropNonXmlChars("abc\x05d\x1Ee\x02f"), "abcdef")
         self.EQ(XStr.unescapeXml("a&#65;-&bull;-&lt;.&#x2022;"), "aA-•-<.•")
         #self.TR(XStr.unescapeXmlFunction(mat))
-        self.EQ(XStr.normalizeSpace("  a   b\t\n c\rd  ", allUnicode=False), "a b c d")
-        self.EQ(XStr.stripSpace("  a\n \rb  ", allUnicode=False), "a b")
 
-        self.EQ(XStr.makeStartTag("spline", attrs="", empty=False, sort=False), "<spline>")
+        self.assertTrue(c in XStr.xmlSpaces_list for c in " \t\r\n")
+        self.EQ(XStr.normalizeSpace("  a   b\t\n c\rd  ", allUnicode=False), "a b c d")
+        self.EQ(XStr.stripSpace("\r\n\t  a b  \t\n \r  ", allUnicode=False), "a b")
+        self.EQ(XStr.stripSpace("  a\n \rb  ", allUnicode=False), "a\n \rb")
+
+        self.EQ(XStr.makeStartTag(
+            "spline", attrs="", empty=False, sort=False), "<spline>")
         self.EQ(XStr.makeStartTag(
             "spline", attrs={"id":"A1", "class":"foo"}, empty=True, sort=False),
             '<spline id="A1" class="foo"/>')
@@ -294,16 +277,16 @@ class testByMethod(MyTestCase):
             if (not XStr.isXmlName(c+"restOfName")):
                 failed.append("U+%04x" % (ord(c)))
         if (failed):
-            self.RZ(ICharE, print("Chars should be namestart but aren't: [ %s ]"
-                % (" ".join(failed))))
+            self.assertFalse(
+                print("Chars should be namestart but aren't: [ %s ]" % (" ".join(failed))))
 
         failed = []
         for c in allNCA:
             if (XStr.isXmlName(c+"restOfName")):
                 failed.append("U+%04x" % (ord(c)))
         if (failed):
-            self.RZ(ICharE, print("Chars should not be namestart but are: [ %s ]"
-                % (" ".join(failed))))
+            self.assertFalse(
+                print("Chars should not be namestart but are: [ %s ]" % (" ".join(failed))))
 
         self.TR(XStr.isXmlName(allNS*2))
 

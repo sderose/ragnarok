@@ -52,7 +52,7 @@ expectedCts = {
 
 def countStuff(doc) -> dict:
     counts = defaultdict(int)
-    for n in doc.eachNode(includeAttributes=True):
+    for n in doc.eachNode(separateAttributes=True):
         if n.isAttribute:
             counts["@"+n.nodeName] += 1
         elif n.isPI:
@@ -65,7 +65,7 @@ def countStuff(doc) -> dict:
 ###############################################################################
 # Test the implementation
 #
-class TestDomBuilderM(unittest.TestCase):
+class TestDomBuilderM(unittest.TestCase):  # using minidom
     def setUp(self):
         self.maxDiff = 9999
         self.db = None
@@ -81,32 +81,21 @@ class TestDomBuilderM(unittest.TestCase):
 
     def testDefault(self):
         db1 = dombuilder.DomBuilder()
-        try:
-            doc1 = db1.parse_string(self.xmlText)
-        except expat.ExpatError as e:
-            print(f"\n======= Initial parse failed\n{self.xmlText}\n=======\n{e}\n")
-            raise expat.ExpatError from e
+        doc1 = db1.parse_string(self.xmlText)
 
         print("\n")
         xmlText2 = doc1.toprettyxml(indent="  ")
         db2 = dombuilder.DomBuilder()
-        try:
-            doc2 = db2.parse_string(xmlText2)
-        except expat.ExpatError as e:
-            print(f"\n=======Re-parse of output failed\n{xmlText2}\n=======\n{e}\n")
-            raise expat.ExpatError from e
-
+        doc2 = db2.parse_string(xmlText2)
         isEqualNode(doc1.documentElement, doc2.documentElement)
 
-    @unittest.skip
     def testEmptyRoot(self):
         xml = """<emptyDoc class="spam baked_beans"/>"""
         self.db = dombuilder.DomBuilder()
         self.doc = self.db.parse_string(xml)
-        xml2 = self.doc.documentElement.outerXML
+        xml2 = self.doc.documentElement.toprettyxml()
         checkXmlEqual(xml, xml2)
 
-    @unittest.skip
     def testRootSiblings(self):
         xml = """<!-- My document -->
 <?zoot sister="dingo"?>
@@ -118,7 +107,6 @@ class TestDomBuilderM(unittest.TestCase):
         with self.assertRaises(SyntaxError):
             self.doc = self.db.parse_string(xml)
 
-    @unittest.skip
     def testExplicitChoice(self):
         self.db = dombuilder.DomBuilder(
             parserCreator=expat.ParserCreate,

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A document with stuff outside the document element. -->
+<?zoot sister="dingo"?>
+<article><p>Naughty, bad, evil Zoot!</p>
+</article>

@@ -39,20 +39,22 @@ class.
 
 ==Methods==
 
-* '''escapeAttribute'''(string, quoteChar='"')
+* '''escapeAttribute'''(string, quoteChar='"', addQuotes:bool=True)
 
 Escape the string as needed for it to
-fit in an attribute value. The crucial thing is to escape the 'quoteChar' to
+fit in an attribute value, including the 'quoteChar' to
 be used around the value. Most people seem to use double quote, but single
 quote is allowed in XML. You can specify which you plan to use, and that
 one will be escaped in 'string'. 'string' should not already be quoted.
+If 'addQuotes' is set, a 'quoteChar' is added to each end.
+Does not yet support curly quotes.
 
 * '''escapeText'''(string)
 
 Escape the string as needed for it to
 fit in XML text content ("&", "<", and "]]>").
 Some software escapes all ">", but that is not required. This method only
-escape ">" when it follows "]]".
+escape ">" when it follows "]]" (cf FormatOptions.escapeGT).
 
 * '''escapeCDATA'''(string)
 
@@ -337,21 +339,17 @@ class XmlStrings:
     ###########################################################################
     # XML string predicates
     #
-    # These test whether a string STARTS with the specified type
-    # (such as the input buffer when parsing).
-    #
-    startsWithXmlName_re = re.compile(f"^{NCName_re}")
-    startsWithXmlQName_re = re.compile(f"^{QName_re}")
-
-    # These all test whether an ENTIRE string is of the specified type.
-    #
     isXmlChars_re = re.compile(r"[%s]" % (_nonXml_rangespec))
-    isXmlName_re = re.compile(f"^{NCName_re}$")
-    isXmlQName_re = re.compile(f"^{QName_re}$")
-    isXmlQQName_re = re.compile(f"^{QQName_re}$")
-    isXmlPName_re = re.compile(f"^{PName_re}$")
-    isXmlNMTOKEN_re = re.compile(f"^{NMTOKEN_re}$")
-    isXmlNumber_re = re.compile(r"^\d+$", flags=re.ASCII)
+
+    # One typically tests whether an ENTIRE string is of the specified type,
+    # so use re.fullmatch. But xsparser has at least one exception.
+    #
+    isXmlName_re = re.compile(NCName_re)
+    isXmlQName_re = re.compile(QName_re)
+    isXmlQQName_re = re.compile(QQName_re)
+    isXmlPName_re = re.compile(PName_re)
+    isXmlNMTOKEN_re = re.compile(NMTOKEN_re)
+    isXmlNumber_re = re.compile(r"^\d+", flags=re.ASCII)
 
     @staticmethod
     def isXmlChars(s:str) -> bool:
@@ -363,54 +361,56 @@ class XmlStrings:
     def isXmlName(s:str) -> bool:
         """Return True for a NON-namespace-prefixed (aka) local name.
         """
-        return bool(re.match(XmlStrings.isXmlName_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlName_re, s))
     isXmlNCName = isXmlName
 
     @staticmethod
     def isXmlQName(s:str) -> bool:
         """Return True for a namespace-prefixed OR unprefixed name.
         """
-        return bool(re.match(XmlStrings.isXmlQName_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlQName_re, s))
 
     @staticmethod
     def isXmlQQName(s:str) -> bool:
         """Return True even for multiple prefixes.
         """
-        return bool(re.match(XmlStrings.isXmlQQName_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlQQName_re, s))
 
     @staticmethod
     def isXmlPName(s:str) -> bool:
         """Return True only for a namespace-prefixed name.
         """
-        return bool(re.match(XmlStrings.isXmlPName_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlPName_re, s))
 
     @staticmethod
     def isXmlNMTOKEN(s:str) -> bool:
-        return bool(re.match(XmlStrings.isXmlNMTOKEN_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlNMTOKEN_re, s))
 
     @staticmethod
     def isXmlNumber(s:str) -> bool:
         """Check whether the token is a number. This turns off re.Unicode,
         lest we get all the non-Arabic digits (category [Nd]).
         """
-        return bool(re.match(XmlStrings.isXmlNumber_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlNumber_re, s))
 
 
     ###########################################################################
     # Escapers
     #
     @staticmethod
-    def escapeAttribute(s:str, quoteChar:str='"') -> str:
+    def escapeAttribute(s:str, quoteChar:str='"', addQuotes:bool=True) -> str:
         """Turn characters special in (double-quoted) attributes, into char refs.
-        Set to "'" if you prefer single-quoting your attributes, in which case
+        If 'addQuotes' is set, also add the quotes.
+        Set quoteChar if you prefer other than '"', in which case
         that character is replaced by a character reference instead.
-        This always uses the predefined XML named special character references.
         """
         s = XmlStrings.dropNonXmlChars(s)
         s = s.replace('&', "&amp;")
         s = s.replace('<', "&lt;")
+        # TODO Impl fo.escapeGT
         if quoteChar == '"': s = s.replace('"', "&quot;",)
-        else: s = s.replace("'", "&apos;")
+        else: s = s.replace(quoteChar, "&#x%04x;" % (ord(quoteChar)))
+        if (addQuotes): return quoteChar + s + quoteChar
         return s
     escapeXmlAttribute = escapeAttribute
 
@@ -462,7 +462,8 @@ class XmlStrings:
     @staticmethod
     def escapeASCII(s:str, width:int=4, base:int=16, htmlNames:bool=True) -> str:
         """Delete truly prohibited chars, turn all non-ASCII characters
-        into character references, then do a regular escapeText().
+        into character references, including the usual escapeText().
+        Also escaped: U+7E since it's weird (DEL)
         @param width: zero-pad numbers to at least this many digits.
         @param base: 10 for decimal, 16 for hexadecimal.
         @param htmlNames: If True, use HTML 4 named entities when applicable.
@@ -471,17 +472,17 @@ class XmlStrings:
         def escASCIIFunction(mat:Match) -> str:
             """Turn all non-ASCII chars to character refs.
             """
-            code = ord(mat.group[1])
+            code = ord(mat.group(1))
             nonlocal width, base, htmlNames
             if htmlNames and code in codepoint2name:
                 return "&%s;" % (codepoint2name[code])
             if base == 10:
-                return "&#%*d;" % (width, code)
-            return "&#x%*x;" % (width, code)
+                return "&#%0*d;" % (width, code)
+            return "&#x%0*x;" % (width, code)
 
         s = XmlStrings.dropNonXmlChars(s)
-        s = re.sub(r'([^[:ascii:]])r', escASCIIFunction, s)
-        s = XmlStrings.escapeText(s)
+        s = re.sub(r'([^\x00-\x7E])', escASCIIFunction, s)
+        #s = XmlStrings.escapeText(s)
         return s
 
     ###########################################################################
@@ -492,7 +493,7 @@ class XmlStrings:
         """Remove the C0 control characters not allowed in XML.
         Unassigned Unicode characters higher up are left unchanged.
         """
-        return re.sub(r"[%s]+" % (XmlStrings._nonXml_rangespec), "", s)
+        return re.sub(r"[%s]+" % (XmlStrings._nonXml_rangespec), "", str(s))
 
     entref_re = r"&(#[xX]?)?(\w+);"  # TODO Ok for common ent names, but...
 
@@ -546,7 +547,7 @@ class XmlStrings:
         for a in (anames):
             v = dct[a]
             if normValues: v = XmlStrings.normalizeSpace(v)
-            attrString += f"{sep}{a}=\"{XmlStrings.escapeAttribute(v)}\""
+            attrString += f"{sep}{a}={XmlStrings.escapeAttribute(v)}"
         return attrString
 
     @staticmethod

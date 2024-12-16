@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# A fairly simple native Python DOM implementation. Basically DOM 2
-# plus a bunch of Pythonic, xpath, etree, etc. conveniences.
+# A modern pure Python DOM implementation, with parser, datatyping,....
 #
-#pylint: disable=W0613, W0212
-#pylint: disable=E1101
+# Geordi, I have spent my whole life trying to figure out crazy ways of
+# doing things. I'm telling ya, as one engineer to another -- I can do this.
+#            -- ST:TNG "Relics"
 #
-#import sys
+#pylint: disable=W0613, W0212, E1101
+#
+import codecs
 from collections import OrderedDict
 from types import SimpleNamespace
-#from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Union, Iterable, Tuple, Mapping, IO
 import functools
-import logging
 import unicodedata
 import re
+from textwrap import wrap
 
-from basedomtypes import HReqE, ICharE, NSuppE, FlexibleEnum
+from basedomtypes import DOMException, HReqE, ICharE, NSuppE, FlexibleEnum
 from basedomtypes import NamespaceError, NotFoundError, OperationError
 from basedomtypes import DOMImplementation_P, NMTOKEN_t, QName_t, NodeType
 
@@ -28,21 +29,15 @@ from xmlstrings import XmlStrings as XStr, CaseHandler
 from xsdtypes import AttrTypes
 from idhandler import IdHandler
 
-#from domgetitem import __domgetitem__  # NodeSelKind
-#from domadditions import whatwgAdditions, EtAdditions, OtherAdditions
-#from cssselectors import CssSelectors
-
-lg = logging.getLogger("BaseDOM")
-
 __metadata__ = {
     "title"        : "BaseDOM",
     "description"  : "A more modern, Pythonic, fast DOM-ish implementation.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
-    "language"     : "Python 3.7",
+    "language"     : "Python 3.11",
     "created"      : "2016-02-06",
-    "modified"     : "2024-10",
+    "modified"     : "2024-12",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
@@ -50,9 +45,26 @@ __version__ = __metadata__['modified']
 
 descr = """See BaseDom.md"""
 
-def _dtrace(msg):
-    return
-    #if __debug__: sys.stderr.write(msg + "\n")
+class DTrace:
+    """Some simple debug tracing.
+    State:  0 = do nothing; 1 = log; 2 = display.
+    """
+    def __init__(self, state:int=0):
+        self.state = 0
+        self.msgLog = []
+
+    def msg(self, m:str):
+        if self.state == 0: return
+        elif self.state == 1: self.msgLog.push(m)
+        else: print(m)
+
+    def clear(self):
+        self.msgLog = []
+
+    def printAll(self):
+        print("\nDTrace log:\n  ", "\n  ".join(self.msgLog))
+
+dtr = DTrace(0)
 
 def hidden(func):
     """Define "@hidden" decorator to signal that a method is hiding
@@ -103,8 +115,8 @@ class DOMImplementation(DOMImplementation_P):
         if not qualifiedName: return doc
 
         if not XStr.isXmlQName(qualifiedName):
-            raise ICharE(f"Root element to be has bad name '{qualifiedName}'.")
-        prefix = XStr.getLocalPart(qualifiedName)
+            raise ICharE(f"Root element to be has bad qname '{qualifiedName}'.")
+        prefix = XStr.getPrefixPart(qualifiedName)
 
         if prefix == "xml":
             if namespaceURI not in [ RWord.XML_PREFIX_URI, "" ]:
@@ -137,8 +149,8 @@ class DOMImplementation(DOMImplementation_P):
 
     def parse(self, f:Union[str, IO], parser=None, bufsize:int=None
         ) -> 'Document':
-        domImpl = getDOMImplementation()
-        dbuilder = DomBuilder(domImpl=domImpl)
+        #domImpl = getDOMImplementation()
+        dbuilder = DomBuilder(domImpl=self)
         theDom = dbuilder.parse(f)
         return theDom
 
@@ -163,8 +175,8 @@ class FormatOptions:  # HERE
 
         # Whitespace insertion
         self.newl:str = "\n"            # String for line-breaks
-        self.indent:str = ""            # String to repeat for indent
-        self.wrapTextAt:int = 0         # Wrap text near this interval      TODO
+        self.indent:str = "  "          # String to repeat for indent
+        self.wrapTextAt:int = 0         # Wrap text near this interval
         self.dropWS:bool = False        # Drop existing whitespace-only text nodes
         self.breakBB:bool = True        # Newline before start tags
         self.breakAB:bool = False       # Newline after start tags
@@ -173,7 +185,7 @@ class FormatOptions:  # HERE
         self.breakBE:bool = False       # Newline before end tags
         self.breakAE:bool = False       # Newline after end tags
 
-        self.inlineTags:List = []       # List of inline elements, no breakXX.
+        self.tagInfos = {}              # Dict mapping nodeNames to CSS display type
 
         # Syntax alternatives
         self.canonical:bool = False     # Use canonical XML syntax?         TODO
@@ -182,120 +194,105 @@ class FormatOptions:  # HERE
         self.includeDoctype = True
         self.useEmpty:bool = True       # Use XML empty-element syntax
         self.emptySpace:bool = True     # Include a space before the /
-        self.quoteChar:str = '"'        # Char to quote attributes          TODO
-        self.sortAttrs:bool = False     # Alphabetical order for attributes
+        self.quoteChar:str = '"'        # Char to quote attributes
+        self.sortAttrs:bool = False     # Alphabetical order (cf readOrder)
         self.normAttrs = False          # Normalize whitespace in attributes
 
         # Escaping  TODO Switch to use EscapeHandler
         self.escapeGT:bool = False      # Escape > in content               TODO
         self.ASCII = False              # Escape all non-ASCII              TODO
         self.charBase:int = 16          # Char refs in decimal or hex?      TODO
-        self.charPad:int = 4            # Min width for numeric char refs
-        self.htmlChars:bool = True      # Use HTML named special characters
+        self.charPad:int = 4            # Min width for numeric char refs   TODO
+        self.htmlChars:bool = True      # Use HTML named special characters TODO
         self.translateTable:Mapping = {} # Let caller control escaping
 
         for k, v in kwargs.items():
-            if k == "inlineTags":
-                self.setInlines(v)
+            if k == "tagInfos":
+                self.setTagInfos(v)
             elif k not in self.__dict__:
                 raise KeyError(f"FormatOptions: Unknown kw arg '{k}'.")
             elif not isinstance(v, type(self.__dict__[k])):
                 raise TypeError(f"FormatOptions: kw arg '{k}' expected type "
                     f"{type(self.__dict__[k])}, not {type(v)}.")
-            self.__dict__[k] = v
+            else:
+                self.__dict__[k] = v
 
-    @staticmethod
-    def canonicalFO() -> 'FormatOptions':
-        """Return a FormatOptions object set up to ensure Canonical XML output.
+    def setInlines(self, v:Union[str, Iterable]=None) -> Dict:
+        """Shorthand to add the passed names to tagInfos as 'inline'.
+        If v is a str, it can be a space-separated list of element types.
         """
-        fo = FormatOptions()
-        fo.canonical = True
-        fo.sortAttrs = True
-        fo.normAttrs = True
-        fo.newl = "\n"
-        fo.quoteChar = '"'
-        fo.htmlChars = False
-        fo.includeDoctype = False
-        fo.useEmpty = False
-        # TODO: namespace dcl before other attrs
+        if v is None: return self.tagInfos
+        if isinstance(v, str):
+            v = v.split()
+        for tag in v:
+            if not XStr.isXmlNMTOKEN(tag): raise ICharE(
+                f"Bad name '{tag}' for setInlines().")
+            self.tagInfos[tag] = "inline"
+        return self.tagInfos
 
-        fo.indent:str = ""
-        fo.wrapTextAt = 0
-        fo.breakBB = fo.breakAB = fo.breakAttrs = fo.breakBE = fo.breakAE = False
-
-        return fo
-
-    _Inline_Lists = {
-        "HTML": """a abbr acronym audio b bdi bdo big br button canvas cite
-code data datalist del dfn em embed i iframe img input ins kbd label map
-mark math meter noscript object output picture progress q ruby rt rp s
-samp select slot small span strong sub sup svg template textarea
-time tt u var wbr""",
-
-        "DocBook": """abbrev accel acronym action application artpagenums
-authorinitials bibliocoverage biblioid biblioref bibliosource citation
-citebiblioid citerefentry citetitle cityname classname co code command
-computeroutput constant coref database date editor email emphasis envar
-errorcode errorname errortext errortype exceptionname fax filename firstname
-firstterm foreignphrase function glossterm guibutton guiicon guilabel guimenu
-guimenuitem guisubmenu hardware honorific initializer inlineequation
-inlinemediaobject interface interfacename jobtitle keycap keycode keycombo
-keysym lineage lineannotation link literal literallayout markup medialabel
-menuchoice methodname modifier mousebutton nonterminal olink ooclass ooexception
-oointerface option optional org orgdiv orgname othercredit othername package
-pagenums parameter phone phrase pob postcode primary primaryie productname
-productnumber prompt property quote refclass refdescriptor refentrytitle
-refmiscinfo refname refpurpose replaceable returnvalue revhistory secondary
-secondaryie see seealso seealsoie seeie seg segtitle shortaffil shortcut state
-street structfield structname subscript superscript surname symbol systemitem
-tag termdef tertiary tertiaryie token trademark type ulink uri userinput
-varargs varname void volumenum wordasword xref year
-Claude can make mistakes. Please double-check responses.""",
-
-        "JATS": """abbrev access-date ack addr-line aff alt-text alternatives
-annotation anonymous array article-title attrib award-id bold boxed-text break
-chem-struct city collab comment conf-date conf-loc conf-name conf-sponsor
-contrib contrib-group contrib-id copyright-holder copyright-statement
-copyright-year country date date-in-citation day def-head degrees disp-formula
-disp-formula-group disp-quote edition email equal-contrib ext-link fax fig
-fixed-case fn fn-group fpage funding-group funding-source funding-statement
-given-names glossary glyph-data glyph-ref gov graphic inline-formula
-inline-graphic inline-supplementary-material institution institution-id isbn issn
-issue issue-id issue-part issue-sponsor issue-title italic journal-id
-journal-subtitle journal-title kwd license license-p long-desc lpage meta-name
-meta-value milestone-end milestone-start mixed-citation monospace month name
-named-content nlm-citation notes object-id on-behalf-of overline p page-range
-patent permissions phone postal-code prefix preformat price
-principal-award-recipient principal-investigator private-char pub-id publisher-loc
-publisher-name rb ref related-article related-object roman rp rt ruby
-sans-serif sc season sec sig sig-block size source speaker state std strike
-string-conf string-date string-name styled-content sub subject suffix sup
-supplementary-material surname table table-wrap target td term tex-math th
-time-stamp title tr underline uri volume volume-id volume-series x xref year
-zip""",
-    }
-
-    def setInlines(self, v:Union[Iterable, str]) -> int:
-        """Accept either a known schema name, a space-separated name list,
-        or an Iterable of names.
+    def setTagInfos(self, source:Union[Dict, str, IO]) -> int:
+        """Add a bunch of tagname:displayType pairs to tagInfos.
+        Accepts either a dict, a str path, or an open file handle.
         Returns the numbers of tags in the resulting list.
-        """
-        if not v:
-            self.inlineTags = []
-        elif isinstance(v, Iterable):
-            self.inlineTags = v
-        elif v in self._Inline_Lists:
-            self.inlineTags = self._Inline_Lists[v].split()
-        else:
-            self.inlineTags = v.split()
 
-        badt = [ tag for tag in self.inlineTags if not XStr.isXmlQName(tag) ]
-        if badt: raise ICharE(f'Bad inlineTags [ {", ".join(badt)} ].')
-        return len(self.inlineTags)
+        The file format has one tagname, value pair per line, and
+        lines beginning with (space and) "#" are ignored as comments.
+        The values are expected to be as for the CSS "display" property.
+        The important ones here are:
+            inline: makes the element type exempt from breakXX settings
+            pre: Not a "display" value, but prevents re-wrapping.
+        """
+        if isinstance(source, dict):
+            for tag, disp in source.items:
+                if not XStr.isXmlNMTOKEN(tag): raise ICharE(
+                    f"Bad name '{tag}' for setInlines().")
+                self.tagInfos[tag] = disp
+            return self.tagInfos
+        elif isinstance(source, str):
+            ifh = codecs.open(source, "rb", encoding="utf-8")
+        else:
+            ifh = source
+
+        for i, rec in enumerate(ifh.readlines()):
+            rec = rec.strip()
+            if rec.startswith("#") or rec == "": continue
+            tag, disp = rec.partition(",")
+            if not disp: raise SyntaxError(
+                f"line {i}: taginfo file record lacks comma: {rec}.")
+            tag = tag.strip()
+            disp = disp.strip()
+            if not XStr.isXmlNMTOKEN(tag): raise ICharE(
+                f"Bad name '{tag}' for setInlines().")
+            self.tagInfos[tag] = disp
+
+        if isinstance(source, str): ifh.close()
+        return self.tagInfos
 
     @property
     def ws(self) -> str:
         return self.newl + self.indent * self.depth
+
+# Global FormatOptions objects for default and for canonical XML output.
+# TODO: fix attr order to do namespace dcl before other attrs
+#
+_CanonicalFO = FormatOptions(
+    canonical = True,
+    sortAttrs = True, normAttrs = True,
+    newl = "\n", quoteChar = '"', htmlChars = False,
+    includeDoctype = False, useEmpty = False,
+    indent = "", wrapTextAt = 0,
+    breakBB = False, breakAB = False, breakAttrs = False,
+    breakBE = False, breakAE = False,
+)
+
+_DefaultFO = FormatOptions(
+    sortAttrs = True, normAttrs = True,
+    newl = "\n", quoteChar = '"', htmlChars = False,
+    includeDoctype = False, useEmpty = False,
+    indent = "  ", wrapTextAt = 0,
+    breakBB = False, breakAB = False, breakAttrs = False,
+    breakBE = False, breakAE = False,
+)
 
 
 ###############################################################################
@@ -342,8 +339,7 @@ class PlainNode(list):
 
     We make this a direct subclass of list (of its childNodes). This gets many
     useful and hopefully intuitive features. However, it has some side effects:
-      * Since Nodes know where they are (parent/owner), ins/del are special.
-      * Inserting a connected node cannot just insert a ref, but must copy.
+      * Since Nodes know where they are (parent/owner), insert/del are special.
       * Empty nodes (no childNode) are not usefully False, b/c they are not
         all identical. So bool() is special.
       * "contains" is nonrecursive in Python lists, but recursive in DOM.
@@ -369,7 +365,7 @@ class PlainNode(list):
     # are in domenums.RWord
 
     @property
-    def canHaveChildren(self) -> bool:
+    def canHaveChildren(self) -> bool:  # HERE
         return self.nodeType in [
             PlainNode.ABSTRACT_NODE,  # TODO Maybe not?
             PlainNode.ELEMENT_NODE, PlainNode.DOCUMENT_NODE,
@@ -377,7 +373,7 @@ class PlainNode(list):
 
     def __init__(self, ownerDocument=None, nodeName:NMTOKEN_t=None):
         """PlainNode (and Node) shouldn't really be instantiated.
-        minidom lets it be, but with different parameters.
+        minidom lets Node be, but with different parameters.
         I add the params for constructor consistency.
         Also, since here it is a list, there's not much need to distinguish
         Node, NodeList, and DocumentFragment -- mainly that only the first
@@ -425,7 +421,7 @@ class PlainNode(list):
         if not isinstance(value, Node): raise HReqE(
             f"Can't insert non-Node ({type(value)}) as child.")
         if isinstance(picker, int):
-            n = self._normalizeIntIndex(picker)
+            n = self._normalizeChildIndex(picker)
             self.replaceChild(value, self[n])
         elif isinstance(picker, slice):
             start, stop, step = picker.indices(len(self))
@@ -491,6 +487,8 @@ class PlainNode(list):
         (or selected siblings). This is O(n). We could save the position,
         but then insert and delete would become O(n).
         *** This is used internally, unlike most extensions ***
+        TODO Ditch onlyElements in favor of ofNodeName="*"??? Meh
+        TODO Rename with underscore?
         """
         if self.parentNode is None: return None
         i = 0
@@ -498,7 +496,7 @@ class PlainNode(list):
             if ch is self: return i
             if onlyElements and not ch.isElement: continue
             if noWSN and ch.isWSN: continue
-            if ofNodeName and ch.nodeName != self.nodeName: continue
+            if ofNodeName and ch.nodeName != self.nodeName: continue  # TODO use nodeNameMatches
             i += 1
         #raise HReqE("Child not found.")
         return None
@@ -506,7 +504,8 @@ class PlainNode(list):
     def getRChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,
         noWSN:bool=False) -> int:  # HERE
         """Return the position from the end (from -1...) among
-        the node's siblings or selected siblings.
+        the node's siblings or selected siblings (such as just Elements, or
+        just nodes of the same nodeName.
         """
         if self.parentNode is None: return None
         i = -1
@@ -514,7 +513,7 @@ class PlainNode(list):
             if ch is self: return i
             if onlyElements and not ch.isElement: continue
             if noWSN and ch.isWSN: continue
-            if ofNodeName and ch.nodeName != self.nodeName: continue
+            if ofNodeName and ch.nodeName != self.nodeName: continue  # TODO use nodeNameMatches
             i -= 1
         #raise HReqE("Child not found.")
         return None
@@ -563,16 +562,18 @@ class PlainNode(list):
         return self.parentNode
 
     @property
+    def previousSibling(self) -> 'Node':
+        if self.parentNode is None: return None
+        if self.isFirstChild: return None
+        return self.parentNode.childNodes[self.getChildIndex()-1]
+
+    @property
     def nextSibling(self) -> 'Node':
         if self.parentNode is None: return None
         if self.isLastChild: return None
         return self.parentNode.childNodes[self.getChildIndex()+1]
 
-    @property
-    def previousSibling(self) -> 'Node':
-        if self.parentNode is None: return None
-        if self.isFirstChild: return None
-        return self.parentNode.childNodes[self.getChildIndex()-1]
+    # See class Node for additional neighbor methods and XPath analogs.
 
     def isSameNode(self, n2) -> bool:
         return self is n2
@@ -589,18 +590,42 @@ class PlainNode(list):
         """
         if n2 is self: return True
         if n2 is None:
-            _dtrace("other is None")
+            dtr.msg("other is None")
             return False
         if self.nodeType != n2.nodeType:
-            _dtrace(f"nodeType differs ({self.nodeType} vs. {n2.nodeType}).")
+            dtr.msg(f"nodeType differs ({self.nodeType} vs. {n2.nodeType}).")
             return False
-        if not self.nodeNameMatches(n2):
-            _dtrace(f"nodeName differs ({self.nodeName} vs. {n2.nodeName}).")
+        if not self._nodeNameMatches(n2):
+            dtr.msg(f"nodeName differs ({self.nodeName} vs. {n2.nodeName}).")
             return False
         if self.nodeValue != n2.nodeValue:
-            _dtrace(f"nodeValue differs:\n###{self.nodeValue}###\n###{n2.nodeValue}###")
+            dtr.msg("nodeValue differs:\n" +
+                f"  ###{self.nodeValue}###\n  ###{n2.nodeValue}###")
             return False
         # Element does additional checks like attributes and childNodes
+        return True
+
+    def _nodeNameMatches(self, other:'Node') -> bool:  # HERE
+        """Factor this out b/c with namespaces there can be a match even
+        if the prefixes don't match, because they could map to the same URI!.
+        When you disconnect a node, you're supposed to keep all
+        relevant namespaces with it.
+        """
+        if (self.ownerDocument and self.ownerDocument.options.ElementCase):
+            if self.ownerDocument.options.ElementCase.strcasecmp(
+                self.localName, other.localName): return False
+        else:
+            if self.localName != other.localName: return False
+
+        #if self.parentNode is None or other.parentNode is None: return True
+        if (self.namespaceURI == RWord.NS_ANY
+            or other.namespaceURI == RWord.NS_ANY): return True
+
+        if (self.ownerDocument and self.ownerDocument.options.NSURICase):
+            if self.ownerDocument.options.NSURICase.strcasecmp(
+                self.namespaceURI, other.namespaceURI): return False
+        else:
+            if self.namespaceURI != other.namespaceURI: return False
         return True
 
     def cloneNode(self, deep:bool=False) -> 'Node':
@@ -617,6 +642,8 @@ class PlainNode(list):
         user should be able to just use what they have.
         """
         if isinstance(ch, Node):
+            if (ch.parentNode != self): raise HReqE(
+                "Putative child node isn't.")
             return ch.getChildIndex(), ch
         if isinstance(ch, int):
             n = ch
@@ -626,7 +653,7 @@ class PlainNode(list):
             raise IndexError(f"child number {ch}, but only {len(self)} there.")
         raise TypeError("Bad child specifier type '%s'." % (type(ch).__name__))
 
-    def _normalizeIntIndex(self, key:int):
+    def _normalizeChildIndex(self, key:int):
         """Accept positive or negative child indexes, but return the positive form.
         If out of range, raise an exception.
         """
@@ -659,34 +686,159 @@ class PlainNode(list):
     def appendChild(self, newChild:'Node') -> None:  # PlainNode
         self.insert(len(self), newChild)
 
+    def append(self, newChild:'Node') -> None:
+        self.insert(len(self), newChild)
+
     def insertBefore(self, newChild:'Node', oldChild:Union['Node', int]) -> None:
         oNum, oChild = self._expandChildArg(oldChild)
-        if oChild.parentNode != self:
-            raise NotFoundError("Node to insert before is not a child.")
+        if oChild.parentNode != self: raise NotFoundError(
+            f"Node to insert before (a {oChild.nodeName}) is not a child.")
         self.childNodes.insert(oNum, newChild)
 
     def insertAfter(self, newChild:'Node', oldChild:Union['Node', int]) -> None:  # HERE
         oNum, oChild = self._expandChildArg(oldChild)
-        if oChild.parentNode != self:
-            raise NotFoundError("Node to insert before is not a child.")
+        if oChild.parentNode != self: raise NotFoundError(
+            f"Node to insert after (a {oChild.nodeName}) is not a child.")
         self.childNodes.insert(oNum+1, newChild)
+
+    def insert(self, i:int, newChild:'Node') -> None:  # PlainNode
+        """Note: Argument order is different than (say) insertBefore.
+        This implementation does not link siblings, b/c tests showed
+        the overhead wasn't worth it. To change that, update those links here.
+        """
+        if not self.canHaveChildren:
+            raise HReqE(f"node type {type(self).__name__} cannot have children.")
+        if not isinstance(newChild, Node) or isinstance(newChild, (Attr, Document)):
+            raise HReqE(f"newChild is bad type {type(newChild).__name__}.")
+        if newChild.parentNode is not None:
+            raise HReqE("newChild already has parent (name %s)"
+                % (newChild.parentNode.nodeName))
+        newChild.ownerDocument = self.ownerDocument
+        if newChild.isElement: self._filterOldInheritedNS(newChild)
+        if i < 0: i = len(self) + i
+        #if i >= len(self): self.appendChild(newChild)  # ?
+        else: super().insert(i, newChild)
+        newChild.parentNode = self
+
+        #if linkSibs:
+        #    newChild.previousSibling = newChild.nextSibling = None
+        #    if i > 0:
+        #        self.childNodes[i-1].nextSibling = newChild
+        #        newChild.previousSibling = self.childNodes[i-1]
+        #    if i < len(self)-1:
+        #        self.childNodes[i+1].previousSibling = newChild
+        #        newChild.nextSibling = self.childNodes[i+1]
+
+    ### Removers
+    #
+    def replaceChild(self, newChild:'Node', oldChild:Union['Node', int]) -> None:
+        if newChild.parentNode is not None:
+            hint = " Swapped arguments?" if oldChild.parentNode is None else ""
+            raise HReqE("New child for replaceChild already has parent." + hint)
+        oNum, oChild = self._expandChildArg(oldChild)
+        self.removeChild(oChild)
+        self.childNodes.insert(oNum, newChild)
+
+    def clear(self) -> None:
+        while len(self) > 0:
+            self.removeChild(self.childNodes[0])
+
+    def pop(self, i:int=-1) -> 'Node':
+        return self.removeChild(self.childNodes[i])
+
+    def remove(self, x:Any=None) -> 'Node':
+        """Remove all members (child nodes) that match x.
+        """
+        if len(self.childNodes) == 0: return None
+        for ch in self.childNodes:
+            if ch._isOfValue(x): self.removeChild(ch)
+
+    def removeNode(self) -> 'Node':
+        """Remove the node itself from its parentNode, unlinking as needed.
+        """
+        if self.parentNode is None:
+            raise HReqE(f"No parent in removeNode for {self.nodeName}.")
+        return self.parentNode.removeChild(self)
 
     def removeChild(self, oldChild:Union['Node', int]) -> 'Node':  # PlainNode
         """Disconnect oldChild from this node, removing it from the tree,
         but not fromm the document. To destroy it, it should also unlinked.
         Namespaces are copied, not cleared (may be if/when re-inserted somewhere).
+        All removals end up here.
         """
         if isinstance(oldChild, Node):
-            if oldChild.parentNode != self:
-                raise HReqE("Node to remove has wrong parent.")
-        elif not isinstance(oldChild, int):
-            raise HReqE(f"Child to remove is not a Node or int, but a {oldChild.type}.")
+            if oldChild.parentNode != self: raise HReqE(
+                f"Node to remove (a {oldChild.nodeName}) has wrong parent.")
+        elif not isinstance(oldChild, int): raise HReqE(
+            f"Child to remove is not a Node or int, but a {oldChild.type}.")
         oNum, oChild = self._expandChildArg(oldChild)
         del self.childNodes[oNum]
         oChild.parentNode = None
+        #if linkSibs:
+        #    newChild.previousSibling = newChild.nextSibling = None
+        #    if i > 0:
+        #        self.childNodes[i-1].nextSibling = newChild.nextSibling
+        #        newChild.previousSibling = None
+        #    if i < len(self)-1:
+        #        self.childNodes[i+1].previousSibling = newChild.previousSibling
+        #        newChild.nextSibling = None
         if oChild.isElement: oChild._resetinheritedNS()
-        #lg.warning("    afterward: %d children.", len(self.childNodes))
         return oChild
+
+    # "del" can't just do a plain delete, 'cuz unlink. TODO: Enable del?
+    #def __delitem__(self, i:int) -> None:
+    #    self.removeChild(self.childNodes[i])
+
+    def unlink(self, keepAttributes:bool=False) -> None:  # MINIDOM
+        """Break all internal references in the subtree, to help gc.
+        But with keepAttributes=True, it will unlink them instead.
+        Element overrides this to unlink attrs and childNodes, too.
+        """
+        self.ownerDocument    = None
+        self.parentNode       = None
+        if hasattr(self, "previousSibling"): self.previousSibling = None
+        if hasattr(self, "nextSibling"): self.nextSibling = None
+
+
+    def writexml(self, writer:IO,
+        indent:str="", addindent:str="", newl:str="",
+        encoding:str=None, standalone:bool=None) -> None:  # Node
+        foptions = FormatOptions(indent=addindent, newl=newl)
+        writer.write(self.toprettyxml(foptions=foptions))
+
+    ### Python list operations (PlainNode)
+
+    def count(self, x:Any) -> int:
+        found = 0
+        for ch in self.childNodes:
+            assert isinstance(ch, Node)
+            if ch._isOfValue(x): found += 1
+        return found
+
+    def index(self, x:Any, start:int=None, end:int=None) -> int:
+        """Find the first child in [start:end] that satisfies x.
+        If x is a Callable, it should take Node and return bool.
+        """
+        if start is None: start = 0
+        elif start < 0: start = len(self.childNodes) + start
+        if end is None: end = len(self.childNodes)
+        elif end < 0: end = len(self.childNodes) + end
+        if end > len(self.childNodes): end = len(self.childNodes)
+        if end <= start: raise IndexError("index() range out of order.")
+        for i in range(start, end):
+            if self.childNodes[i]._isOfValue(x): return i
+        raise ValueError("'%s' not satisfied in %s '%s' [%d:%d]."
+            % (x, self.nodeType, self.nodeName, start, end))
+
+    def _isOfValue(self, value:Any) -> bool:
+        """Used by count, index, remove to pick node(s) to work on.
+        What *should* the test be? Going with nodeName for now.
+        """
+        if value is None: return True  # TODO ???
+        if callable(value): return value(self)
+        if value == "*" and self.nodeType == NodeType.ELEMENT_NODE: return True
+        if value == self.nodeName: return True
+        return False
 
     def _resetinheritedNS(self) -> None:
         """When removed, the node loses parentNode but not ownerDocument, and
@@ -702,55 +854,6 @@ class PlainNode(list):
             raise HReqE(f"Don't reset ns on nodeType {self.nodeType}...")
         if self.inheritedNS:
             self.inheritedNS = self.inheritedNS.copy()
-
-    def writexml(self, writer:IO,
-        indent:str="", addindent:str="", newl:str="",
-        encoding:str=None, standalone:bool=None) -> None:  # Node
-        writer.write(self.toprettyxml(indent=addindent, newl=newl))
-
-    ### Python list operations (PlainNode)
-
-    def count(self, x:Any) -> int:
-        found = 0
-        for ch in self.childNodes:
-            assert isinstance(ch, Node)
-            if ch._isOfValue(x): found += 1
-        return found
-
-    def index(self, x, start:int=None, end:int=None) -> int:
-        """TODO: Is this the best way to support the list op?
-        """
-        if start is None: start = 0
-        elif start < 0: start = len(self.childNodes) + start
-        if end is None or end > len(self.childNodes): end = len(self.childNodes)
-        if end < 0: end = len(self.childNodes) + end
-        if end <= start: raise IndexError("index range out of order.")
-        for i in range(start, end):
-            if self.childNodes[i]._isOfValue(x): return i
-        raise ValueError("'%s' not found in %s '%s' [%d:%d]."
-            % (x, self.nodeType, self.nodeName, start, end))
-
-    def append(self, newChild:'Node') -> None:
-        self.insert(len(self), newChild)
-
-    def insert(self, i:int, newChild:'Node') -> None:  # PlainNode
-        """Note: Argument order is different than (say) insertBefore.
-        This implementation does not doubly-link siblings, as tests showed
-        the overhead wasn't worth it. TO change that, update those links here.
-        """
-        if not self.canHaveChildren:
-            raise HReqE(f"node type {type(self).__name__} cannot have children.")
-        if not isinstance(newChild, Node) or isinstance(newChild, Attr):
-            raise HReqE(f"newChild is  bad type {type(newChild).__name__}.")
-        if newChild.parentNode is not None:
-            raise HReqE("newChild already has parent (type %s)"
-                % (newChild.parentNode.nodeType))
-        newChild.ownerDocument = self.ownerDocument
-        if newChild.isElement: self._filterOldInheritedNS(newChild)
-        if i < 0: i = len(self) + i
-        #if i >= len(self): self.appendChild(newChild)  # ?
-        else: super().insert(i, newChild)
-        newChild.parentNode = self
 
     def _filterOldInheritedNS(self, newChild:'Element') -> None:
         """If we're about to insert 'other', it may have inheritedNS left
@@ -783,40 +886,9 @@ class PlainNode(list):
             if newChild.declaredNS is None: newChild.declaredNS = {}
             newChild.declaredNS[k] = v
 
-
-    ### Normal Python list operations, for PlainNode.
+    ### More Python list operations, for PlainNode.
     #
-    def clear(self) -> None:
-        raise HReqE("Can't clear() abstract Node.")
-
-    # "del" can't just do a plain delete, 'cuz unlink. TODO: Enable del
-    #def __delitem__(self, i:int) -> None:
-    #    self.removeChild(self.childNodes[i])
-    #    for other in others:
-    #        self.appendChild(other)
-
-    def pop(self, i:int=-1) -> 'Node':
-        try:
-            toDel = self.childNodes[i]
-            return self.removeChild(toDel)
-        except IndexError as e:
-            raise NotFoundError from e
-
-    def remove(self, x:Any=None) -> 'Node':
-        """Remove all members (child nodes) that match x.
-        """
-        if len(self.childNodes) == 0: return None
-        for ch in self.childNodes:
-            if ch._isOfValue(x): ch.removeNode()
-
-    def reverse(self) -> None:
-        """Reverse the order of childNodes in place.
-        Well, actually we move to a NodeList then copy back.
-        """
-        if len(self.childNodes) == 0: return None
-        revCh = NodeList()
-        while len(self.childNodes) > 0: revCh.append(self.pop())
-        self.extend(revCh)
+    #def reverse(self) -> None: -- Should just work on superclass.
 
     def reversed(self) -> NodeList:
         """Create a NodeList of the childNodes in reverse order.
@@ -844,27 +916,17 @@ class PlainNode(list):
 
     def sorted(self, key:Callable=None, reverse:bool=False) -> None:
         """Sort the childNodes into a new Node List.
+        NOTE: sorted() returns a plain list, even if called on a subclass.
+        I think it makes more sense to return the subclass.
         """
-        nl = NodeList()
-        if len(self.childNodes) == 0: return nl
-        for ch in self.childNodes: nl.append(ch)
-        sortedNL = sorted(nl, key=key, reverse=reverse)
+        if len(self.childNodes) == 0: return NodeList()
+        nl = NodeList(self.childNodes)
+        sortedNL = NodeList(sorted(nl, key=key, reverse=reverse))
         return sortedNL
 
-    def _isOfValue(self, value:Any) -> bool:
-        """Used by count, index, remove to pick node(s) to work on.
-        What *should* the test be? Going with nodeName for now.
-        """
-        if value is None: return True
-        if callable(value): return value(self)
-        if value == "*" and self.nodeType == NodeType.ELEMENT_NODE: return True
-        if value == self.nodeName: return True
-        return False
-
     # You can't put the identical element into a parent twice.
-    # Though you *can* do that with a NodeList.
-    # So what should __add__, __mul__, etc. do? We clone.
-    # If we allowed entity reference, transclusion, etc., though?
+    # Though you *can* put them into NodeLists.
+    # So __add__, __mul__, etc. have to become non-in-place.
     #
     def __mul__(self, x:int) -> 'NodeList':  # PlainNode
         """Well, I guess for completeness...
@@ -908,22 +970,13 @@ class PlainNode(list):
             self.appendChild(ch)
         return self
 
+    ### Misc (PlainNode)
+
     def getInterface(self) -> None:
         raise NSuppE("getInterface: obsolete.")
 
     def isSupported(self) -> bool:
         raise NSuppE("isSupported: obsolete.")
-
-    ### Meta (PlainNode)
-
-    def unlink(self, keepAttributes:bool=False) -> None:  # MINIDOM
-        """Break all internal references in the subtree, to help gc.
-        Has to delete attributes, b/c they have ownerElement, ownerDocument.
-        But with keepAttributes=True, it will unlink them instead.
-        ELement overrides this to unlink attrs and childNodes, too.
-        """
-        self.ownerDocument    = None
-        self.parentNode       = None
 
 
 ###############################################################################
@@ -933,7 +986,7 @@ class Node(PlainNode):
     #CssSelectors,
     #__slots__ = ("nodeType", "nodeName", "ownerDocument", "parentNode")
 
-    def bool(self) -> bool:
+    def __bool__(self) -> bool:
         """A node can be empty but still meaningful (think hr or br in HTML).
         That is not like 0, [], or {}, and so we want it to test True.
 
@@ -941,9 +994,11 @@ class Node(PlainNode):
         the compulsions, the fantasies, the terrors that flock to fill the void.
                                                 -- Ursula Le Guin
         """
-        if isinstance(self, (Element, Document, Node)): return True
         if isinstance(self, CharacterData): return bool(self.data)
         if isinstance(self, Attr): return bool(self.nodeValue)
+        if isinstance(self, (Element, Document, Node)): return True
+        else:
+            raise DOMException(f"Unexpected type {type(self)} for bool.")
 
     @property
     def length(self) -> int:
@@ -969,7 +1024,7 @@ class Node(PlainNode):
         return self is not other
 
     def __lt__(self, other:'Node') -> bool:
-        assert self.ownerDocument == other.ownerDocument  # TODO
+        assert self.ownerDocument == other.ownerDocument
         return self.compareDocumentPosition(other) < 0
 
     def __le__(self, other:'Node') -> bool:
@@ -984,23 +1039,6 @@ class Node(PlainNode):
         assert self.ownerDocument == other.ownerDocument
         return self.compareDocumentPosition(other) > 0
 
-    # Overload [] to be more useful.
-    def NOTYET__getitem__(self, key: Union[int, slice, str]) -> Union[List, 'Node']:  # HERE/PY
-        # Integrate __getitem__
-        if isinstance(key, int):
-            return super(Node, self).__getitem__(key)
-        if isinstance(key, str):
-            theChosen = []
-            for ch in self:
-                if ch.nodeName == key: theChosen.append(ch)  # TODO NS?
-            return theChosen or None
-        elif isinstance(key, slice):
-            # Component are instances of "member_descriptor"
-            #return __domgetitem__(self, slice.start, slice.stop, slice.step)
-            raise NSuppE("[] not hooked up yet")
-        else:
-            raise IndexError("Unexpected [] arg type: %s" % (type(key)))
-
     @property
     def depth(self) -> int:
         """How deeply nested are we in the tree?
@@ -1012,12 +1050,14 @@ class Node(PlainNode):
             cur = cur.parentNode
         return d
 
+    # Additional neighbor properties and synonyms
+    #
     @property
     def previous(self) -> 'Node':  # XPATH
         """Find the previous node. If you're first it's your parent;
         otherwise it's your previous sibling's last descendant.
         """
-        #lg.error("previous: At '%s' (cnum %d), is1st %s.",
+        #dtr.msg("previous: At '%s' (cnum %d), is1st %s.",
         #    self.nodeName, self.getChildIndex(), self.isFirstChild)
         if self.parentNode is None: return None
         if self.isFirstChild: return self.parentNode
@@ -1027,30 +1067,85 @@ class Node(PlainNode):
 
     @property
     def next(self) -> 'Node':  # XPATH
-        if self.childNodes: return self.childNodes[0]
+        if len(self.childNodes) > 0: return self.childNodes[0]
         cur = self
         while (cur.parentNode is not None):
             if not cur.isLastChild: return cur.nextSibling
             cur = cur.parentNode
         return None
 
-    def nodeNameMatches(self, other) -> bool:  # HERE
-        """Factor this out b/c with namespaces there can be a match even
-        if the prefixes don't match, because they could map to the same URI!.
-        Apparently when you disconnect a node, you're supposed to keep all
-        relevant namespaces with it
-        TODO: Is this where to add case-ignoring?
-        """
-        if self.localName != other.localName: return False
-        if self.parentNode is None or other.parentNode is None: return True
-        if self.namespaceURI == RWord.NS_ANY or other.namespaceURI == RWord.NS_ANY: return True
-        if self.namespaceURI != other.namespaceURI: return False
-        return True
+    # These return the whole axis
+    #
+    @property
+    def previousSiblings(self) -> 'NodeList':
+        myCNum = self.getChildIndex()
+        return NodeList(self.parentNode.childNodes[0:myCNum])
+    @property
+    def nextSiblings(self) -> 'NodeList':
+        myCNum = self.getChildIndex()
+        return NodeList(self.parentNode.childNodes[myCNum+1:])
+    @property
+    def previousNodes(self) -> 'NodeList':
+        raise NSuppE("Srsly?")
+    @property
+    def nextNodes(self) -> 'NodeList':
+        raise NSuppE("Srsly?")
+
+    # Equivalents named like XPath axes
+    # (unlike the generators, these lack an includeSelf option)
+    #
+    @property
+    def precedingSibling(self) -> 'Node':
+        return self.previousSibling
+    @property
+    def followingSibling(self) -> 'Node':
+        return self.nextSibling
+    @property
+    def preceding(self) -> 'Node':
+        return self.previous
+    @property
+    def following(self) -> 'Node':
+        return self.next
+    @property
+    def precedingSiblings(self) -> 'NodeList':
+        return self.previousSiblings
+    @property
+    def followingSiblings(self) -> 'NodeList':
+        return self.nextSiblings
+    @property
+    def precedingNodes(self) -> 'NodeList':
+        return self.previousNodes
+    @property
+    def followingNodes(self) -> 'NodeList':
+        return self.nextNodes
+
+    # And the rest of XPath-like stuff
+    #
+    @property
+    def parent(self) -> 'Node':
+        return self.parentNode
+    @property
+    def ancestors(self) -> 'NodeList':
+        nl = NodeList()
+        cur = self.parentNode
+        while (cur):
+            nl.append(cur)
+            cur = cur.parentNode
+        return nl
+    @property
+    def children(self) -> 'NodeList':
+        return NodeList(self.childNodes)
+    @property
+    def descendants(self, nl:NodeList=None) -> 'NodeList':  # TODO Optimize
+        if nl is None: nl = NodeList()
+        for ch in self.childNodes:
+            nl.append(ch)
+            ch.descendants(nl)
+        return nl
 
     @property
     def textContent(self) -> str:  # Node
-        raise NSuppE(
-            f"Cannot set textContent on Node of type {self.nodeType}.")
+        return None  # Same as DOM says for Document.
 
     @textContent.setter
     def textContent(self, newData:str) -> None:  # Node
@@ -1135,25 +1230,9 @@ class Node(PlainNode):
 
     @property
     def hasChildNodes(self) -> bool:
-        """Rreturns False for either None or [] (Nodes are lists).
+        """Returns False for either None or [] (Nodes are lists).
         """
-        return bool(self.childNodes)
-
-    def removeNode(self) -> 'Node':
-        """Remove the node itself from its parentNode, unlinking as needed.
-        Not sure; should the subtree be left intact, or not?
-        """
-        if self.parentNode is None:
-            raise HReqE("No parent in removeNode.")
-        return self.parentNode.removeChild(self)
-
-    def replaceChild(self, newChild:'Node', oldChild:Union['Node', int]) -> None:
-        if newChild.parentNode is not None:
-            hint = " Swapped arguments?" if oldChild.parent is None else ""
-            raise HReqE("New child for replaceChild already has parent." + hint)
-        oNum, oChild = self._expandChildArg(oldChild)
-        self.removeChild(oChild)
-        self.childNodes.insert(oNum, newChild)
+        return len(self.childNodes) > 0
 
 
     #######################################################################
@@ -1279,9 +1358,9 @@ class Node(PlainNode):
     def changeOwnerDocument(self, otherDocument:'Document') -> None:
         """Move a subtree to another document. This requires deleting it, too.
         """
-        if self.ownerDocument is not None: self.removeNode()
+        if self.parentNode is not None: self.removeNode()
         #self.unlink(keepAttributes=True)
-        for node in self.eachNode(includeAttributes=True):
+        for node in self.eachNode(separateAttributes=True):
             node.ownerDocument = otherDocument
 
     # Serialization (Node)
@@ -1306,14 +1385,18 @@ class Node(PlainNode):
     def tostring(self) -> str:  # Node
         return self.toxml()
 
-    def toxml(self, indent:str="", newl:str="", encoding:str="utf-8") -> str:  # Node
-        return self.toprettyxml( indent=indent, newl=newl,encoding=encoding)
+    def toxml(self, indent:str="", newl:str="", encoding:str="",
+        foptions:FormatOptions=_DefaultFO) -> str:  # Node
+        if (indent or newl or encoding):
+            if foptions is None:
+                foptions = FormatOptions(indent=indent, newl=newl, encoding=encoding)
+        return self.toprettyxml(foptions=foptions)
+
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # minidom Node
+        raise NSuppE(f"No toprettyxml on Node (from {self.nodeType}).")
 
     def tocanonicalxml(self) -> str:  # HERE
-        return self.toprettyxml(FormatOptions.canonical())
-
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # minidom Node
-        raise NSuppE(f"No toprettyxml on Node (from {self.nodeType}).")
+        return self.toprettyxml(foptions=_CanonicalFO)
 
 
     #######################################################################
@@ -1324,11 +1407,10 @@ class Node(PlainNode):
         if not steps: return None
         return "/".join([ str(step) for step in steps ])
 
-    def getNodeSteps(self, useId:bool=False, attrOk:bool=False, wsn:bool=True) -> List:  # XPTR
-        """Get the child-numer path to the node, as a list.
+    def getNodeSteps(self, useId:bool=False, attrOk:bool=False, wsn:bool=True) -> List:
+        """Get the child-number path to the node, as a list.  # XPTR
         At option, start it at the nearest ID (given an attr name for ids).
         Attributes yield the ownerElement unless 'attrOk' is set.
-        TODO: Option to skip counting wsn?
         """
         if self.nodeType == PlainNode.ABSTRACT_NODE:
             raise NSuppE("No paths to abstract Nodes.")
@@ -1344,11 +1426,11 @@ class Node(PlainNode):
                     f.insert(0, anode.nodeValue)
                     break
             if cur.parentNode is None:
-                f.insert(0, "1")
+                f.insert(0, 1)
             elif wsn:
                 f.insert(0, cur.getChildIndex() + 1)
             else:
-                raise NSuppE("Counting without wsn not yet supported.")
+                f.insert(0, cur.getChildIndex(noWSN=True) + 1)
             cur = cur.parentNode
         return f
 
@@ -1366,7 +1448,7 @@ class Node(PlainNode):
         except ValueError as e:
             node = document.getElementById(steps[0])
             if node is None:
-                raise HReqE("Leading id '%s' of path not found." % (steps[0])) from e
+                raise HReqE(f"Leading id '{steps[0]}' of path not found.") from e
             startAt = 1
 
         for i in range(startAt, len(steps)):
@@ -1374,7 +1456,7 @@ class Node(PlainNode):
             try:
                 cnum = int(steps[i])
             except ValueError as e:
-                raise HReqE("Non-integer in path: %s" % (steps)) from e
+                raise HReqE(f"Non-integer in path: {steps}") from e
             if node.nodeType not in [ Node.ELEMENT_NODE, Node.DOCUMENT_NODE ]:
                 raise HReqE("Node path step %d from non-node (%s) in: %s"
                     % (i, type(node), steps))
@@ -1411,18 +1493,43 @@ class Node(PlainNode):
         self.before(stuff)
         self.removeNode()
 
-    def eachChild(self, excludeNodeNames:List=None) -> 'Node':
+    # Generators (cf XPath)
+    # TODO ? each desc, prec, foll, attr
+    #
+    @staticmethod
+    def _isExcluded(node:'Node', excludeNodeNames:List) -> bool:
+        """Help the following generators do node-exclusion as requested.
+        """
+        if not excludeNodeNames: return False
+        if node.nodeName in excludeNodeNames: return True
+        if not node.isElement:
+            if "#" in excludeNodeNames: return True
+            if (node.isText and "#wsn" in excludeNodeNames
+                and node.data.strip()==""): return True
+        return False
+
+    def eachAncestor(self, excludeNodeNames:List=None, includeSelf:bool=False) -> 'Node':
         if isinstance(excludeNodeNames, str):  # HERE
             excludeNodeNames = excludeNodeNames.split()
-        if self.childNodes is None: return None
-        for ch in self.childNodes:
-            if self.nodeName in excludeNodeNames: continue
-            if "#" in excludeNodeNames and not self.isElement: return
-            yield ch
+        cur = self if includeSelf else self.parentNode
+        while (cur):
+            if not self._isExcluded(cur, excludeNodeNames): yield cur
+            cur = cur.parentNode
         return None
 
-    def eachNode(self, includeAttributes:bool=False,
-        excludeNodeNames:Union[List,str]=None) -> 'Node':  # HERE
+    def eachChild(self, excludeNodeNames:List=None, includeSelf:bool=False) -> 'Node':
+        if isinstance(excludeNodeNames, str):  # HERE
+            excludeNodeNames = excludeNodeNames.split()
+        if (includeSelf
+            and not self._isExcluded(self, excludeNodeNames)): yield self
+        if self.childNodes is None:
+            return None
+        for node in self.childNodes:
+            if not node._isExcluded(node, excludeNodeNames): yield node
+        return None
+
+    def eachNode(self, separateAttributes:bool=False,
+        excludeNodeNames:Union[List,str]=None, includeSelf:bool=False) -> 'Node':  # HERE
         """Generate all descendant nodes in document order.
         Don't include attribute nodes unless asked.
         @param exclude: Filter out any nodes whose names are in the list
@@ -1430,17 +1537,12 @@ class Node(PlainNode):
         """
         if isinstance(excludeNodeNames, str):
             excludeNodeNames = excludeNodeNames.split()
-        if excludeNodeNames:
-            if self.nodeName in excludeNodeNames: return
-            if "#" in excludeNodeNames and not self.isElement: return
-            if ("#wsn" in excludeNodeNames
-                and self.nodeName==RWord.NN_TEXT
-                and self.data.strip()==""): return
 
-        yield self
-        if includeAttributes and self.isElement and self.attributes:
-            for anode in self.attributes.values(): yield anode
-
+        if (includeSelf
+            and not self._isExcluded(self, excludeNodeNames)):
+            yield self
+            if separateAttributes and self.isElement and self.attributes:
+                for anode in self.attributes.values(): yield anode
 
         if self.isDocument: childList = self.documentElement
         elif self.isElement: childList = self.childNodes
@@ -1449,27 +1551,43 @@ class Node(PlainNode):
         if childList:
             for ch in childList:
                 for chEvent in ch.eachNode(
-                    includeAttributes=includeAttributes,
-                    excludeNodeNames=excludeNodeNames):
+                    separateAttributes=separateAttributes,
+                    excludeNodeNames=excludeNodeNames, includeSelf=True):
                     yield chEvent
 
         return
 
-    def eachSaxEvent(self, separateAttributes:bool=False,
-        excludeNodeNames:Union[List,str]=None) -> 'Node':  # HERE
+
+    def eachSaxEvent(self, separateAttributes:bool=False, attrDict:bool=False,
+        excludeNodeNames:Union[List,str]=None) -> Tuple:  # HERE
         """Generate a series of SAX events as if subtree were being parsed.
+        Each even is a tuple of a SaxEvent plus args:
+            (INIT, )
+            (START   name:str    attrname:str attrvalue:str,..., )
+                (you can also request one event per attribute:
+                    ATTRIBUTE   attrname:str attrvalue:str
+            (END     name:str, )
+            (CDATASTART, )
+            (CHAR    text:str, )
+            (CDATAEND, )
+            (COMMENT text:str, )
+            (PROC    target:str  data:str, )
+            (FINAL, )
+
+        TODO: Option to gett attrs as a dict; attr types?
         """
         if isinstance(excludeNodeNames, str):
             excludeNodeNames = excludeNodeNames.split()
 
-        yield (SaxEvent.INIT)
-        for se in self.eachSaxEvent_R(separateAttributes, excludeNodeNames):
+        yield (SaxEvent.INIT, )
+        for se in self.eachSaxEvent_R(separateAttributes, attrDict, excludeNodeNames):
+            #dtr.msg("SE: %s", repr(se))
             yield se
-        yield (SaxEvent.FINAL)
+        yield (SaxEvent.FINAL, )
         return
 
     def eachSaxEvent_R(self:'Node', separateAttributes:bool=False,
-        excludeNodeNames:Union[List,str]=None) -> Tuple:  # HERE
+        attrDict:bool=False, excludeNodeNames:Union[List,str]=None) -> Tuple:  # HERE
         if excludeNodeNames:
             if self.nodeName in excludeNodeNames: return
             if "#" in excludeNodeNames and not self.isElement: return
@@ -1483,30 +1601,38 @@ class Node(PlainNode):
             yield (SaxEvent.CHAR, self.data)
         elif self.nodeType == Node.COMMENT_NODE:
             yield (SaxEvent.COMMENT, self.data)
-        elif self.nodeType == Node.CDATA_NODE:
+        elif self.nodeType == Node.CDATA_SECTION_NODE:
             yield (SaxEvent.CDATASTART, )
             yield (SaxEvent.CHAR, self.data)
             yield (SaxEvent.CDATAEND, )
         elif self.nodeType == Node.PROCESSING_INSTRUCTION_NODE:
             yield (SaxEvent.PROC, self.target, self.data)
         elif self.nodeType == Node.ELEMENT_NODE:
-            if separateAttributes:
+            if not self.attributes:
                 yield (SaxEvent.START, self.nodeName)
-                for k in self.attributes:
-                    yield (SaxEvent.ATTRIBUTE, k, self.getAttribute[k])
+            elif separateAttributes:
+                assert not attrDict
+                yield (SaxEvent.START, self.nodeName)
+                for k in self.attributes.keys():
+                    yield (SaxEvent.ATTRIBUTE, k, self.getAttribute(k))
                 if self.declaredNS:
                     for k in self.declaredNS:
                         yield (SaxEvent.ATTRIBUTE,
-                            RWord.NS_PREFIX+k, self.getAttribute[k])
+                            RWord.NS_PREFIX+k, self.getAttribute(k))
+            elif attrDict:
+                adict = {}
+                for k in self.attributes.keys():
+                    adict[k] = self.getAttribute(k)
+                yield (SaxEvent.START, self.nodeName, adict)
             else:
                 vals = [ SaxEvent.START, self.nodeName ]
-                for k in self.attributes:
+                for k in self.attributes.keys():
                     vals.append(k)
-                    vals.append(self.getAttribute[k])
+                    vals.append(self.getAttribute(k))
                 if self.declaredNS:
                     for k in self.declaredNS:
                         vals.append(RWord.NS_PREFIX+k)
-                        vals.append(self.getAttribute[k])
+                        vals.append(self.getAttribute(k))
                 yield tuple(vals)
 
             if self.childNodes is not None:
@@ -1534,6 +1660,7 @@ class Node(PlainNode):
         All subclasses do their own version, but all except Attr
         super() this first (Attr doesn't b/c of self.parentNode.childNodes)
         """
+        # Document and Element do their own deep handling, so no 'deep' here.
         assert isinstance(self.nodeType, NodeType)
         assert (self.nodeType != Node.ATTRIBUTE_NODE)
         if self.ownerDocument is not None:
@@ -1627,57 +1754,58 @@ class Document(Node):
         return SimpleNamespace(**{
             "parser":           "lxml",  # Default parser to use
 
-            "IdCase":           "NONE",  # Charset and naming rules
-            "ElementCase":      "NONE",
-            "AttributeCase":    "NONE",
-            "EntityCase":       "NONE",
-            "wsDef":            "XML",
-            "UNorm":            "NONE",
-            "NameTest":         "XML",
+            "EntityCase":       None,    # (to xsparser?)                   # TODO
+            "ElementCase":      None,    # None or a CaseHandler
+            "AttributeCase":    None,    #                                  # TODO
+            "IdCase":           None,    # (pass to idhandler calls)        # TODO
+            "NSURICase":        None,    #                                  # TODO
 
-            "attributeTypes":   False,   # Attribute datatypes
-            "xsdTypes":         True,
+            "UNorm":            None,    # None or a UNormHandler enum      # TODO
+            "wsDef":            None,    # None or a WSHandler enum         # TODO
+            "NameTest":         None,    # None or a NameTest enum          # TODO
+
+            "attributeTypes":   False,   # Attribute datatype check/cast    # TODO
+            "xsdTypes":         True,    # impl option                      # TODO
 
             # API extensions
             "nodeType_p":       True,    # Allow node.isElement, etc.
             "getItem":          True,    # Overload [] for child selection
-            "CSSSelectors":     False,   # Support CSS selectors
-            "XPathSelectors":   False,   # Support XPath selectors
-            "whatwgStuff":      True,    # Support whatwg calls
-            "BSStuff":          False,   # Support bsoup/etree calls
-            #
-            "ws_nodes":         True,    # Keep whitespace-only nodes?
-            "IdNameSpaces":     False,   # Recognize ns prefixes on ID values
+            "CSSSelectors":     False,   # Support CSS selectors            # TODO
+            "XPathSelectors":   False,   # Support XPath selectors          # TODO
+            "whatwgStuff":      True,    # Support whatwg calls             # TODO
+            "BSStuff":          False,   # Support bsoup/etree calls        # TODO
 
-            # Namespace restrictions
-            "ns_global":        False,   # Limit ns dcls to doc element
-            "ns_redef":         True,    # Allow redefining a ns prefix?
-            "ns_never":         False,   # No namespaces please
+            # Namespace options
+            "IdNameSpaces":     False,   # Allow ns prefixes on ID values   # TODO
+            "ns_global":        False,   # Limit ns dcls to doc element     # TODO
+            "ns_redef":         True,    # Allow redefining a ns prefix?    # TODO
+            "ns_never":         False,   # No namespaces please             # TODO
 
-            # Syntax extensions
-            #
+            # Syntax extensions -- see xsparser
         })
 
     def registerFilterScheme(self, name:NMTOKEN_t, handler:Callable):
-        """Add a named scheme that returns a NodeList given a Node and
-        some selector string defined per sheme. Used by __getitem__.
+        """Add a named scheme to be supported within []. The handler
+        must take a Node and return a NodeList of selected child nodes,
+        based on some selector string defined per sheme.
         For example:
             myNode["css:#chap_3"]
             myNode["xptr:chap_3/5/7/1"]
             myNode["xpath://footnote[@class='ref']"]
         """
-        if not XStr.isXmlNmToken(name): raise ICharE(
-            f"Bad name for new filter scheme: '{name}'.")
-        self.ownerDocument.schemeHandlers[name] = handler
+        if not XStr.isXmlNCName(name): raise ICharE(
+            f"Name for filter scheme in not an NCNAME: '{name}'.")
+        if not callable(handler): raise TypeError(
+            f"Hander for filter scheme '{name}' is {type(handler)}, not callable.")
+        self.schemeHandlers[name] = handler
 
     @property
     def textContent(self) -> str:  # Document
-        if self.documentElement is None: return ""
-        return self.documentElement.textContent()
+        return None  # So says DOM...
 
     @textContent.setter
     def textContent(self, newData:str) -> None:  # Document
-        return None
+        raise NSuppE("textContent setter on Document")  # ???
 
     @property
     def charset(self) -> str:
@@ -1791,8 +1919,7 @@ class Document(Node):
         if self.doctype: return self.doctype.outerXml
         return f"<!DOCTYPE {self.documentElement.nodeName} []>"
 
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # Document
-        if not foptions: foptions = FormatOptions(**kwargs)
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # Document
         t = ""
         if foptions.includeXmlDcl: t += self.xmlDcl
         if foptions.includeDoctype: t += foptions.newl + self.doctypeDcl
@@ -1806,7 +1933,7 @@ class Document(Node):
         if enames is None: enames = [ "*" ]
         elif not isinstance(enames, Iterable): enames = [ enames ]
         for ename in enames:
-            if ename != "*" and not XStr.isXmlNmToken(ename): raise ICharE(
+            if ename != "*" and not XStr.isXmlNMTOKEN(ename): raise ICharE(
                 f"Bad element name '{ename}' for buildIndex.")
 
         if not aname: aname = "id"
@@ -1814,7 +1941,8 @@ class Document(Node):
                 f"Bad attribute name '{aname}' for buildIndex.")
 
         for ename in enames:
-            self.idHandler.addAttrChoice(ens="##any", ename=ename, ans="##any", aname=aname)
+            self.idHandler.addAttrChoice(
+                ens="##any", ename=ename, ans="##any", aname=aname)
         self.idHandler.buildIdIndex()
 
     def getElementById(self, idValue:str) -> Node:  # HTML
@@ -1827,11 +1955,11 @@ class Document(Node):
         return self.documentElement.getElementsByClassName(name, attrName=attrName)
 
     def checkNode(self, deep:bool=True) -> None:  # Document  # DBG
-        super().checkNode()
+        super().checkNode(deep=False)
         assert self.nodeType == NodeType.DOCUMENT_NODE
         assert self.nodeName == "#document"
         assert self.parentNode is None
-        assert self.attributes is None
+        assert not hasattr(self, "attributes")
         assert self.previousSibling is None and self.nextSibling is None
         if self.documentElement is not None:
             assert self.documentElement.isElement
@@ -1862,6 +1990,8 @@ class Element(Node):
         so they just get a ref to their parent's defs. But when one is added,
         a copy is created (even if the ns is already on the parent, b/c
         adding a ns explicitly is different than just inheriting).
+        NOTE: It might be cleaner (though slower) to just run up the
+        ancestors when needed (say, using getInheritedAttribute()).
         """
         prefix, _, local = name.partition(":")
         if not local:
@@ -1873,10 +2003,10 @@ class Element(Node):
             raise ICharE(
                 f"_addNamespace: Invalid local part in '{name}' -> '{uri}'.")
 
-        if (self.parentNode and
-            self.inheritedNS is self.parentNode.inheritedNS):
+        if self.inheritedNS is None:
+            self.inheritedNS = { }
+        elif (self.parentNode and self.inheritedNS is self.parentNode.inheritedNS):
             self.inheritedNS = self.parentNode.inheritedNS.copy()
-        if self.inheritedNS is None: self.inheritedNS = {}
         self.inheritedNS[local] = uri
 
     def cloneNode(self, deep:bool=False) -> 'Element':
@@ -1952,22 +2082,23 @@ class Element(Node):
         tn = self.ownerDocument.createTextNode(newData)
         self.appendChild(tn)
 
-    def isEqualNode(self, n2) -> bool:  # Element  # DOM3
+    def isEqualNode(self, n2:'Node') -> bool:  # Element  # DOM3
         """To help with debugging, versioning, etc. if the nodes differ
         we stash the reason/location in self.
         """
-        #if path is None: path = [ 1 ]
-        _dtrace(f"isEqualNode for name {self.nodeName} vs. {n2.nodeName}")
+        if n2 is None: return False  # What minidom does for isSameNode(None).
+        if not isinstance(n2, Node):
+            raise HReqE(f"Other for isEqualNode is not a Node, but {type(n2)}.")
+        dtr.msg(f"isEqualNode for name {self.nodeName} vs. {n2.nodeName}")
         #import pudb; pudb.set_trace()
         if self.isElement and n2.isElement:
-            _dtrace(f"###{self.toxml()}###\n###{n2.toxml()}###")
+            dtr.msg(f"###{self.toxml()}###\n###{n2.toxml()}###")
         if not super().isEqualNode(n2):
-            _dtrace("super tests found unequal.")
+            dtr.msg("Element super() tests found unequal.")
             return False
-        #import pudb; pudb.set_trace()
 
         if len(self) != len(n2):
-            _dtrace(f"len unequal ({len(self)} vs. {len(n2)}.")
+            dtr.msg(f"len unequal ({len(self)} vs. {len(n2)}.")
             return False
 
         # Careful, OrderedDict eq would test order, which we don't want.
@@ -1975,21 +2106,23 @@ class Element(Node):
         if not self.attributes and not n2.attributes:
             pass  # That's a match (even None vs. {})
         elif not self.attributes or not n2.attributes:
-            _dtrace("Somebody's got no attributes.")
+            dtr.msg("Somebody's got no attributes.")
             return False
         elif len(self.attributes) != len(n2.attributes):
-            _dtrace("unequal number of attrs.")
+            dtr.msg("Unequal number of attrs.")
             return False
         else:
+            # Because they have the same number of attrs, this suffices:
             for k in self.attributes:
                 if self.getAttribute(k) != n2.getAttribute(k):
-                    _dtrace("attr '%s' differs: '%s' vs. '%s'."
+                    dtr.msg("Attribute '%s' differs: '%s' vs. '%s'."
                         % (k, self.getAttribute(k), n2.getAttribute(k)))
                     return False
 
         for i, ch in enumerate(self.childNodes):
+            # TODO report depth somehow to _dtrace
             if not ch.isEqualNode(n2.childNodes[i]):
-                _dtrace(f"({ch.nodeName}) unequal.")
+                dtr.msg(f"child #{i} ({ch.nodeName}) unequal.")
                 return False
         return True
 
@@ -2000,7 +2133,7 @@ class Element(Node):
 
     ### Attribute plain
     #
-    def _findAttr(self, ns:str, aname:str) -> 'Attr':
+    def _findAttr(self, ns:str, aname:NMTOKEN_t) -> 'Attr':
         """All(?) attribute stuff goes through here.
         """
         if not aname or not XStr.isXmlQName(aname):
@@ -2009,9 +2142,9 @@ class Element(Node):
         if aname in self.attributes: # If total match, we're ok. (?)
             return self.attributes[aname]
         if ":" in aname:
-            nsPrefix, _colon, lname = aname.partition(":")
+            _nsPrefix, _colon, lname = aname.partition(":")
         else:
-            nsPrefix = None; lname = aname
+            _nsPrefix = None; lname = aname
         for _k, anode in self.attributes.items():
             if anode.localName != lname: continue
             if not ns or ns == RWord.NS_ANY: return anode
@@ -2168,13 +2301,12 @@ class Element(Node):
         if od.idHandler is None:
             caseH = CaseHandler(od.options.IdCase)
             od.idHandler = IdHandler(od, caseHandler=caseH)
-            lg.info("\n##### Built id index, %d entries.", len(od.idHandler.theIndex))
         return od.getElementById(IdValue)
 
-    def getElementsByClassName(self, name:str, attrName:str="class", nodeList=None) -> List:
+    def getElementsByClassName(self, name:str, attrName:str="class", nodeList=None) -> NodeList:
         """Works even if it's just one of multiple class tokens.
         """
-        if nodeList is None: nodeList = []
+        if nodeList is None: nodeList = NodeList()
         if self.nodeType != Node.ELEMENT_NODE: return nodeList
         if self.hasAttribute(attrName) and name in self.getAttribute(attrName).split():
             nodeList.append(self)
@@ -2182,11 +2314,11 @@ class Element(Node):
             ch.getElementsByClassName(name, attrName=attrName, nodeList=nodeList)
         return nodeList
 
-    def getElementsByTagName(self, tagName:NMTOKEN_t, nodeList:NodeList=None) -> List:
+    def getElementsByTagName(self, tagName:NMTOKEN_t, nodeList:NodeList=None) -> NodeList:
         """Search descendants for nodes of the right name, and return them.
         This is on minidom.Element.
         """
-        if nodeList is None: nodeList = []
+        if nodeList is None: nodeList = NodeList()
         if self.nodeType != Node.ELEMENT_NODE: return nodeList
         if NameSpaces.nameMatch(self, tagName, ns=None):
             nodeList.append(self)
@@ -2196,22 +2328,26 @@ class Element(Node):
 
     def getChildrenByTagName(self, tagName:NMTOKEN_t) -> NodeList:  # HERE
         """Search just direct children for nodes of the right name, and return them.
+        TODO Integrate this namematch logic w/ other places!
         """
-        nodeList = []
+        nodeList = NodeList()
         if self.nodeType != Node.ELEMENT_NODE: return nodeList
         for ch in self.childNodes:
-            if tagName[0] == "#":
-                if tagName == ch.nodeName: nodeList.append(ch)
-            else:
-                if NameSpaces.nameMatch(ch, tagName, ns=None): nodeList.append(ch)
+            if "*" == tagName:
+                if not ch.isElement: continue
+            elif ":" not in tagName:
+                if (tagName != ch.nodeName): continue
+            elif not NameSpaces.nameMatch(ch, tagName): continue
+            nodeList.append(ch)
         return nodeList
 
-    def getElementsByTagNameNS(self, tagName:NMTOKEN_t, namespaceURI:str, nodeList=None) -> List:
+    def getElementsByTagNameNS(self, tagName:NMTOKEN_t,
+        namespaceURI:str, nodeList=None) -> NodeList:
         """This is on minidom.Element.
         """
         if not XStr.isXmlQName(tagName):
             raise ICharE("Bad attribute name '%s'." % (tagName))
-        if nodeList is None: nodeList = []
+        if nodeList is None: nodeList = NodeList()
         if self.nodeType != Node.ELEMENT_NODE: return nodeList
         if NameSpaces.nameMatch(self, tagName, ns=namespaceURI):
             nodeList.append(self)
@@ -2270,18 +2406,18 @@ class Element(Node):
         newDoc = self._string2doc(xml)
         theWrapper = newDoc.documentElement
         assert theWrapper.nodeName == "wrapper"
-        #lg.warning("Parsed string yields: %s", theWrapper.toxml())
+        #dtr.msg("Parsed string yields: %s", theWrapper.toxml())
 
         par = self.parentNode
         while len(theWrapper.childNodes) > 0:
             ch = theWrapper.childNodes[0]
-            #lg.warning("Moving %s", ch.toxml())
+            #dtr.msg("Moving %s", ch.toxml())
             theWrapper.removeChild(ch)
             #ch.changeOwnerDocument(otherDocument=par.ownerDocument)
             par.insertBefore(newChild=ch, oldChild=self)
         newDoc.unlink()
         par.removeChild(self)
-        #lg.warning("Deleted %s", self.toxml())
+        #dtr.msg("Deleted %s", self.toxml())
 
     @property
     def innerXML(self) -> str:  # Element  # HTML
@@ -2313,20 +2449,24 @@ class Element(Node):
         assert newDoc.documentElement.nodeName == "wrapper"
         return newDoc
 
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # Element
-        if not foptions: foptions = FormatOptions(**kwargs)
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # Element
         t = ""
-        ws = "" if self.nodeName in foptions.inlineTags else foptions.ws
+        ws = "" if self.nodeName in foptions.tagInfos else foptions.ws
         if foptions.breakBB: t += ws
-        t += self._startTag(foptions=foptions)
-        if foptions.breakAB: t += ws
-        if len(self.childNodes) > 0:
+        stag = self._startTag(foptions=foptions)
+        if len(self.childNodes) == 0:
+            if not foptions.useEmpty: t += stag + self.endTag
+            elif (foptions.emptySpace): t += stag[0:-1] + " />"
+            else: t += stag[0:-1] + "/>"
+        else:
+            t += stag
+            if foptions.breakAB: t += ws
             foptions.depth += 1
             for ch in self.childNodes:
                 t += ch.toprettyxml(foptions)
             foptions.depth -= 1
-        if foptions.breakBE: t += ws
-        t += self.endTag
+            if foptions.breakBE: t += ws
+            t += self.endTag
         if foptions.breakAE: t += ws
         return t
 
@@ -2337,11 +2477,10 @@ class Element(Node):
         return self._startTag()
 
     def _startTag(self, empty:bool=False, includeNS:bool=False,
-        foptions=None, **kwargs) -> str:  # HERE
+        foptions:FormatOptions=_DefaultFO) -> str:  # HERE
         """Gets a correct start-tag for the element. If 'includeNS' is set,
         declare all in-scope namespaces even if inherited.
         """
-        if not foptions: foptions = FormatOptions(**kwargs)
         if self.nodeType != NodeType.ELEMENT_NODE:
             raise HReqE(f"_startTag request for non-Element {self.nodeType}.")
         t = f"<{self.nodeName}"
@@ -2350,14 +2489,17 @@ class Element(Node):
             names = self.attributes.keys()
             if foptions.sortAttrs or foptions.canonical:
                 names = sorted(names)
-            q = foptions.quoteChar
             for k in names:
-                vEsc = XStr.escapeAttribute(self.attributes[k].nodeValue)
-                t += f'{ws}{k}={q}{vEsc}{q}'
+                v = self.attributes[k].nodeValue
+                if foptions.normAttrs: v = str(v).strip()  # TODO Extend
+                vEsc = XStr.escapeAttribute(
+                    v, quoteChar=foptions.quoteChar, addQuotes=True)
+                t += f'{ws}{k}={vEsc}'
         if includeNS:  # TODO Interleave if sorted
             for k, v in self.inheritedNS.items:
-                vEsc = XStr.escapeAttribute(v)
-                t += f'{ws}{RWord.NS_PREFIX}:{k}={q}{vEsc}{q}'
+                vEsc = XStr.escapeAttribute(
+                    v, quoteChar=foptions.quoteChar, addQuotes=True)
+                t += f'{ws}{RWord.NS_PREFIX}:{k}={vEsc}'
         return t + ((foptions.spaceEmpty + "/") if empty else "") + ">"
 
     @property
@@ -2369,6 +2511,7 @@ class Element(Node):
     ### Meta (Element)
 
     def unlink(self, keepAttributes:bool=False) -> None:  # MINIDOM
+        # TODO Delete attributes?
         super().unlink(keepAttributes=keepAttributes)
         if self.attributes:
             for attr in self.attributes.values(): attr.unlink()
@@ -2377,7 +2520,7 @@ class Element(Node):
             self.childNodes.clear()
 
     def checkNode(self, deep:bool=False) -> None:  # Element  # DBG
-        super().checkNode()
+        super().checkNode(deep=False)
 
         if self.attributes is not None:
             assert isinstance(self.attributes, NamedNodeMap)
@@ -2397,6 +2540,7 @@ class Element(Node):
                     NodeType.ENTITY_REFERENCE_NODE,
                     NodeType.PROCESSING_INSTRUCTION_NODE,
                     NodeType.COMMENT_NODE,
+                    # docfrag??? entref???
                 ]
                 assert ch.parentNode == self
                 if i > 0: assert ch.previousSibling is not None
@@ -2420,8 +2564,12 @@ class CharacterData(Node):
 
 
     def isEqualNode(self, n2) -> bool:  # CharacterData  # DOM3
-        if not super().isEqualNode(n2): return False
-        if self.data != n2.data: return False
+        if not super().isEqualNode(n2):
+            dtr.msg("CharacterData super() tests found unequal.")
+            return False
+        if self.data != n2.data:
+            dtr.msg("CharacterData data mismatch.")
+            return False
         return True
 
     @property
@@ -2502,7 +2650,6 @@ class CharacterData(Node):
         return self.data
 
     # Hide any methods that can't apply to leaves.
-    # Don't know why DOM put them on Node instead of Element.
     #
     LeafChildMsg = "CharacterData nodes cannot have children."
     @property
@@ -2536,11 +2683,11 @@ class CharacterData(Node):
 
     def unlink(self, keepAttributes:bool=False) -> None:  # MINIDOM
         super().unlink()
-        self.data             = None
+        self.data = None
         return
 
     def checkNode(self, deep:bool=True) -> None:  # CharacterData (cf Attr):  # DBG
-        super().checkNode()
+        super().checkNode(deep=False)
         assert self.parentNode is None or self.parentNode.isElement
         #assert self.attributes is None and self.childNodes is None
         if self.isPI: assert XStr.isXmlName(self.target)
@@ -2550,8 +2697,7 @@ class CharacterData(Node):
 #
 class Text(CharacterData):
     def __init__(self, ownerDocument=None, data:str=""):
-        super().__init__(ownerDocument=ownerDocument,
-            nodeName=RWord.NN_TEXT)
+        super().__init__(ownerDocument=ownerDocument, nodeName=RWord.NN_TEXT)
         self.nodeType = Node.TEXT_NODE
         self.data = data
 
@@ -2560,13 +2706,24 @@ class Text(CharacterData):
         if self.userData: newNode.userData = self.userData
         return newNode
 
-    ####### EXTENSIONS for Text
+    def insertNode(self, node:Node, offset:int) -> None:  # HERE
+        """Split the text Node at the given offset, and insert node between.
+        """
+        if self.parentNode is None: raise HReqE(
+            "Cannot insert nodes into an unconnected Text node.")
+        if node.parentNode is not None: raise HReqE(
+            "Node to insert is already connected.")
+        text2 = None
+        if offset < len(self.data)-1:
+            text2 = self.ownerDocument.createTextNode(self.data[offset:])
+            self.data = self.data[0:offset]
+            self.parentNode.insertAfter(oldchild=self, newChild=text2)
+            self.parentNode.insertAfter(oldchild=self, newChild=node)
 
     def cleanText(self, unorm:str=None, normSpace:bool=True) -> str: # HERE
         """Apply Unicode normalization and or XML space normalization
         to the text of the node.
         TODO: Upgrade to handle all the UNorm, Case, WS options; dft from doc?
-        TODO: Move up to CharacterData?
         """
         if unorm: buf =  unicodedata.normalize(unorm, self.data)
         else: buf = self.data
@@ -2574,13 +2731,18 @@ class Text(CharacterData):
         self.data = buf
         return buf
 
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # Text
-        if not foptions: foptions = FormatOptions(**kwargs)
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # Text
+        """TODO indent? Remove newlines before wrap? Preformatted elements?
+        """
         if foptions.dropWS and self.data.strip() == "": return ""
         ws = foptions.ws if foptions.breakBText else ""
+        buf = ws + XStr.escapeText(self.data)
         if foptions.translateTable:
-            return (ws + XStr.escapeText(self.data).translate(foptions.translateTable))
-        return ws + XStr.escapeText(self.data)
+            buf = buf.translate(foptions.translateTable)
+        if foptions.wrapTextAt > 0:
+            buf = wrap(buf, width=foptions.wrapTextAt, break_long_words=False,
+                break_on_hyphens=False)
+        return buf
 
     def tostring(self) -> str:  # Text
         return self.data
@@ -2594,10 +2756,7 @@ class CDATASection(CharacterData):
         self.nodeType = Node.CDATA_SECTION_NODE
         self.data = data
 
-    ####### EXTENSIONS
-
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # CDATASection
-        if not foptions: foptions = FormatOptions(**kwargs)
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # CDATASection
         return f"<![CDATA[{XStr.escapeCDATA(self.data)}]]>"
 
     def tostring(self) -> str:  # CDATASection
@@ -2623,14 +2782,15 @@ class ProcessingInstruction(CharacterData):
         return newNode
 
     def isEqualNode(self, n2) -> bool:  # PI  # DOM3
-        if not super().isEqualNode(n2): return False
-        if self.target != n2.target: return False
+        if not super().isEqualNode(n2):
+            dtr.msg("PI super() tests found unequal.")
+            return False
+        if self.target != n2.target:
+            dtr.msg("PI target mismatch.")
+            return False
         return True
 
-    ####### EXTENSIONS PI
-
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # PI
-        if not foptions: foptions = FormatOptions(**kwargs)
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # PI
         return f"<?{XStr.escapePI(self.target)} {XStr.escapePI(self.data)}?>"
 
     def tostring(self) -> str:  # PI
@@ -2652,10 +2812,7 @@ class Comment(CharacterData):
         if self.userData: newNode.userData = self.userData
         return newNode
 
-    ####### EXTENSIONS
-
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # Comment
-        if not foptions: foptions = FormatOptions(**kwargs)
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # Comment
         return foptions.ws + f"<!--{XStr.escapeComment(self.data)}-->"
 
     def tostring(self) -> str:  # Comment
@@ -2679,8 +2836,7 @@ class EntityReference(CharacterData):  # OBS DOM
         self.nodeType = Node.ENTITY_REFERENCE_NODE
         self.data = data
 
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # EntityReference
-        if not foptions: foptions = FormatOptions(**kwargs)
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # EntityReference
         return f"&{self.nodeName};"
 
     def tostring(self) -> str:  # EntityReference
@@ -2699,13 +2855,18 @@ class Attr(Node):
         * They have a discrete scalar (or maybe list of scalars) value.
         * They have a parentNode, but are not children or siblings.
         * They inherit namespace prefix definitions, but not the default ns.
+        * They (may?) track whether they were explicit or defaulted.
         * They have methods to retrieve either the value, or the Attr object.
     (which is a Dict, not a Node), which then owns the Attr objects.
-    TODO: namespace support
+    TODO namespace support
+    TODO way to tunnel defaulting info from xsparser. subclass Atttr?
+    TODO Possibly do casefolding (when requested) only on the key for
+    Element.attributes, not on Attr.node/name?
+    TODO If options.attributeTypes is set, just when should casting happen?
     """
     def __init__(self, name:NMTOKEN_t, value:Any, ownerDocument:Document=None,
         nsPrefix:NMTOKEN_t=None, namespaceURI:str=None, ownerElement:Node=None,
-        attrType:str="string"):
+        attrTypeName:str="string", readOrder:int=None, specified:bool=True):
         if not XStr.isXmlQName(name):
             raise ICharE(f"Bad attribute name '{name}'.")
         if ownerElement is not None and ownerElement.nodeType != Node.ELEMENT_NODE:
@@ -2719,17 +2880,24 @@ class Attr(Node):
         self.ownerElement = ownerElement
         self.parentNode = None  # True in DOM, though XPath @foo/parent::element
         self.inheritedNS = None  # Resolved via parent
+        self.attrTypeName = attrTypeName
+        self.readOrder = readOrder
+        self.specified = specified  # Set explicitly, not defaulted. OBS
+        self.isId = False
 
-        if attrType:
-            if attrType not in AttrTypes: raise TypeError(
-                f"Unrecognized type name '{attrType}' for Attr '{name}'.")
+        if attrTypeName:
+            if attrTypeName not in AttrTypes: raise TypeError(
+                f"Unrecognized type name '{attrTypeName}' for Attr '{name}'.")
             try:
-                self.attrType = attrType
-                attrTypeDef = AttrTypes[attrType]
-                self.nodeValue = attrTypeDef.pybase(value)
-                #self.isId = self.attrType == "ID"  # TODO hook up to idhandler
+                attrTypeDef = AttrTypes[attrTypeName]
+                pyType = attrTypeDef.pybase or str
+                self.nodeValue = pyType(value)
+                if self.attrTypeName == "ID":
+                    self.isId = True
+                elif (idh := self.ownerDocument.idHandler) is not None:
+                    self.isId = idh.getIdAttrNode(ownerElement) is self
             except (ValueError, AttributeError):
-                self.attrType = None
+                self.attrTypeName = None
                 self.nodeValue = value  # TODO Cast to str or xsd string?
 
     def clear(self) -> None:
@@ -2766,12 +2934,12 @@ class Attr(Node):
         return False
 
     @property
-    def textContent(self) -> None:  # Attr
+    def textContent(self) -> None:  # Attr  # TODO Typecasting?
         return self.nodeValue
 
     @textContent.setter
-    def textContent(self, newData:str) -> None:  # Attr
-        if self.attrType: newData = self.attrType(newData)
+    def textContent(self, newData:str) -> None:  # Attr  # TODO Typecasting?
+        if self.attrTypeName: newData = self.attrTypeName(newData)  # TODO FIX!
         self.nodeValue = newData
 
     @property
@@ -2809,22 +2977,38 @@ class Attr(Node):
         raise HReqE("Attributes do not have document positions.")
 
     def isEqualNode(self, n2:'Attr') -> bool:  # DOM3
-        if not n2.isAttribute: raise ValueError("No n2 attr provided.")
-        if not self.nodeNameMatches(n2): return False
-        if not self.nodeValue == n2.nodeValue: return False
+        """Equality of attributes is slightly fraught. If XSD datatypes
+        are declared, DOM still compares on strings  If options.attributeTypes
+        is set, then we'll need the cast back to string for this (which has
+        other issues such as leading zero loss...).
+        """
+        # Do not test super, Attr is special.
+        if not n2.isAttribute:
+            msg = f"Node to compare is not also an Attr, but {type(n2)}."
+            dtr.msg(msg)
+            raise ValueError(msg)
+        if not self._nodeNameMatches(n2):
+            dtr.msg("Attr nodeName mismatch."
+                f"  {self.nodeName}\n  {n2.nodeName}")
+            return False
+        if str(self.nodeValue) != str(n2.nodeValue):
+            dtr.msg("Attr nodeValue mismatch:\n"
+                f"  {self.nodeValue}\n  {n2.nodeValue}")
+            return False
         return True
 
     def cloneNode(self, deep:bool=False) -> 'Attr':
         newAttr = Attr(name=self.nodeName, value=self.nodeValue,
             ownerDocument=self.ownerDocument,
-            ownerElement=None, attrType=self.attrType)
+            ownerElement=None, attrTypeName=self.attrTypeName)
         return newAttr
 
     ### Serializers (Attr)
     #
-    def toprettyxml(self, foptions:FormatOptions=None, **kwargs) -> str:  # Attr
-        #if not foptions: foptions = FormatOptions(**kwargs)
-        return f"{self.nodeName}=\"{XStr.escapeAttribute(self.nodeValue)}\""
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:  # Attr
+        escVal = XStr.escapeAttribute(
+            self.nodeValue, quoteChar=foptions.quoteChar, addQuotes=True)
+        return f"{self.nodeName}={escVal}"
 
     def tostring(self) -> str:  # Attr
         """Attr is not quoted or escaped for this.
@@ -2841,9 +3025,9 @@ class Attr(Node):
         assert "data" not in dir(self) and "target" not in dir(self)
 
         assert XStr.isXmlQName(self.nodeName)
-        if self.attrType and self.nodeValue is not None:
-            assert isinstance(self.attrType, type)
-            assert isinstance(self.nodeValue, self.attrType)
+        if self.attrTypeName and self.nodeValue is not None:
+            assert isinstance(self.attrTypeName, type)
+            assert isinstance(self.nodeValue, self.attrTypeName)
         if self.userData is not None:
             assert isinstance(self.userData, dict)
 
@@ -2915,7 +3099,7 @@ class NamedNodeMap(OrderedDict):
         else:
             if not XStr.isXmlQName(attrNodeOrName): raise ICharE(
                 f"Bad item name '{attrNodeOrName}'.")
-            anode = Attr(attrNodeOrName, avalue, attrType=atype,
+            anode = Attr(attrNodeOrName, avalue, attrTypeName=atype,
                 ownerDocument=self.ownerDocument, ownerElement=None)
             self[anode.nodeName] = anode
 
@@ -3005,16 +3189,29 @@ class NamedNodeMap(OrderedDict):
         encoding:str=None, standalone:bool=None) -> None: # MINIDOM
         writer.write(self.tostring())
 
-    def tostring(self) -> str:
+    def toprettyxml(self, foptions:FormatOptions=_DefaultFO) -> str:
         """Produce the complete attribute list as would go in a start tag.
         """
-        s = ""
         ks = self.keys()
         if self.ownerDocument and self.ownerDocument.options.sortAttrs:
             ks = sorted(ks)
+        buf = ""
         for k in ks:
-            s += ' %s="%s"' % (k, XStr.escapeAttribute(self[k].nodeValue))
-        return s
+            escVal = XStr.escapeAttribute(
+                self[k].nodeValue, quoteChar=foptions.quoteChar, addQuotes=True)
+            buf += f" {k}={escVal}"
+        return buf
+
+    def tostring(self) -> str:
+        """Produce the complete attribute list as would go in a start tag.
+        """
+        ks = self.keys()
+        if self.ownerDocument and self.ownerDocument.options.sortAttrs:
+            ks = sorted(ks)
+        buf = ""
+        for k in ks:
+            buf += f" {k}={XStr.escapeAttribute(self[k].nodeValue)}"
+        return buf
 
 
 ###############################################################################
@@ -3032,7 +3229,7 @@ class NameSpaces(Dict):  # extension, sort of
         assert self.isNamespaceURI(uri)
         if prefix in self:
             if self[prefix] == uri: return
-            #lg.warning("Prefix '%s' rebound from '%s' to '%s'.",
+            #dtr.msg("Prefix '%s' rebound from '%s' to '%s'.",
             #    prefix, self[prefix], uri)
         super().__setitem__(prefix, uri)
 
@@ -3083,5 +3280,5 @@ class NameSpaces(Dict):  # extension, sort of
         elif Tprefix:
             if (not re.match(r"^(\*|#all|#any)$", Tprefix, flags=re.I)
                 and node.prefix != Turi): return False
-        if Tname and node.nodeName != Turi: return False
+        if Tname and node.nodeName != Turi: return False   # TODO use nodeNameMatches
         return True

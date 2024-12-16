@@ -200,15 +200,19 @@ or InvalidModificationError or TypeError or InvalidNodeTypeError?
 
 ==Schema stuff==
 
-* global attributes?
-
 * sync doctype to tree.docinfo.internalDTD
 
 * mixin/inclusions -- dcl like incl exceptions?
 
 * Option to make plural attrs be list/dicts/sets? cf xsd
 
+* global attributes?
+
 * Vector attrs (maybe just float{3,3}?)
+
+* typed attributes: when to cast. Lose or keep original string?
+Semantics for isEqualNode? Can't quite use Pythonesque duck typing, since
+it wants "5" != 5 (etc.).
 
 * JsonX mapping for DTDs?
 
@@ -223,3 +227,20 @@ or InvalidModificationError or TypeError or InvalidNodeTypeError?
     @nextSibling.setter:
     def nextSibling(self, theSib:Node):
         if hasattr(self, '_NSib'): self._NSib = theSib
+    Could a transclusion node be introduced, to allow DAGs or even graphs?
+        Traversal would have to prevent circularities; affected methods?
+        childInex works if you can only transclude one subtree per
+        nodeSteps, parentNode, depth
+        searches
+        ?subclass of characterData so it doesn't "have" children
+
+* Should getitem work for virtual XPath axes? Not just childNodes, but
+maybe: Ancestors, PSibs, FSibs, Prec, Foll, Desc, Attrs (and |self)
+
+* Change RepType.... prob. not an Enum, just a small obj, with a
+smart constructor. Add the {} parsing to xsparser.
+
+* with getitem and registerFilterSchema, don't use ":" for the schema sep
+because it's also the qname sep. maybe "::" or "?"
+
+* XML allow stuff outside the document element, why shouldn't DOM?

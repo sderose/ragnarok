@@ -12,14 +12,14 @@ import re
 import logging
 from typing import Union, List, Dict, Tuple, Iterable
 from types import SimpleNamespace
+from collections import OrderedDict
 
 #import html
 from html.entities import name2codepoint  # codepoint2name
 
-from domenums import FlexibleEnum
 from xmlstrings import XmlStrings as XStr, WSHandler, CaseHandler, UNormHandler
 from saxplayer import SaxEvent
-from basedomtypes import NSuppE, NMTOKEN_t
+from basedomtypes import FlexibleEnum, NSuppE, NMTOKEN_t
 from documenttype import Model, RepType, AttrTypes, ContentType  # ModelGroup
 
 lg = logging.getLogger("EntityManager")
@@ -545,7 +545,8 @@ class EntityFrame:
         """
         if ss: self.skipSpaces()
         #lg.warning(f"readName: buf has '{self.buf[self.bufPos:]}'.\n")
-        mat = re.match(XStr.startsWithXmlQName_re, self.buf[self.bufPos:])
+        # Not re.fullmatch here!
+        mat = re.match(XStr.isXmlQName_re, self.buf[self.bufPos:])
         if not mat: return None
         self.bufPos += len(mat.group())
         return mat.group()
@@ -623,7 +624,16 @@ class EntityFrame:
 class StackReader:
     """Keep dictionaries of entities and notations, and a stack of
     open ones being read. Support very basic read operations (leave the
-    fancy stuff for a subclass to add).
+    fancy stuff for a subclass to add), and support extensions.
+
+    Shunt the deuterium from the main cryo-pump to the auxiliary tank.
+    Er, the tank can't withstand that kind of pressure.
+    Where'd you... where'd you get that idea?
+    ...It's in the impulse engine specifications.
+    Regulation 42/15 -- Pressure Variances on the IRC Tank Storage?
+    Yeah.
+    Forget it. I wrote it. Just... boost the flow. It'll work.
+            -- ST:TNG "Relics"
     """
     attrTypes = {
         "CDATA":1, "ENTITY":1, "ENTITIES":2, "NOTATION":1,
@@ -675,9 +685,13 @@ class StackReader:
         # Switchable in XML DCL (iff "version" starts with "s.")
         #
         self.options = SimpleNamespace(**{
-            ### Size limits
-            "MAXEXPANSION": 1 << 20,# Limit expansion of entities
-            "MAXSUBS": 1000,        # Limit nesting of entities
+            ### Size limits and security
+            "MAXEXPANSION": 1 << 20,# Limit expansion length of entities
+            "MAXENTITYDEPTH": 1000, # Limit nesting of entities
+            "charEntities": True,   # Only SDATA and CDATA entities (no recursion).  TODO
+            "extEntities": True,    # Allow external entity refs  TODO
+            "netEntities": True,    # Allow off-localhost external entity refs  TODO
+            # TODO Limit system entities to subtree/vol/path?
 
             ### Schemas
             "schemaType": "DTD",    # <!DOCTYPE foo SYSTEM "" NDATA XSD>  TODO
@@ -736,7 +750,7 @@ class StackReader:
         })
 
         if options:
-            for k, v in options:
+            for k, v in options.items():
                 setattr(self.options, k, v)
 
         if self.options.xsdType:
@@ -794,6 +808,7 @@ class StackReader:
             totpasses += 1
             s, n = re.subn(r"%([-_:.\w]+);", self.getParameterText, s)
             nestLevel += n
+            # TODO: Hook up to isEntRefPermitted()!
             if nestLevel > self.options.MAXENTITYDEPTH:
                 self.SE("Too many parameter entity substitutions, depth %d, count %d."
                     % (totpasses, nestLevel))
@@ -802,7 +817,7 @@ class StackReader:
     def getParameterText(self, mat) -> str:
         peName = mat.group(1)
         if self.isOpen(EntSpace.PARAMETER, peName):
-            self.SE("Parameter entity {peName} is already open.")
+            self.SE(f"Parameter entity {peName} is already open.")
         try:
             peDef = self.parameterDefs[peName]
         except KeyError as e:
@@ -819,22 +834,43 @@ class StackReader:
         return False
 
     def open(self, space:EntSpace, name:NMTOKEN_t) -> EntityFrame:
+        """Open a new input source, generally an entity. Most entity-expansion
+        security options happen here.
+        """
         eDef = self.findEntity(space, name)
         if not eDef: raise KeyError(
             f"Unknown entity '{name}'.")
-        if self.isOpen(space, name):
-            self.SE("Entity {name} is already open.")
+        if not self.isEntRefPermitted(eDef): return None
+        lg.info("Opening entity '%s'.", name)
         ef = EntityFrame(eDef)
-        lg.info("Opening entity {name}.")
         self.entStack.append(ef)
         return ef
+
+    def isEntRefPermitted(self, eDef:EntityDef) -> bool:
+        """Implement some entity-expansion safety protocols.
+        TODO: Should this skip the exceptions and just return False?
+        """
+        if self.isOpen(eDef.space, eDef.name):
+            self.SE(f"Entity {eDef.name} is already open.")
+        if self.depth >= self.options.MAXENTITYDEPTH:
+            self.SE(f"Too much entity nesting, depth {self.depth}.")
+        if (not self.options.extEntities
+            and eDef.dataSource.systemId or eDef.dataSource.publicID):
+            self.SE("Extnernal (PUBLIC and SYSTEM) entities are disabled.")
+        if (not self.options.netEntities):
+            sid = eDef.dataSource.systemId
+            if "://" in sid and not sid.startswith("file://"):
+                self.SE("Non-file URIs for SYSTEM identifiers are disabled.")
+        # TODO Add limitations on local directory choice
+        # TODO Add special case for XML 5 and HTML named
+        return True
 
     def close(self) -> int:
         """Close the innermost open EntityFrame.
         """
         cf = self.curFrame
         if not cf: return False
-        lg.info("Closing entity '%s'." % cf.eDef.name)
+        lg.info("Closing entity '%s'.", cf.eDef.name)
         cf.close()
         self.entStack.pop()
         return self.depth
@@ -1103,14 +1139,15 @@ class StackReader:
         if self.readConst("<!ELEMENT", thenSp=True) is None: return None
         omitStart = omitEnd = False
 
-        if self.options.multiElement and self.peek() == "(":
+        # TODO Switch to readNameOrNameGroup()?
+        if self.options.groupDcl and self.peek() == "(":
             names = self.readNameGroup()
         else:
             names = [ self.readName() ]
         if names is None:
             self.SE("Expected element name or group at {self.bufSample}.")
 
-        if self.options.sgml:
+        if self.options.oflag:
             omitStart = omitEnd = False
             # Doesn't handle PE refs in mid-omitFlags.
             mat = self.readRegex(r"\s+([-O])\s+([-0])")
@@ -1155,10 +1192,10 @@ class StackReader:
         return Model(tokens=mtokens)
 
     def readModelGroup(self, ss:bool=True) -> List[str]:        # ( x | Y | z )
-        """Extract and return a balanced paren group like a content model,
-        possibly plus a final reoetition operator.
+        """Extract and return a list of tokens from a balanced paren group
+        like a content model, including sequence and repetition operators.
         Handily, you can't have parens as escaped data in there.
-        Does not check that each group is uniform on [,|&].
+        Does not make an AST (see readModel(), which construct a Model object).
         TODO PE refs?
         """
         if ss: self.skipSpaces()
@@ -1193,7 +1230,7 @@ class StackReader:
             tokens.append(rep.group())
         elif self.options.repBrace and (rep := self.readRepIndicator()):
             tokens.append(rep)
-        return Model(tokens=tokens)
+        return tokens
 
     def readRepIndicator(self, ss:bool=True) -> RepType:        # *|+|?|{}
         """The repetition operator (including the {} form extension).
@@ -1226,7 +1263,7 @@ class StackReader:
         """
         if self.readConst("<!ATTLIST", thenSp=True) is None: return None
         self.skipSpaces()
-        if self.options.multiElement and self.peek() == "(":
+        if self.options.groupDcl and self.peek() == "(":
             names = self.readNameGroup()
         else:
             names = [ self.readName() ]
@@ -1315,10 +1352,10 @@ class StackReader:
         if empty: self.doCB(SaxEvent.END, name)
         return name, attrs, empty
 
-    def readAttrs(self, ss:bool=True) -> Dict:
-        attrs = {}
+    def readAttrs(self, ss:bool=True) -> OrderedDict:
+        attrs = OrderedDict()
         while (True):
-            aname, avalue, bang = self.readAttr(ss=True)
+            aname, avalue, _bang = self.readAttr(ss=ss)  # TODO Implement bang
             if aname is None: break
             if self.options.elementFold: aname = aname.upper()
             # TODO Fold and normalize and cast value per schema
@@ -1431,6 +1468,8 @@ class StackReader:
         """Parse the start of an XML document, up through the declaration
         subset (the stuff between [] in the DOCTYPE). Return before actually
         parsing the document instance (caller can do parseDocument() for that).
+
+        TODO Fix API so can use as just a normal parse/parse_string.
         """
         #import pudb; pudb.set_trace()
         self.doCB(SaxEvent.START)
@@ -1518,7 +1557,7 @@ class StackReader:
             elif c == "<" and not self.inRCDATA:
                 self.consume()
                 c2 = self.peek()
-                if c2 == "/":
+                if c2 == "/":                               # ENDTAG
                     e = self.readEndTag()
                     if not e: self.SE("Expected name after '</'.")  # TODO </>
                     if self.options.elementFold: e = e.upper()
@@ -1538,7 +1577,7 @@ class StackReader:
                             "End-tag for {e}, but {self.tagStack[-1]} is current.")
                         self.tagStack.pop()
                     self.doCB(SaxEvent.END, e)
-                elif c2 == "!":
+                elif c2 == "!":                             # COMMENT, CDATA,...
                     # For SGML we'd have to check for USEMAP to
                     if self.peek(3) == "!--":
                         e = self.readComment()
@@ -1549,7 +1588,7 @@ class StackReader:
                             self.doCB(SaxEvent.CDATASTART)
                             self.doCB(SaxEvent.CHAR, e or "")
                             self.doCB(SaxEvent.CDATAEND)
-                elif c2 == "?":
+                elif c2 == "?":                             # PI
                     if not (e := self.readPI()):
                         self.SE("Expected target and data after '<?'.")
                     self.doCB(SaxEvent.PROC, *e)
@@ -1559,14 +1598,16 @@ class StackReader:
                     e = self.tagStack[-1]
                     self.doCB(SaxEvent.END, e)
                     self.doCB(SaxEvent.START, e)
-                elif c2 in "-+":  # Suspend/resume
+                elif c2 in "-+":                            # Suspend/resume
                     if not self.options.suspend:
                         self.SE("<+ and <- only allowed with 'suspend' extension.")
                     else:
                         raise NSuppE
-                else:
+                else:                                       # STARTTAG
                     e, attrs, emptySyntax = self.readStartTag()
                     if not (e): self.SE("Unexpected characters after '<'.")
+                    #if self.doctype:
+                    #    self.doctype.applyDefaults(e, attrs)  # TODO Attr Defaults
                     self.doCB(SaxEvent.START, e, attrs)
                     self.tagStack.append(e)
                     if emptySyntax:

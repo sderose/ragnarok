@@ -85,6 +85,16 @@ def isEqualNode(n1, n2) -> bool:
             if not isEqualNode(n1.childNodes[i], n2.childNodes[i]): return False
     return True
 
+def compareAttrs(node1:Node, node2:Node) -> bool:
+    """Test if all the attributes of two nodes match.
+    """
+    s1 = set(node1.attributes.keys())
+    s2 = set(node2.attributes.keys())
+    if s1 != s2: return False
+    for aname in s1:
+        if node1.getAttribute(aname) != node2.getAttribute(aname): return False
+    return True
+
 
 ###############################################################################
 #
@@ -97,12 +107,12 @@ class DBG:
 
     @staticmethod
     def dumpNode(node:Node, msg:str=""):
-        lg.warning("\n####### %s",  msg)
+        lg.warning("\n####### %s\n",  msg)
         node.writexml(sys.stderr, indent='    ', addindent='  ', newl='\n')
 
     @staticmethod
     def dumpNodeData(node:Node, msg:str=""):
-        lg.warning("\n####### %s", msg)
+        lg.warning("\n####### %s\n", msg)
         if node.parentNode is None:
             pname = lname = rname = "None"
             cnum = cof = -1
@@ -287,26 +297,26 @@ class makeTestDoc0:
         lg.warning(*args, "\n")
 
     @staticmethod
-    def addFullTree(node:Node, n:int=10, depth:int=3,
-        types:list=None, withText:bool=False):
+    def addFullTree(node:Node, n:int=10, depth:int=3, types:list=None,
+        withText:bool=False, withAttr:bool=False) -> None:
         """Recursively create a subtree, adding 'n' more levels (possibly plus
         one for text nodes at the bottom), each node having n children.
         """
         if not types: types = [ "p", "bq" ]
         od = node.ownerDocument
-        if (depth == 0):
-            if (withText):
-                tx = od.createTextNode("Some text")
-                node.appendChild(tx)
-            return
-        makeTestDoc0.addChildren(node, n, types, withText)
+        makeTestDoc0.addChildren(node, n, types,
+            withText=depth == 0 and withText, withAttr=withAttr)
+        if depth <= 0: return
         for ch in node.childNodes:
             if ch.isText: continue
-            makeTestDoc0.addFullTree(ch, n, depth-1, types, withText)
-        return node
+            makeTestDoc0.addFullTree(ch, n, depth-1, types,
+                withText=depth == 0 and withText, withAttr=withAttr)
+            return
+        return
 
     @staticmethod
-    def addChildren(node:Node, n:int=10, types:list=None, withText:bool=False):
+    def addChildren(node:Node, n:int=10, types:list=None,
+        withText:bool=False, withAttr:bool=False):
         """Add n children to the node, alternating among the given types,
         and optionally with some (merely constant) text.
         """
@@ -319,6 +329,8 @@ class makeTestDoc0:
             newEl = d.createElement(ename)
             if (withText):
                 newEl.appendChild(d.createTextNode("for the snark was a boojum"))
+            if (withAttr):
+                newEl.setAttribute("speaker", "narr")
             node.appendChild(newEl)
 
     @staticmethod
@@ -333,6 +345,8 @@ class makeTestDoc0:
             x = doc.createComment(dc.com_data)
             node.appendChild(x)
             x = doc.createCDATASection(dc.cdata_data)
+            node.appendChild(x)
+            x = doc.createTextNode("Some text.")
             node.appendChild(x)
 
             if (not specials):
@@ -373,22 +387,31 @@ class makeTestDoc0:
 #
 class makeTestDoc2(makeTestDoc0):
     """Create a document with 3 child nodes:
-        child0: the first with an attribute and text node
-        child1: the second with a child
-        child2: the third empty
+        <?xml version="1.0" encoding="utf-8"?>
+        <!DOCTYPE html []>
+        <html xmlns:html="https://example.com/namespaces/foo">
+            <child0 an_attr.name="this is an attribute value"
+                class="class1 class2" id="html_id_17">
+                Some text content.</child0>
+            <child1>
+                <grandchild></grandchild>
+            </child1>
+            <child2/>
+        </html>
     """
+    beenShown = False
+
     def __init__(self, dc=DAT, show:bool=False):
         super().__init__(dc)
         assert isinstance(self.n.impl, DOMImplementation)
         assert isinstance(self.n.doc, Document)
         assert isinstance(self.n.docEl, Element)
-        assert self.n.child0 is None
+        assert len(self.n.docEl.childNodes) == 0
 
         self.createRestOfDocument()
-
-        if show: lg.warning(
-            "makeTestDoc2 produced: %s", self.n.doc.outerXML)
-
+        if show and not beenShown:
+            lg.warning("makeTestDoc2 produced: %s", self.n.doc.outerXML)
+            beenShown = True
 
     def createRestOfDocument(self):
         """Store stuff we want to refer back to, in self.docItems.

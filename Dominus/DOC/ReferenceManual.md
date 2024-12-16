@@ -503,6 +503,54 @@ equivalent. So casting all empty elements to boolean as False (merely because
 they have no children) could be super confusing.
 Node overrides bool() so empty elements do not come out the same as None.
 
+Neighbor/axis extensions
+
+Besides the DOM "previousSibling" and "nextSibling" properties already on PlainNode,
+Node defines "previous" and "next" to get the adjacent node in document order,
+whether or not it's a sibling. For example, from the very last descendant
+of a node N, "next" gets N's following sibling, or if there is no
+such sibling, N's parent's next sibling, and so on.
+
+Node also add properties to get the first item along the XPath axes via
+their XPath names (though without hyphens because
+you can't have hyphens in Python identifiers). So you also have:
+    "precedingSibling" = "previousSibling"
+    "followingSibling" = "nextSibling"
+    "preceding" = "previous"
+    "following" = "next"
+    "parent" = "parentNode"
+
+The XPath "self" axis is not included, because "self" is not only a Python
+reserved word, but not typically needed (you already have a named for that node
+if you're calling these methods on it in the first place). Nor are attributes
+provided in this fashion, since they'd need a parameter, which is inconvenient
+for Python properties, and there's already a ton of way to get at them.
+
+Node also provides methods (not properties) to return the entirety of an
+XPath axis as a NodeList, names as plurals:
+    "precedingSiblings" or "previousSiblings"
+    "followingSiblings" or "nextSiblings"
+    "precedingNodes" or "previousNodes" (not yet)
+    "followingNodes" or "nextNodes" (not yet)
+    "ancestors"
+    "children" (this is NodeList(n.childNodes), not merely n.childNodes)
+    "descendants"
+
+And finally, there are generators. They also have some options:
+    * excludeNodeNames takes a string or list of nodeNames to be skipped;
+the entries can be localnames, qnames, reserved names like #text, or "*"
+for elements-only (these are the same values that work in __getitem__ and [].
+    * includeSelf can be set to True to add the subject node
+    * separateAttributes can be set to also get Attr items immediately
+after each yielded Element node (so far, just on eachNode and eachSaxEvent)
+
+    eachAncestor()
+    eachChild()
+    eachNode()
+    eachSaxEvent()
+
+I'll likely add the rest of the axis generators, but haven't yet.
+
     __eq__() and the rest of the comparisons are provided, and use
 document order as the criterion. Since a node can only appear in one place
 in document order, eq and ne also amount to identity comparison.
@@ -555,9 +603,9 @@ Generate the children of the Node, in document order.
 If excludeNodeNames is set, skip childNodes
 whose names are list there (in str form, separated by spaces).
 
-    eachNode(self, includeAttributes:bool=False,
+    eachNode(self, separateAttributes:bool=False,
         excludeNodeNames:Union[List,str]=None) -> Node:
-Like eachChild(), but all descendants. If 'includeAttributes' is set, also
+Like eachChild(), but all descendants. If 'separateAttributes' is set, also
 generate the attributes immediately after the start tag for their element.
 
     eachSaxEvent(self:Node, separateAttributes:bool=False,
@@ -576,8 +624,17 @@ If 'deep' is set, recurse to check all descendants.
 ========================================================================
 ====class FormatOptions====
 
-This is a big batch of options for how serialization of a DOM to XML happens.
-Ones marked "TODO" are not yet implemented, though the names are known.
+This provides options for how serialization of a DOM to XML happens.
+It mainly affects toprettyxml(), but most other serializers use that
+anyway.
+
+To use these options, create a FormatOptions object and pass it to the
+"foptions" option of toprettyxml() or various other methods:
+
+    myFO = FormatOptions(opt1=val1,...)
+
+Format options marked "TODO" are not yet implemented, though the names are
+defined.
 
     # Whitespace insertion
     self.newl:str = "\n"            # String for line-breaks
@@ -591,8 +648,6 @@ Ones marked "TODO" are not yet implemented, though the names are known.
     self.breakBE:bool = False       # Newline before end tags
     self.breakAE:bool = False       # Newline after end tags
 
-    self.inlineTags:List = []       # List of inline elements, no breakXX.
-
     # Syntax alternatives
     self.canonical:bool = False     # Use canonical XML syntax?         TODO
     self.encoding:str = "utf-8"     # utf-8. Just utf-8.
@@ -600,7 +655,7 @@ Ones marked "TODO" are not yet implemented, though the names are known.
     self.includeDoctype = True
     self.useEmpty:bool = True       # Use XML empty-element syntax
     self.emptySpace:bool = True     # Include a space before the /
-    self.quoteChar:str = '"'        # Char to quote attributes          TODO
+    self.quoteChar:str = '"'        # Char to quote attributes
     self.sortAttrs:bool = False     # Alphabetical order for attributes
     self.normAttrs = False          # Normalize whitespace in attributes
 
@@ -608,9 +663,20 @@ Ones marked "TODO" are not yet implemented, though the names are known.
     self.escapeGT:bool = False      # Escape > in content               TODO
     self.ASCII = False              # Escape all non-ASCII              TODO
     self.charBase:int = 16          # Char refs in decimal or hex?      TODO
-    self.charPad:int = 4            # Min width for numeric char refs
-    self.htmlChars:bool = True      # Use HTML named special characters
+    self.charPad:int = 4            # Min width for numeric char refs   TODO
+    self.htmlChars:bool = True      # Use HTML named special characters TODO
     self.translateTable:Mapping = {} # Let caller control escaping
+
+There are no current options for controlling newlines around PIs, comments,
+or CDATA sections.
+
+One more option, tagInfos, is a dict that maps element type names to
+CSS "display" property values ("inline", "block", etc). This is mainly
+useful in the case of inlines: any tag names assigned the value "inline"
+are exempt from the "breakXX" options. There are methods to set a string
+or list of tag names to "inline", to assign a dict of name:displayvalue pairs,
+or to read a simple listing such pairs (some are provided in the DATA/
+directory.
 
 
 ========================================================================
@@ -649,7 +715,7 @@ Node cconstructors. The usual DOM ones are provided.
 So are the WHATWG synonyms like Attr(), Text(), etc (those are just the normal
 constructors for those classes, or synonyms to them).
 
-    createElement(self, tagName:NMTOKEN_t, attributes:Dict=None, parent:Node=None,text:str=None           ) -> 'Element'
+    createElement(self, tagName:NMTOKEN_t, attributes:Dict=None, parent:Node=None,text:str=None) -> 'Element'
     createDocumentFragment(self, namespaceURI:str=None, qualifiedName:str="frag", doctype:str=None, isFragment:bool=True) -> 'Document'
     createAttribute(self, name:NMTOKEN_t, value=None, parentNode=None) -> 'Attr'
     createTextNode(self, data:str) -> 'Text'
@@ -678,7 +744,16 @@ Tree searches
 
     xmDcl -- this property returns the text of the XML declaration.
     doctypeDcl -- this property returns the text of the doctype declaration.
-    _buildIndex() -- forwards to the Document
+    _buildIndex() -- forwards to the Document to make an index of IDs.
+
+    index(self, value:Any, start:int, end:int) -> Node
+-- This is like the normal list.index() method. However, since an
+Element can only occur in one place in a Document, it is less commonly useful
+to pass an actual Element to look for. index() therefore merely checks 'value'
+against each child's nodeName, so can find the first "p", "#text", etc.
+However, if the value passed as target is a Callable, it will be called
+for each childNode in the range until it returns True, and that node
+will be returned (or None if that never happens).
 
     getElementById()
     getElementsByTagName()
@@ -691,7 +766,7 @@ Tree searches
 
     _presetAttr(self, aname:str, avalue:str) -> None -- internal helper
 
-Attribute first appear here (because only Element can have attributes)
+Attributes first appear here (because only Element can have attributes)
 
 DOM needs a range of forms due to the distinction between attribute names,
 values, and objects, and attribute's unusual relationship to namespaces.
@@ -780,6 +855,8 @@ This also overrides several inapplicable methods
 ========================================================================
 ====class Text(CharacterData)====
 
+    insertNode(self, node:Node, offset:int)
+Split the text node at the given offset, and insert node there.
     cleanText(self, unorm:str=None, normSpace:bool=True) -> str
 
 

@@ -252,6 +252,7 @@ class DomBuilder():
         Iff it is a path, it is both opened and closed here.
         @return A DOM object representing the document.
         """
+        lg.warning("Start basedom dombuilder.parse")
         import _io
         if isinstance(path_or_fh, str):
             if not os.path.isfile(path_or_fh):
@@ -262,6 +263,7 @@ class DomBuilder():
         else:
             raise ValueError(
                 "Not a path or file handle, but %s." % (type(path_or_fh)))
+
         self.parser_setup(encoding="utf-8", dcls=True)
         self.domDoc = self.domImpl.createDocument(None, None, None)
         self.nodeStack = [ ]
@@ -407,7 +409,7 @@ class DomBuilder():
             raise IndexError(
                 f"EndElement '{name}' but no elements open.")
 
-        if self.nodeStack[-1].nodeName != name:
+        if self.nodeStack[-1].nodeName != name:  # TODO use nodeNameMatches
             raise ValueError(
                 "EndElement '%s' but open element is '%s'" %
                 (name, self.nodeStack[-1].nodeName))
@@ -434,12 +436,13 @@ class DomBuilder():
         else:
             if not self.nodeStack:
                 raise("CharacterData outside any element: '%s'." % (data))
-        if (self.nodeStack[-1].childNodes and
-            self.nodeStack[-1].childNodes[-1].nodeType == NodeType.TEXT_NODE):
-            self.nodeStack[-1].childNodes[-1].data += data
+        curNode = self.nodeStack[-1]
+        if (len(curNode.childNodes) > 0
+            and curNode.childNodes[-1].nodeType == NodeType.TEXT_NODE):
+            curNode.childNodes[-1].data += data
         else:
             tn = self.domDoc.createTextNode(data)
-            self.nodeStack[-1].appendChild(tn)
+            curNode.appendChild(tn)
         return
 
     def CommentHandler(self, data:str) -> None:

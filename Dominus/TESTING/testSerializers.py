@@ -48,7 +48,7 @@ def packXml(s:str) -> str:
 
 def countStuff(doc) -> dict:
     counts = defaultdict(int)
-    for n in doc.eachNode(includeAttributes=True):
+    for n in doc.eachNode(separateAttributes=True):
         if n.isAttribute:
             counts["@"+n.nodeName] += 1
         elif n.isPI:
@@ -68,6 +68,7 @@ class TestDomBuilderM(unittest.TestCase):
         impl = basedom.getDOMImplementation()
         self.db = dombuilder.DomBuilder(domImpl=impl)
         self.doc = self.db.parse_string(self.xmlText)
+        self.docEl = self.doc.documentElement
 
     def testDefault(self):
         xmlText2 = self.doc.toxml()
@@ -81,11 +82,11 @@ class TestDomBuilderM(unittest.TestCase):
 
         self.assertIsInstance(self.doc.toxml(), str)
         self.assertIsInstance(self.doc.tostring(), str)
-        self.assertIsInstance(self.doc.collectallXML(), str)
-        self.assertIsInstance(self.doc.innerXML(), str)
-        self.assertIsInstance(self.doc.outerXML(), str)
+        self.assertIsInstance(self.docEl.collectAllXml(), str)
+        self.assertIsInstance(self.docEl.innerXML, str)
+        self.assertIsInstance(self.docEl.outerXML, str)
 
-        self.assertIsInstance(self.doc.toprettyxml(), str)
+        self.assertIsInstance(self.docEl.toprettyxml(), str)
 
     def testFO(self):
         """This flips most values to non-defaults.

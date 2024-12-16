@@ -67,7 +67,7 @@ class EtAdditions:
         isQName = ":" in name
         for ch in self.childNodes:
             if not ch.isElement: continue
-            if isQName:
+            if isQName:   # TODO use nodeNameMatches
                 if ch.nodeName == name: return ch
             else:
                 if ch.localName == name: return ch
@@ -81,7 +81,7 @@ class EtAdditions:
         nodes = []
         for ch in self.childNodes:
             if not ch.isElement: continue
-            if isQName:
+            if isQName:  # TODO use nodeNameMatches
                 if ch.nodeName == name: nodes.append(ch)
             else:
                 if ch.localName == name: nodes.append(ch)
@@ -238,9 +238,18 @@ class Synonyms:  # TODO: Implement Synonyms?
         (operators for compareDocumentPosition)
         % for ["*"] ??
 
-        prev         = previous
-        prevSibling = previousSibling
-        hasDescendant= contains,
+        # DOM              XPath           SHORT
+        N/A              = preceding         = left     left
+        N/A              = following         = right    right
+        previous         = preceding         = left     lsib
+        next             = following         = right    rsib
+        parentNode       = parent            = up       par
+        ---              = ancestor          = up       anc
+        childNodes       = child             =          child
+        ---              = descendant        =          desc
+        (self)           = self              =          ----
+        ---              = ancestor-or-self  =          (option)
+        ---              = descendant        =          (option)
 
         u = parentNode
         d = firstChild

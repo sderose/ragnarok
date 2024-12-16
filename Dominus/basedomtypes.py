@@ -132,6 +132,9 @@ class FlexibleEnum(Enum):
                     if member.value == value: return member
         return None
 
+    def tostring(self):
+        return self.name
+
 
 ###############################################################################
 #

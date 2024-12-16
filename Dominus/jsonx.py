@@ -6,12 +6,12 @@
 import codecs
 import re
 from typing import Any, List, IO, Union
+from types import SimpleNamespace
 import json
 
 from xmlstrings import XmlStrings as XStr
 #from dombuilder import DomBuilder
-from basedomtypes import FlexibleEnum
-from domenums import RWord #, NodeType
+#from domenums import RWord #, NodeType
 
 # DOMImplementation
 
@@ -25,48 +25,48 @@ An example:
 [ { "#name":"#document", "#format":"JSONX",
     "#version":"1.1", "#encoding":"utf-8", "#standalone":"yes",
     "#doctype":"html", "#systemId":"http://w3.org/html" },
-  [ { "#name": "html", "xmlns:html": "http://www.w3.org/1999/xhtml" },
-    [ { "#name": "html:head" },
+  [ { "#name":"html", "xmlns:html":"http://www.w3.org/1999/xhtml" },
+    [ { "#name":"html:head" },
 
-      [ { "#name": "title" },
+      [ { "#name":"title" },
         "My document" ]
     ],
-    [ { "#name": "body" },
-      [ { "#name": "p", "id":"stuff" },
+    [ { "#name":"body" },
+      [ { "#name":"p", "id":"stuff" },
         "This is a ",
-        [ { "#name": "i" }, "very" ],
+        [ { "#name":"i" }, "very" ],
         " short document."
       ]
     ],
-    [ { "#name": "hr" } ],
-    [ { "#name": "#cdata" }, "This is some \"literal\" <text>." ],
-    [ { "#name": "#comment" }, "Pay no attention to the comment behind the curtains." ],
-    [ { "#name": "#pi", "#target":"myApp" }, "foo='bar' version='1.0'" ]
+    [ { "#name":"hr" } ],
+    [ { "#name":"#cdata" }, "This is some \"literal\" <text>." ],
+    [ { "#name":"#comment" }, "Pay no attention to the comment behind the curtains." ],
+    [ { "#name":"#pi", "#target":"myApp" }, "foo='bar' version='1.0'" ]
   ]
 ]
 
 
 ==Doctype?==
 
-[ { "#name"="DOCTYPE", "root"="html", "systemId"="...",
+[ { "#name":"DOCTYPE", "root":"html", "systemId":"...",
     "elementFold":true, "entityFold":false },
 
-  [ { "#name"="ELEMENT", "name"="br", "type="EMPTY" } ],
-  [ { "#name"="ELEMENT", "name"="i", "type="PCDATA" } ],
-  [ { "#name"="ELEMENT", "name"="div", "type="ANY" } ],
-  [ { "#name"="ELEMENT", "name"="html", "type="MODEL",
-      "model"="(head, body)" } ],
+  [ { "#name":"ELEMENT", "name":"br", "type:"EMPTY" } ],
+  [ { "#name":"ELEMENT", "name":"i", "type:"PCDATA" } ],
+  [ { "#name":"ELEMENT", "name":"div", "type:"ANY" } ],
+  [ { "#name":"ELEMENT", "name":"html", "type:"MODEL",
+      "model":"(head, body)" } ],
 
-  [ { "#name"="ENTITY", "type"="parameter", "name"="chap1", "systemId"="..." } ],
-  [ { "#name"="ENTITY", "name"="em", "data"=" -- " } ],
-  [ { "#name"="ATTLIST", "for"="p" },
-    [ { "#name"="ATT", "name"="id", "type"="ID", "use"="#IMPLIED" } ],
-    [ { "#name"="ATT", "name"="class", "type"="NMTOKENS", "use"="#FIXED",
-        "default"="normal" } ]
-    [ { "#name"="ATT", "name"="just",
-        type="(left|right|center)", default="left" } ]
+  [ { "#name":"ENTITY", "type":"parameter", "name":"chap1", "systemId":"..." } ],
+  [ { "#name":"ENTITY", "name":"em", "data":" -- " } ],
+  [ { "#name":"ATTLIST", "for":"p" },
+    [ { "#name":"ATT", "name":"id", "type":"ID", "use":"#IMPLIED" } ],
+    [ { "#name":"ATT", "name":"class", "type":"NMTOKENS", "use":"#FIXED",
+        "default":"normal" } ]
+    [ { "#name":"ATT", "name":"just",
+        type:"(left|right|center)", default:"left" } ]
   ]
-  [ { "#name"="NOTATION", name="png", "publicId"="..." } ]
+  [ { "#name":"NOTATION", name:"png", "publicId":"..." } ]
 ]
 
 
@@ -74,52 +74,52 @@ An example:
 
 * Maybe shorten "#name" to "#" or "." or something?
 * Specify doctype mapping
-* How to pick documentElement among children of doc
-* Separate JSONX vs. XML version
 * Enable link() to bump strings/ints/floats/bools to jnodes???
 * Move jsonx support from basedom to here
 """
 
 
 ###############################################################################
+# Constants for JSONX format.
 #
-class JKeys(FlexibleEnum):
-    """Constants for JSONX format. Compare domenums.RWord.
-    """
+JKeys = SimpleNamespace(**{
     # Reserved JsonX pseudo-attribute *names*
     #
-    J_NAME_KEY       = "#name"
-    J_TARGET_KEY     = "#target"
+    "J_NAME_KEY"       : "#name",
+    "J_TARGET_KEY"     : "#target",
 
     # Reserved JsonX pseudo-attribute *names* for ROOT node
     #
-    J_FORMAT_KEY     = "#format"     # Const value "JSONX"
-    J_JSONX_VER_KEY  = "#jver"
-    J_XML_VER_KEY    = "#xver"
-    J_ENCODING_KEY   = "#encoding"
-    J_STANDALONE_KEY = "#standalone"
-    J_DOCTYPE_KEY    = "#doctype"    # DOCTYPE name, e.g. "html"
-    J_PUBLICID_KEY   = "#publicId"
-    J_SYSTEMID_KEY   = "#systemId"
+    "J_FORMAT_KEY"     : "#format",     # Const value "JSONX"
+    "J_JSONX_VER_KEY"  : "#jver",
+    "J_XML_VER_KEY"    : "#xver",
+    "J_ENCODING_KEY"   : "#encoding",
+    "J_STANDALONE_KEY" : "#standalone",
+    "J_DOCTYPE_KEY"    : "#doctype",    # DOCTYPE name, e.g. "html"
+    "J_PUBLICID_KEY"   : "#publicId",
+    "J_SYSTEMID_KEY"   : "#systemId",
 
     # Root node property values
-    J_FORMAT         = "JSONX"
-    J_JSONX_VER      = "0.9"
+    "J_FORMAT"         : "JSONX",
+    "J_JSONX_VER"      : "0.9",
 
 
-    # Reserved node-name (J_NAME_KEY) *values* (save as for DOM nodeNames)
-    J_NN_TEXT        = "#text"
-    J_NN_CDATA       = "#cdata"
-    J_NN_PI          = "#pi"
-    J_NN_DOCUMENT    = "#document"
-    J_NN_COMMENT     = "#comment"
+    # Reserved node-name ("J_NAME_KEY") *values* (save as for DOM nodeNames)
+    "J_NN_TEXT"        : "#text",
+    "J_NN_CDATA"       : "#cdata",
+    "J_NN_PI"          : "#pi",
+    "J_NN_DOCUMENT"    : "#document",
+    "J_NN_COMMENT"     : "#comment",
 
     # Potential properties (not in JSON, might add for navigation):
-    J_PARENT         = "#parent"
-    J_OWNERDOC       = "#odoc"
-    J_PSIB           = "#psib"
-    J_NSIB           = "#nsib"
+    "J_PARENT"         : "#parent",
+    "J_OWNERDOC"       : "#odoc",
+    "J_PSIB"           : "#psib",
+    "J_NSIB"           : "#nsib",
+})
 
+J_NODENAMES = [ JKeys.J_NN_TEXT, JKeys.J_NN_CDATA,
+   JKeys.J_NN_PI, JKeys.J_NN_DOCUMENT, JKeys.J_NN_COMMENT ]
 
 def getNodeName(jnode:List) -> str:
     if isinstance(jnode, (str, int, float, bool)): return JKeys.J_NN_TEXT
@@ -163,7 +163,6 @@ class Loader:
             f"Not JsonX, {JKeys.J_FORMAT_KEY} is '{nn}', not '{JKeys.J_FORMAT}'.")
         assert len(self.jroot) == 2
 
-
     def check_jsonx(self, jnode:Any) -> None:
         """See if this is really correct JsonX.
         We want elements like
@@ -173,13 +172,13 @@ class Loader:
             return
         elif not isinstance(jnode, list): raise SyntaxError(
             f"Node must be list or atom, not {type(jnode)}.")
-        elif len(jnode) < 1 or isinstance(jnode[0], dict):
-            raise SyntaxError("No dict in first item of JsonX node.")
+        elif len(jnode) < 1 or not isinstance(jnode[0], dict):
+            raise SyntaxError(f"No dict in first item of JsonX node: {jnode}")
         elif JKeys.J_NAME_KEY not in jnode[0]:
             raise SyntaxError(f"No '{JKeys.J_NAME_KEY}' item in properties.")
         else:
             nn = getNodeName(jnode)
-            if not XStr.isXmlName(nn) and nn not in RWord:  # TODO Too forgiving
+            if not XStr.isXmlName(nn) and nn not in J_NODENAMES:
                 raise SyntaxError(f"Unrecognized name '{nn}' for node.")
             if len(jnode) > 1:
                 for ch in jnode[1:]: self.check_jsonx(ch)
@@ -228,13 +227,13 @@ class Loader:
                 par.appendChild(node)
             elif XStr.isXmlQName(nodeName):                 # ELEMENT
                 node = self.domDoc.createElement(
-                    ownerDocument=od, parentNode=par, nodeName=nodeName)
+                    parent=par, tagName=nodeName)
                 for k, v in jnode[0].items():
                     if k.startswith("#"): continue
                     node.setAttribute(k, str(v))
-                par.appendChild(node)
+                if par is not None: par.appendChild(node)
                 for cNum in range(1, len(jnode)):
-                    self.jsonSax_R(od=od, par=jnode, jnode=jnode[cNum])
+                    self.jsonSax_R(od=od, par=node, jnode=jnode[cNum])
             else:
                 raise SyntaxError("Unrecognized #name='{nodeName}'.")
         else: # Scalars
@@ -276,6 +275,8 @@ class Saver:
         return self.DocumentToJsonX(
             domDoc=self.domDoc, indent=self.indent, depth=0)
 
+    # Converters for each node type
+
     def NodeToJsonX(self, node:'Node', depth:int=0) -> str:
         """Dispatch to a nodeType-specific method.
         """
@@ -314,6 +315,7 @@ class Saver:
             JKeys.J_PUBLICID_KEY,   pub,
             JKeys.J_SYSTEMID_KEY,   sys)
         buf += self.NodeToJsonX(domDoc.documentElement, depth=depth+1) + "]\n"
+        return buf
 
     def ElementToJsonX(self, node:'Node', depth:int=0) -> str:
         istr = self.indent * depth
@@ -338,7 +340,7 @@ class Saver:
 
     def CDATAToJsonX(self, node:'Node', depth:int=0) -> str:
         istr = self.indent * depth
-        return istr + '[ {"#name"="#cdata"}, "%s"]' % (escapeJsonStr(node.data))
+        return istr + '[ {"#name":"#cdata"}, "%s"]' % (escapeJsonStr(node.data))
 
     def PIToJsonX(self, node:'Node', depth:int=0) -> str:
         istr = self.indent * depth
