@@ -144,25 +144,25 @@ class testNodeType(unittest.TestCase):
     def tests(self):
         from xml.dom.minidom import Node as MN
 
-        for n in range(13):
+        for n in range(1, 13):
             self.assertTrue(NodeType.okNodeType(NodeType(n), die=False))
             self.assertTrue(NodeType.okNodeType(NodeType(n), die=False))
             self.assertTrue(NodeType.tostring(NodeType(n)))
 
         AEQ = self.assertEqual
-        AEQ(Node.ELEMENT_NODE,                 NodeType(MN.ELEMENT_NODE))
-        AEQ(Node.ATTRIBUTE_NODE,               NodeType(MN.ATTRIBUTE_NODE))
-        AEQ(Node.TEXT_NODE,                    NodeType(MN.TEXT_NODE))
-        AEQ(Node.CDATA_SECTION_NODE,           NodeType(MN.CDATA_SECTION_NODE))
-        AEQ(Node.ENTITY_REFERENCE_NODE,        NodeType(MN.ENTITY_REFERENCE_NODE))
-        AEQ(Node.ENTITY_NODE,                  NodeType(MN.ENTITY_NODE))
+        AEQ(Node.ELEMENT_NODE,            NodeType(MN.ELEMENT_NODE).value)
+        AEQ(Node.ATTRIBUTE_NODE,          NodeType(MN.ATTRIBUTE_NODE).value)
+        AEQ(Node.TEXT_NODE,               NodeType(MN.TEXT_NODE).value)
+        AEQ(Node.CDATA_SECTION_NODE,      NodeType(MN.CDATA_SECTION_NODE).value)
+        AEQ(Node.ENTITY_REFERENCE_NODE,   NodeType(MN.ENTITY_REFERENCE_NODE).value)
+        AEQ(Node.ENTITY_NODE,             NodeType(MN.ENTITY_NODE).value)
         AEQ(Node.PROCESSING_INSTRUCTION_NODE,
-            NodeType(MN.PROCESSING_INSTRUCTION_NODE))
-        AEQ(Node.COMMENT_NODE,                 NodeType(MN.COMMENT_NODE))
-        AEQ(Node.DOCUMENT_NODE,                NodeType(MN.DOCUMENT_NODE))
-        AEQ(Node.DOCUMENT_TYPE_NODE,           NodeType(MN.DOCUMENT_TYPE_NODE))
-        AEQ(Node.DOCUMENT_FRAGMENT_NODE,       NodeType(MN.DOCUMENT_FRAGMENT_NODE))
-        AEQ(Node.NOTATION_NODE,                NodeType(MN.NOTATION_NODE))
+            NodeType(MN.PROCESSING_INSTRUCTION_NODE).value)
+        AEQ(Node.COMMENT_NODE,            NodeType(MN.COMMENT_NODE).value)
+        AEQ(Node.DOCUMENT_NODE,           NodeType(MN.DOCUMENT_NODE).value)
+        AEQ(Node.DOCUMENT_TYPE_NODE,      NodeType(MN.DOCUMENT_TYPE_NODE).value)
+        AEQ(Node.DOCUMENT_FRAGMENT_NODE,  NodeType(MN.DOCUMENT_FRAGMENT_NODE).value)
+        AEQ(Node.NOTATION_NODE,           NodeType(MN.NOTATION_NODE).value)
 
 
 ###############################################################################
@@ -250,7 +250,7 @@ class testPlainNode(unittest.TestCase):
         el8 = docEl.childNodes[8]
         pnode = PlainNode(ownerDocument=None, nodeName="aPlainNodeToTry")
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(AttributeError):
             pnode.__contains__(12)
 
         #self.assertRaises(IndexError, docEl.childNodes[200])  # TODO
@@ -368,6 +368,8 @@ class testNode(unittest.TestCase):
         self.assertIsNone(node.textContent)
         with self.assertRaises(NSuppE):
             node.textContent = "xyzzy"
+        with self.assertRaises(NSuppE):
+            _ = node.cloneNode()
 
         self.assertFalse(el8.isEqualNode(node))
         self.assertFalse(el8.isSameNode(node))
@@ -473,45 +475,45 @@ class testNodeType_Predicates(unittest.TestCase):
         docEl = self.n.docEl
         el = docEl.childNodes[5]
         for ch in docEl.childNodes:
-            if (ch.nodeType == NodeType.ABSTRACT_NODE):
+            if (ch.nodeType == Node.ABSTRACT_NODE):
                 self.allPreds(ch, [ ])
-            elif (ch.nodeType == NodeType.ELEMENT_NODE):
-                self.allPreds(ch, [ NodeType.ELEMENT_NODE ])
-            elif (ch.nodeType == NodeType.ATTRIBUTE_NODE):
-                self.allPreds(ch, [ NodeType.ATTRIBUTE_NODE ])
-            elif (ch.nodeType == NodeType.TEXT_NODE):
-                self.allPreds(ch, [ NodeType.TEXT_NODE ])
-            elif (ch.nodeType == NodeType.CDATA_SECTION_NODE):
-                self.allPreds(ch, [ NodeType.CDATA_SECTION_NODE ])
-            elif (ch.nodeType == NodeType.ENTITY_REFERENCE_NODE):
-                self.allPreds(ch, [ NodeType.ENTITY_REFERENCE_NODE ])
-            elif (ch.nodeType == NodeType.PROCESSING_INSTRUCTION_NODE):
-                self.allPreds(ch, [ NodeType.PROCESSING_INSTRUCTION_NODE ])
-            elif (ch.nodeType == NodeType.COMMENT_NODE):
-                self.allPreds(ch, [ NodeType.COMMENT_NODE ])
-            elif (ch.nodeType == NodeType.DOCUMENT_NODE):
-                self.allPreds(ch, [ NodeType.DOCUMENT_NODE ])
-            elif (ch.nodeType == NodeType.DOCUMENT_TYPE_NODE):
+            elif (ch.nodeType == Node.ELEMENT_NODE):
+                self.allPreds(ch, [ Node.ELEMENT_NODE ])
+            elif (ch.nodeType == Node.ATTRIBUTE_NODE):
+                self.allPreds(ch, [ Node.ATTRIBUTE_NODE ])
+            elif (ch.nodeType == Node.TEXT_NODE):
+                self.allPreds(ch, [ Node.TEXT_NODE ])
+            elif (ch.nodeType == Node.CDATA_SECTION_NODE):
+                self.allPreds(ch, [ Node.CDATA_SECTION_NODE ])
+            elif (ch.nodeType == Node.ENTITY_REFERENCE_NODE):
+                self.allPreds(ch, [ Node.ENTITY_REFERENCE_NODE ])
+            elif (ch.nodeType == Node.PROCESSING_INSTRUCTION_NODE):
+                self.allPreds(ch, [ Node.PROCESSING_INSTRUCTION_NODE ])
+            elif (ch.nodeType == Node.COMMENT_NODE):
+                self.allPreds(ch, [ Node.COMMENT_NODE ])
+            elif (ch.nodeType == Node.DOCUMENT_NODE):
+                self.allPreds(ch, [ Node.DOCUMENT_NODE ])
+            elif (ch.nodeType == Node.DOCUMENT_TYPE_NODE):
                 self.allPreds(ch, [ el.isDocumentType ])
-            elif (ch.nodeType == NodeType.DOCUMENT_FRAGMENT_NODE):
-                self.allPreds(ch, [ NodeType.DOCUMENT_FRAGMENT_NODE ])
-            elif (ch.nodeType == NodeType.NOTATION_NODE):
+            elif (ch.nodeType == Node.DOCUMENT_FRAGMENT_NODE):
+                self.allPreds(ch, [ Node.DOCUMENT_FRAGMENT_NODE ])
+            elif (ch.nodeType == Node.NOTATION_NODE):
                 self.allPreds(ch, [ el.isNotation ])
             else:
                 assert ValueError, "Unexpected nodeType %d." % (ch.nodeType)
 
     def allPreds(self, el, ok:List):
-        self.assertEqual(el.isElement,      NodeType.ELEMENT_NODE in ok)
-        self.assertEqual(el.isAttribute,    NodeType.ATTRIBUTE_NODE in ok)
-        self.assertEqual(el.isText,         NodeType.TEXT_NODE in ok)
-        self.assertEqual(el.isCDATA,        NodeType.CDATA_SECTION_NODE in ok)
-        self.assertEqual(el.isEntRef,       NodeType.ENTITY_REFERENCE_NODE in ok)
-        self.assertEqual(el.isPI,           NodeType.PROCESSING_INSTRUCTION_NODE in ok)
-        self.assertEqual(el.isComment,      NodeType.COMMENT_NODE in ok)
-        self.assertEqual(el.isDocument,     NodeType.DOCUMENT_NODE in ok)
-        self.assertEqual(el.isDocumentType, NodeType.DOCUMENT_TYPE_NODE in ok)
-        self.assertEqual(el.isFragment,     NodeType.DOCUMENT_FRAGMENT_NODE in ok)
-        self.assertEqual(el.isNotation,     NodeType.NOTATION_NODE in ok)
+        self.assertEqual(el.isElement,      Node.ELEMENT_NODE in ok)
+        self.assertEqual(el.isAttribute,    Node.ATTRIBUTE_NODE in ok)
+        self.assertEqual(el.isText,         Node.TEXT_NODE in ok)
+        self.assertEqual(el.isCDATA,        Node.CDATA_SECTION_NODE in ok)
+        self.assertEqual(el.isEntRef,       Node.ENTITY_REFERENCE_NODE in ok)
+        self.assertEqual(el.isPI,           Node.PROCESSING_INSTRUCTION_NODE in ok)
+        self.assertEqual(el.isComment,      Node.COMMENT_NODE in ok)
+        self.assertEqual(el.isDocument,     Node.DOCUMENT_NODE in ok)
+        self.assertEqual(el.isDocumentType, Node.DOCUMENT_TYPE_NODE in ok)
+        self.assertEqual(el.isFragment,     Node.DOCUMENT_FRAGMENT_NODE in ok)
+        self.assertEqual(el.isNotation,     Node.NOTATION_NODE in ok)
 
 
 ###############################################################################
@@ -612,6 +614,10 @@ class testElement(unittest.TestCase):
         el5.textContent = "something else"
         self.assertEqual(el5.textContent, "something else")
 
+    def testInternals(self):
+        docEl = self.n.docEl
+        el5 = docEl[5]
+
         with self.assertRaises(IndexError):
             docEl._expandChildArg(999)
             docEl._expandChildArg(-999)
@@ -627,10 +633,8 @@ class testElement(unittest.TestCase):
 
         self.assertTrue(bool(docEl))  # b/c it makes more sense
 
-        revnl = docEl.sorted()
-        self.assertIsInstance(revnl, NodeList)
-        self.assertEqual(len(revnl), len(docEl))
-        self.assertIs(revnl[0], docEl[-1])
+        #DBG.dumpNode(docEl, msg="docEl")
+        #DBG.dumpNode(docEl[-1], msg="docEl[-1]")
 
     def test_neighbors(self):
         docEl = self.n.docEl
@@ -709,6 +713,21 @@ class testElement(unittest.TestCase):
         with self.assertRaises(HReqE):
             docEl.replaceChild(newChild=el8, oldChild=el8)
             docEl.replaceChild(el0, zzz3)  # bad order
+
+        revnl = docEl.reversed()
+        self.assertIsInstance(revnl, NodeList)
+        #DBG.dumpNode(revnl, msg="revnl")
+        self.assertEqual(len(revnl), len(docEl))
+        self.assertIs(revnl[0], docEl[-1])
+
+        nl = sorted(docEl)
+        self.assertEqual(len(docEl), len(nl))
+        emp = docEl.ownerDocument.createElement("br")
+        nl = sorted(emp)
+        self.assertEqual(len(nl), 0)
+
+        nl = docEl * -1
+        self.assertEqual(len(nl), 0)
 
     def test_attributes(self):
         docEl = self.n.docEl
@@ -804,7 +823,7 @@ class testElement(unittest.TestCase):
         self.assertEqual(el5.endTag, el5EndTag)
 
     def test_getitem(self):
-        #doc = self.n.doc
+        doc = self.n.doc
         docEl = self.n.docEl
         #el0 = docEl.childNodes[0]
         el5 = docEl.childNodes[5]
@@ -842,8 +861,47 @@ class testElement(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             nl = docEl[3+4j]
+        with self.assertRaises(TypeError):
+            docEl[3.14+4j] = doc.createElement("p")
+
+        self.assertTrue(docEl["*"])
+        self.assertTrue(docEl["p"])
+        self.assertTrue(docEl["#text"])
+        self.assertTrue(docEl["#pi"])
+        self.assertTrue(docEl["#comment"])
+        self.assertTrue(docEl["@id"])
+
+        with self.assertRaises(TypeError):
+            self.assertTrue(docEl["unknown:oracle(99)"])
+
+        self.assertFalse(docEl.isEqualNode(None))
 
         # TODO SchemeHandlers
+
+    def test_setitemSingle(self):
+        doc = self.n.doc
+        docEl = self.n.docEl
+        #el5 = docEl.childNodes[5]
+
+        newb = doc.createElement("newb")
+        docEl[5] = newb
+        self.assertEqual(docEl.childNodes[5], newb)
+        docEl.checkNode(deep=True)
+
+    def test_setitemSlice(self):
+        doc = self.n.doc
+        docEl = self.n.docEl
+        #el5 = docEl.childNodes[5]
+
+        nl = NodeList()
+        for _ in range(5):
+            nl.append(doc.createElement("newb"))
+        self.assertEqual(len(nl), 5)
+
+        prevLen = len(docEl)
+        docEl[0:2] = nl
+        self.assertEqual(len(docEl), prevLen - 2 + 5)
+        docEl.checkNode(deep=True)
 
     @unittest.skip
     def test_fetchers(self):
@@ -1149,7 +1207,7 @@ class testAttr(unittest.TestCase):
             DBG.dumpNode(anode2, msg="anode 2:")
         self.assertTrue(eqBit)
 
-        anode3 = anode2.cloneNode(deep=True)
+        #anode3 = anode2.cloneNode(deep=True)
 
         anode2.checkNode()
         self.assertTrue(bool(anode2))
@@ -1226,15 +1284,30 @@ class testGenerator2(unittest.TestCase):
         self.n = madeDocObj.n
         self.n.fan = 5
         madeDocObj.addFullTree(self.n.docEl, n=self.n.fan, depth=2,
-            withText=True, withAttr=True)
+            withText="", withAttr={})  # Using default text/attrs
 
     def testGens(self):
         docEl = self.n.docEl
         origLen = len(docEl.childNodes)
         self.assertFalse(docEl.hasTextNodes)
-        print("el 7: " + docEl[3].outerXML)
-        self.assertTrue(docEl[3].hasSubElements)
-        self.assertFalse(docEl[3][0].hasSubElements)
+
+        #print("docEl: \n" + docEl.toxml())
+
+        p0 = docEl[0]
+        self.assertEqual(p0.nodeName, "para0")
+        self.assertTrue(p0.hasSubElements)
+        self.assertFalse(p0.hasTextNodes)
+
+        p1 = p0[3]
+        self.assertEqual(p1.nodeName, "para1")
+        self.assertTrue(p1.hasSubElements)
+        self.assertFalse(p1.hasTextNodes)
+
+        p2 = p1[3]
+        self.assertEqual(p2.nodeName, "para2")
+        self.assertFalse(p2.hasSubElements)
+        self.assertTrue(p2.hasTextNodes)
+
         self.assertEqual(docEl._normalizeChildIndex(self.n.fan-2), self.n.fan-2)
         self.assertEqual(docEl._normalizeChildIndex(-2), self.n.fan-2)
 
@@ -1254,61 +1327,61 @@ class testGenerator2(unittest.TestCase):
             nanc += 1
         self.assertEqual(nanc, 1)
 
-        print("\n********")
-        print(f"testGenerator2: ", self.n.docEl.toprettyxml())
+        #print("\n********")
+        #print("testGenerator2: ", self.n.docEl.toprettyxml())
         #import pudb; pudb.set_trace()
-        self.tryOptions(
-            docEl.eachSaxEvent, separateAttributes=False, attrDict=False)
-        self.tryOptions(
-            docEl.eachSaxEvent, separateAttributes=True, attrDict=False)
-        self.tryOptions(
-            docEl.eachSaxEvent, separateAttributes=False, attrDict=True)
+        self.tryOptions(docEl.eachSaxEvent, attrTx="PAIRS")
+        self.tryOptions(docEl.eachSaxEvent, attrTx="EVENTS")
+        self.tryOptions(docEl.eachSaxEvent, attrTx="DICT")
 
-    def tryOptions(self, gen:Callable, separateAttributes:bool, attrDict:bool):
+    def tryOptions(self, gen:Callable, attrTx:bool):
         eventCounts = defaultdict(int)
-        for se in gen(separateAttributes=separateAttributes, attrDict=attrDict):
+        for se in gen(attrTx=attrTx):
             self.assertIsInstance(se, Tuple)
             tlen = len(se)
             seType = se[0]
             eventCounts[seType] += 1
             if seType == SaxEvent.INIT: self.assertEqual(tlen, 1)
             elif seType == SaxEvent.START:
-                if separateAttributes:
+                if attrTx == "EVENTS":
                     self.assertTrue(tlen == 2)
-                elif attrDict:
-                    #print("\nTuple for attrDict: ", repr(se))
-                    self.assertTrue(tlen == 2 or tlen == 3)
-                    if (tlen == 3): self.assertIsInstance(se[2], dict)
-                else:
+                elif attrTx == "DICT":
+                    if tlen == 2:
+                        pass
+                    elif tlen == 3:
+                        self.assertIsInstance(se[2], dict)
+                    else:
+                        self.assertFalse(f"Extra event args with attrDict: {se}.")
+                elif attrTx == "PAIRS":
                     self.assertEqual(tlen % 2, 0)
+                else:
+                    raise DOMException("Bad attrTx")
             elif seType == SaxEvent.END: self.assertEqual(tlen, 2)
-            elif seType == SaxEvent.CDATASTART: self.assertEqual(tlen, 1)
+            elif seType == SaxEvent.CDATA: self.assertEqual(tlen, 1)
             elif seType == SaxEvent.CHAR: self.assertEqual(tlen, 2)
             elif seType == SaxEvent.CDATAEND: self.assertEqual(tlen, 1)
             elif seType == SaxEvent.COMMENT: self.assertEqual(tlen, 2)
             elif seType == SaxEvent.PROC: self.assertEqual(tlen, 3)
             elif seType == SaxEvent.ATTRIBUTE:
-                print(f"ATTR event/: {repr(se)}")
                 self.assertEqual(tlen, 3)
             elif seType == SaxEvent.FINAL: self.assertEqual(tlen, 1)
             else:
-                raise ValueError("Non-SaxEvent {seType}.")
+                raise ValueError("Unknown SaxEvent {seType}.")
 
         #DBG.msg("Events:\n    %s" % (repr(eventCounts)))
         # Check the actual counts
-        nElements = self.n.fan * (self.n.fan+1) + 1
         self.assertEqual(eventCounts[SaxEvent.INIT], 1)
-        self.assertEqual(eventCounts[SaxEvent.START], nElements)
-        self.assertEqual(eventCounts[SaxEvent.END], nElements)
-        self.assertEqual(eventCounts[SaxEvent.CDATASTART], 0)
-        self.assertEqual(eventCounts[SaxEvent.CHAR], 55)
+        self.assertEqual(eventCounts[SaxEvent.START], 156)
+        self.assertEqual(eventCounts[SaxEvent.END], 156)
+        self.assertEqual(eventCounts[SaxEvent.CDATA], 0)
+        self.assertEqual(eventCounts[SaxEvent.CHAR], 125)
         self.assertEqual(eventCounts[SaxEvent.CDATAEND], 0)
         self.assertEqual(eventCounts[SaxEvent.COMMENT], 0)
         self.assertEqual(eventCounts[SaxEvent.PROC], 0)
         self.assertEqual(eventCounts[SaxEvent.FINAL], 1)
 
-        if separateAttributes:
-            self.assertEqual(eventCounts[SaxEvent.ATTRIBUTE], 1)
+        if attrTx == "EVENTS":
+            self.assertEqual(eventCounts[SaxEvent.ATTRIBUTE], 155)
         else:
             self.assertEqual(eventCounts[SaxEvent.ATTRIBUTE], 0)
 

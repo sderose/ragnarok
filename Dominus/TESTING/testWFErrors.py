@@ -6,7 +6,6 @@ from xml.parsers import expat
 from xml.dom import minidom
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation,Element
-#from domenums import NodeType
 
 #from basedom import Node
 
@@ -84,10 +83,12 @@ WFTestCases = [
     """<p>&#x1;</p>""",
     """<p>&#-12;</p>""",
     """<p>&#65.2;</p>""",
-    """<p>%#65;</p>""",
-    """<p>%#x2022;</p>""",
-    """<p>%#x2022;</p>""",
-    """<p>%#x2022;</p>""",
+
+    # These are ok in doc instance:
+    #"""<p>%#65;</p>""",
+    #"""<p>%#x2022;</p>""",
+    #"""<p>%#x2022;</p>""",
+    #"""<p>%#x2022;</p>""",
 
     # Improper use of reserved characters (< > & ' ") without escaping [§2.4]
     """<p> Really? < </p>""",
@@ -115,8 +116,8 @@ WFTestCases = [
 
     # Namespaces [§3]
     """<undef:p>Hello</undef:p>""",
-    """<p xmlns:xml="http://www.w3.org/XML/1998/namespace">Hello</p>""",
     """<p xmlns:foo="">Hello</p>""",
+    """<p xmlns:xml="http://www.w3.org/XML/1998/namespace">Hello</p>""",
 
     # DTD
     """<!DOCTYPE root [<!NOPE foo "bar"> ]>""",

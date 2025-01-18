@@ -20,6 +20,7 @@ import dombuilder
 #
 if 'unittest.util' in __import__('sys').modules:
     # Show full diff in self.assertEqual.
+    #pylint: disable=W0212
     __import__('sys').modules['unittest.util']._MAX_LENGTH = 32000
 
 # Can't trivially test CDATA since it isn't preserved.
@@ -60,10 +61,10 @@ def countStuff(doc) -> dict:
 
 ###############################################################################
 #
-class TestDomBuilderM(unittest.TestCase):
+class TestSerializers(unittest.TestCase):
     def setUp(self):
         self.maxDiff = 9999
-        with codecs.open("sample01.xml", "rb", encoding="utf-8") as ifh:
+        with codecs.open("../DATA/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
         impl = basedom.getDOMImplementation()
         self.db = dombuilder.DomBuilder(domImpl=impl)
@@ -106,8 +107,6 @@ class TestDomBuilderM(unittest.TestCase):
             breakBE = True,       # Newline before end tags
             breakAE = True,       # Newline after end tags
 
-            inlineTags = "i,b,tt,sup,sub,span".split(","),
-
             # Syntax alternatives
             canonical = False,    # Use canonical XML syntax? NOTYET
             encoding = "utf-8",   # utf-8. Just utf-8.
@@ -127,13 +126,69 @@ class TestDomBuilderM(unittest.TestCase):
             htmlChars = False,    # Use HTML named special characters
             translateTable = { "A": "&#x41;", "e": None}
         )
-        self.doc.toprettyxml(foptions=fo)
+        fo.setInlines("i b tt sup sub span")
+        self.doc.toprettyxml(fo=fo)
 
         with self.assertRaises(KeyError):
             fo = basedom.FormatOptions(notAnOption="foo")
         with self.assertRaises(TypeError):
             fo = basedom.FormatOptions(breakAE="foo")
 
+
+###############################################################################
+#
+class TestFO(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = 9999
+        with codecs.open("../DATA/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
+            self.xmlText = ifh.read()
+        impl = basedom.getDOMImplementation()
+        self.db = dombuilder.DomBuilder(domImpl=impl)
+        self.doc = self.db.parse_string(self.xmlText)
+        self.docEl = self.doc.documentElement
+
+    def testDefault(self):
+        # This flips most settings away from the defaults.
+        fo = basedom.FormatOptions(
+            newl            = "\r\n",
+            indent          = "    ",
+            wrapTextAt      = 80,
+            dropWS          = True,
+            breakBB         = True,
+            breakAB         = True,
+            breakAttrs      = True,
+            breakBText      = True,
+            breakBE         = True,
+            breakAE         = True,
+
+            # Syntax alternatives
+            canonical       = False,
+            encoding        = "utf-8",
+            includeXmlDcl   =  False,
+            standalone      =  "yes",
+            includeDoctype  =  False,
+            useEmpty        = True,
+            emptySpace      = False,
+            quoteChar       = "'",
+            sortAttrs       = True,
+            normAttrs       =  True,
+
+            # Escaping
+            escapeGT        = True,
+            ASCII           =  True,
+            charBase        = 10,
+            charPad         = 6,
+            htmlChars       = False,
+            #translateTable = [],
+        )
+
+        fo.setInlines("i b u tt mono a br")
+        fo.setTagInfos({ "i":"inline" })
+        with codecs.open("../DATA/HTML.taginfo", "rb", encoding="utf-8") as ifh:
+            fo.setTagInfos(ifh)
+
+        x = self.doc.toprettyxml(fo=fo)
+        print(x)
 
 if __name__ == '__main__':
     unittest.main()

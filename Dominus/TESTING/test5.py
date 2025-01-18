@@ -15,13 +15,13 @@ import re
 #from collections import defaultdict
 #from typing import List
 
-from basedomtypes import HReqE, ICharE, NSuppE, NodeType
+from basedomtypes import HReqE, ICharE, NSuppE
 #from basedomtypes import NotFoundError
 from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
 from xmlstrings import XmlStrings as XStr
 
 import basedom
-from basedom import DOMImplementation, FormatOptions, _CanonicalFO
+from basedom import DOMImplementation, FormatOptions
 from basedom import PlainNode, Node, Document, Element, Attr
 from basedom import CharacterData, Text, NamedNodeMap, NodeList
 
@@ -278,7 +278,7 @@ class testByMethod(unittest.TestCase):
         n2 = self.n.child2
         newList = NodeList()
         for x in range(10):
-            ch = self.n.doc.createElement("P_{x}", attributes={ "seq":str(x) })
+            ch = self.n.doc.createElement(f"P_{x}", attributes={ "seq":str(x) })
             newList.append(ch)
         newList2 = newList.copy()
 
@@ -425,7 +425,7 @@ class testByMethod(unittest.TestCase):
         newChild = self.n.doc.createElement("p")
         newList = NodeList()
         for x in range(10):
-            ch = self.n.doc.createElement("P_{x}", attributes={ "seq":str(x) })
+            ch = self.n.doc.createElement(f"P_{x}", attributes={ "seq":str(x) })
             newList.append(ch)
         self.assertEqual(len(newList), 10)
 
@@ -437,7 +437,7 @@ class testByMethod(unittest.TestCase):
 
         newList = NodeList()
         for x in range(10):
-            ch = self.n.doc.createElement("P2_{x}", attributes={ "seq":str(x) })
+            ch = self.n.doc.createElement(f"P2_{x}", attributes={ "seq":str(x) })
             newList.append(ch)
         self.XX(n0.before(newList))
 
@@ -483,7 +483,7 @@ class testByMethod(unittest.TestCase):
 
         newList = NodeList()
         for x in range(10):
-            ch = self.n.doc.createElement("P_{x}", attributes={ "seq":str(x) })
+            ch = self.n.doc.createElement(f"P_{x}", attributes={ "seq":str(x) })
             newList.append(ch)
         self.assertEqual(len(newList), 10)
         newList2 = newList.copy()
@@ -675,8 +675,8 @@ class testByMethod(unittest.TestCase):
 
         fo = FormatOptions(indent="____", quoteChar="'", newl="\r\n")
         fo.setInlines(None)
-        self.XX(self.n.docEl.toprettyxml(foptions=fo))
-        self.XX(self.n.docEl.toprettyxml(foptions=_CanonicalFO))
+        self.XX(self.n.docEl.toprettyxml(fo=fo))
+        self.XX(self.n.docEl.toprettyxml(fo=FormatOptions.getCanonicalFO()))
 
         # TODO Add a serious test of canonicity
 

@@ -6,9 +6,8 @@ import re
 import unicodedata
 
 #from basedomtypes import HReqE, ICharE, NSuppE  # NotFoundError
-#from basedomtypes import NodeType
 from xmlstrings import XmlStrings as XStr
-from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
+from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler, Normalizer
 
 #import basedom
 #from basedom import DOMImplementation, PlainNode, Node
@@ -18,18 +17,7 @@ from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
 from makeTestDoc import makeTestDoc2, DAT  #, DBG
 
 
-class MyTestCase(unittest.TestCase):
-    def TR(self, expr):
-        return self.assertTrue(expr)
-
-    def FA(self, expr):
-        return self.assertFalse(expr)
-
-    def EQ(self, first, second):
-        return self.assertEqual(first, second)
-
-
-class testByMethod(MyTestCase):
+class testByMethod(unittest.TestCase):
     def setUp(self):
         """Should make:
         <html xmlns:html="https://example.com/namespaces/foo">
@@ -60,35 +48,43 @@ class testByMethod(MyTestCase):
                 "***" if s2c != s3c else ""))
 
     def testUNormHandler(self):
-        # TODO ALSO VIA cleanText
-        textPairs = {
+        # TODO Also test via cleanText().
+        # See unorm.py for isolated unorm mapping.
+        testPairs1 = {
+           "NFD": ("caf\u00e9 na\u00efve", "cafe\u0301 nai\u0308ve"),
+           "NFC": ("scho\u0308n mu\u0308de", "sch\u00f6n m\u00fcde"),
+           "NFKD": ("\u2168 \u2169", "IX X"),
+           "NFKC": ("\ufb03 \ufb02", "ffi fl")
+        }
+        testPairs2 = {
             "NFC": (
-                "caf\xe9, e\u0301clair, pi\xf1a, a\xf1o, " +
-                "na\xefve, r\xe9sum\xe9",
-                "caf\xe9, \xe9clair, pi\xf1a, a\xf1o, na\xefve, r\xe9sum\xe9"),
+                "cafe\u0301, e\u0301clair, pin\u0303a, an\u0303o, " +
+                "nai\u0308ve, re\u0301sume\u0301",
+                "caf\u00e9, \u00e9clair, pi\u00f1a, a\u00f1o, " +
+                "na\u00efve, r\u00e9sum\u00e9"),
             "NFD": (
-                "caf\xe9, \xe9clair, pi\xf1a, a\xf1o, na\xefve, r\xe9sum\xe9",
+                "caf\u00e9, \u00e9clair, pi\u00f1a, a\u00f1o, " +
+                "na\u00efve, r\u00e9sum\u00e9",
                 "cafe\u0301, e\u0301clair, pin\u0303a, an\u0303o, " +
                 "nai\u0308ve, re\u0301sume\u0301"),
-            "NFKC": (  # TODO Add halfwidth, mu-A, etc.?
-                #lig   lig   dubH  roman log
-                "\ufb03\ufb04\u210d\u2171\u33d2",
-                "ffifflHiilog"),
+            "NFKC": (
+                "\ufb03\ufb04\u210e\u2171\u33d2",
+                "ffifflhiilog"),
             "NFKD": (
-                "\u00c5\u01fa\u1e36\u1fcd\u1fc4",
-                "A\u030aA\u030a\u0301L\u0323"),
+                "\ufb03\ufb04" + "\u2460\u2461\u2462",
+                "ffiffl" + "123")
         }
-
         nonorm = UNormHandler("NONE")
-        for k, v in textPairs.items():
-            self.EQ("NONE"+nonorm.normalize(v[0]), "NONE"+v[0])
-            self.assertNotEqual("NONE"+nonorm.normalize(v[0]), "NONE"+v[1])
-            un = UNormHandler(k)
-            normed = un.normalize(v[0])
-            if normed != v[1]:
-                print(f"UNorm '{k}' not as expected:")
-                self.showDiff(v[0], normed, v[1])
-                self.EQ(un.normalize(v[0]), v[1])
+        for tp in [ testPairs1, testPairs2 ]:
+            for k, v in tp.items():
+                self.assertEqual("NONE"+nonorm.normalize(v[0]), "NONE"+v[0])
+                self.assertNotEqual("NONE"+nonorm.normalize(v[0]), "NONE"+v[1])
+                un = UNormHandler(k)
+                normed = un.normalize(v[0])
+                if normed != v[1]:
+                    print(f"UNorm '{k}' not as expected:")
+                    self.showDiff(v[0], normed, v[1])
+                    self.assertEqual(un.normalize(v[0]), v[1])
 
     def testCaseHandler(self):
         SIGMA = 0x003a3  # "GREEK CAPITAL LETTER SIGMA"
@@ -99,10 +95,20 @@ class testByMethod(MyTestCase):
         sigmai = f"UC {SIGMA} fin {final} lc {sigma} lun {lunat} LUN {LUNAT}"
 
         s = "aBcDeF #$_- " + sigmai
-        self.EQ(CaseHandler.NONE.normalize(s), s)
-        self.EQ(CaseHandler.LOWER.normalize(s), s.lower())
-        self.EQ(CaseHandler.UPPER.normalize(s), s.upper())
-        self.EQ(CaseHandler.FOLD.normalize(s), s.casefold())
+        self.assertEqual(CaseHandler.NONE.normalize(s), s)
+        self.assertEqual(CaseHandler.LOWER.normalize(s), s.lower())
+        self.assertEqual(CaseHandler.UPPER.normalize(s), s.upper())
+        self.assertEqual(CaseHandler.FOLD.normalize(s), s.casefold())
+
+
+        self.assertEqual(CaseHandler.NONE.strcasecmp("XYZ", "xyz"), -1)
+        self.assertEqual(CaseHandler.LOWER.strcasecmp("XYZ", "xyz"), 0)
+        self.assertEqual(CaseHandler.UPPER.strcasecmp("XYZ", "xyz"), 0)
+        self.assertEqual(CaseHandler.FOLD.strcasecmp("XYZ", "xyz"), 0)
+
+        self.assertEqual(CaseHandler.LOWER.strcasecmp("xyz0", "XYZ1"), -1)
+        self.assertEqual(CaseHandler.LOWER.strcasecmp("xyz0", "XYZ0"), 0)
+        self.assertEqual(CaseHandler.LOWER.strcasecmp("xyz", "XYY"), 1)
 
     def testWSDef(self):
         """Check that the whitespace variants are right.
@@ -119,17 +125,31 @@ class testByMethod(MyTestCase):
             wsh = WSHandler(wh)
             spaceChars = wsh.spaces
             #visChars = ", ".join("U+%04x" % (ord(c)) for c in spaceChars)
-            self.FA(re.search(r"(.).*\1", spaceChars)) # No dups, please.
+            self.assertFalse(re.search(r"(.).*\1", spaceChars)) # No dups, please.
             #msg=f"{wh} has dup: [ {visChars} ]")
-            self.EQ(len(spaceChars), expectedLen)      # Right count?
+            self.assertEqual(len(spaceChars), expectedLen)      # Right count?
             #msg=f"{wh}, sp='{visChars}'.")
             for c in spaceChars:                       # All spaces?
-                self.TR(unicodedata.category(c)[0] in "CZ")
-            self.TR(wsh.isSpace(spaceChars*3))
-            self.FA(wsh.isSpace(""))
-            self.FA(wsh.isSpace("\x2022"))  # BULLET
-            self.FA(wsh.isSpace(None))
-            self.FA(wsh.isSpace("\u200B   \t\r\n"))
+                self.assertTrue(unicodedata.category(c)[0] in "CZ")
+            self.assertTrue(wsh.isSpace(spaceChars*3))
+            self.assertFalse(wsh.isSpace(""))
+            self.assertFalse(wsh.isSpace("\x2022"))  # BULLET
+            self.assertFalse(wsh.isSpace(None))
+            self.assertFalse(wsh.isSpace("\u200B   \t\r\n"))
+
+            self.assertTrue(wsh.hasSpace("abc\t"))
+            self.assertEqual(wsh.lstrip(" \t\n\rabc \t\n\r"), "abc \t\n\r")
+            self.assertEqual(wsh.rstrip(" \t\n\rabc \t\n\r"), " \t\n\rabc")
+            self.assertEqual(wsh.strip(" \t\n\rabc \t\n\r"), "abc")
+            self.assertEqual(wsh.replace(" \t\n\rabc \t\n\r"), "    abc    ")
+            self.assertEqual(wsh.normalize(" \t\n\rab\t\r  c \t\n\r"), "ab c")
+            self.assertEqual(wsh.collapse( " \t\n\rab\t\r  c \t\n\r"), "ab c")
+            #
+        self.assertEqual(WSHandler.xstripSpace(" \t\n\rabc \t\n\r"), "abc")
+
+    def testNormalizer(self):
+        nzr = Normalizer(unorm="NONE", case="UPPER", wsDef="WHATWG")
+        self.assertEqual(nzr.normalize(" \t\n\rab\t\r  c \t\n\r"), "AB C")
 
     def testNameTest(self):
         from string import ascii_letters, digits
@@ -144,7 +164,7 @@ class testByMethod(MyTestCase):
         asciiName = asciiStart + digits  # ".-:" for some
         for wh in which:
             nt = NameTest(wh)
-            self.TR(nt.isName(asciiName))
+            self.assertTrue(nt.isName(asciiName))
             #msg=f"asciiName should pass {wh}: '{asciiName}'.")
 
         # Sample the Unicode "L" category (could add Mn and a few others)
@@ -157,120 +177,153 @@ class testByMethod(MyTestCase):
         for wh in [ "XML", "HTML", "WHATWG" ]:
             # PYTHON allows Unicode, but we don't test it.
             nt = NameTest(wh)
-            self.TR(nt.isName(randName))
+            self.assertTrue(nt.isName(randName))
             #msg=f"randName should pass for {wh}: {randName}'.")
 
     def testXStr(self):
         allNS = XStr.allNameStartChars()
         allNCA = XStr.allNameCharAddls()
         allNC = XStr.allNameChars()
-        self.EQ(len(allNS), 54001)
-        self.EQ(len(allNCA), 127)
-        self.EQ(len(allNC), 54128)
+        self.assertEqual(len(allNS), 54001)
+        self.assertEqual(len(allNCA), 127)
+        self.assertEqual(len(allNC), 54128)
 
-        self.TR(XStr.isXmlName("Rainbow.1"))
-        self.TR(XStr.isXmlName("_Rainbow.1"))
-        self.TR(XStr.isXmlQName("lb"))
-        self.TR(XStr.isXmlQName("tei:lb"))
-        self.TR(XStr.isXmlQQName("tei"))
-        self.TR(XStr.isXmlQQName("tei:lb"))
-        self.TR(XStr.isXmlQQName("tei:lb:c"))
-        self.TR(XStr.isXmlPName("svg:g"))
-        self.TR(XStr.isXmlNMTOKEN("-foo-"))
-        self.TR(XStr.isXmlNumber("0123456789"))
+        self.assertTrue(XStr.isXmlChars("aArdVarK7.\x2022"))
+        self.assertFalse(XStr.isXmlChars("aArd\x04VarK7"))
+        self.assertFalse(XStr.isXmlChars(""))
 
-        self.FA(XStr.isXmlName("Rain•bow'1"))
-        self.FA(XStr.isXmlName("-Rain"))
-        self.FA(XStr.isXmlName(".Rain"))
-        self.FA(XStr.isXmlName("1Rain"))
-        self.FA(XStr.isXmlName("1Rain"))
-        self.FA(XStr.isXmlQName("  zork "))
-        self.FA(XStr.isXmlQName("tei:lb:c"))
-        self.FA(XStr.isXmlQQName("tei:lb:-c"))
-        self.FA(XStr.isXmlPName("g"))
-        self.FA(XStr.isXmlPName("1svg:g"))
-        self.FA(XStr.isXmlNMTOKEN("-f#o-"))
-        self.FA(XStr.isXmlNumber("a999"))
-        self.FA(XStr.isXmlNumber("{45}"))
+        self.assertTrue(XStr.isXmlName("Rainbow.1"))
+        self.assertTrue(XStr.isXmlName("_Rainbow.1"))
+        self.assertTrue(XStr.isXmlQName("lb"))
+        self.assertTrue(XStr.isXmlQName("tei:lb"))
+        self.assertTrue(XStr.isXmlQQName("tei"))
+        self.assertTrue(XStr.isXmlQQName("tei:lb"))
+        self.assertTrue(XStr.isXmlQQName("tei:lb:c"))
+        self.assertTrue(XStr.isXmlPName("svg:g"))
+        self.assertTrue(XStr.isXmlNMTOKEN("-foo-"))
+        self.assertTrue(XStr.isXmlNumber("0123456789"))
 
-        self.EQ(XStr.escapeAttribute(
+        self.assertFalse(XStr.isXmlName("Rain•bow'1"))
+        self.assertFalse(XStr.isXmlName("-Rain"))
+        self.assertFalse(XStr.isXmlName(".Rain"))
+        self.assertFalse(XStr.isXmlName("1Rain"))
+        self.assertFalse(XStr.isXmlName("1Rain"))
+        self.assertFalse(XStr.isXmlQName("  zork "))
+        self.assertFalse(XStr.isXmlQName("tei:lb:c"))
+        self.assertFalse(XStr.isXmlQQName("tei:lb:-c"))
+        self.assertFalse(XStr.isXmlPName("g"))
+        self.assertFalse(XStr.isXmlPName("1svg:g"))
+        self.assertFalse(XStr.isXmlNMTOKEN("-f#o-"))
+        self.assertFalse(XStr.isXmlNumber("a999"))
+        self.assertFalse(XStr.isXmlNumber("{45}"))
+
+    def testXStrEscapers(self):
+        self.assertEqual(XStr.escapeAttribute(
             'Alfred <"E"> Neuman.', quoteChar='"', addQuotes=False),
             'Alfred &lt;&quot;E&quot;> Neuman.')
 
-        self.EQ(XStr.escapeText(
+        self.assertEqual(XStr.escapeText(
             'abc<tag> AT&T xyz'),
             'abc&lt;tag> AT&amp;T xyz')
-        self.EQ(XStr.escapeText(
+        self.assertEqual(XStr.escapeText(
             'abc \u2022y AT&T zz', escapeAllPast=0x2000),
             'abc &#x2022;y AT&amp;T zz')
-        self.EQ(XStr.escapeText(
+        self.assertEqual(XStr.escapeText(
             'abc ]]> zz'),
             'abc ]]&gt; zz')
-        self.EQ(XStr.escapeText(
+        self.assertEqual(XStr.escapeText(
             'abc >>> zz'),
             'abc >>> zz')
-        self.EQ(XStr.escapeText(
+        self.assertEqual(XStr.escapeText(
             'abc >>> zz', escapeAllGT=True),
             'abc &gt;&gt;&gt; zz')
 
-        self.EQ(XStr.escapeCDATA(
+        self.assertEqual(XStr.escapeCDATA(
             "1234<[!CDATA[m<n> AT&T]]>, right?"),
             "1234<[!CDATA[m<n> AT&T]]&gt;, right?")
-        self.EQ(XStr.escapeCDATA(
+        self.assertEqual(XStr.escapeCDATA(
             "1234<[!CDATA[m<n> AT&T]]>, right?", replaceWith="]]&gt;"),
             "1234<[!CDATA[m<n> AT&T]]&gt;, right?")
-        self.EQ(XStr.escapeCDATA(
+        self.assertEqual(XStr.escapeCDATA(
             "1234<[!CDATA[m<n> AT&T]]>, right?", replaceWith="\u2022"),
             "1234<[!CDATA[m<n> AT&T\u2022, right?")
 
-        self.EQ(XStr.escapeComment(
+        self.assertEqual(XStr.escapeComment(
             "some <p>s fr-om AT&T are -- well?> -- ok."),
             "some <p>s fr-om AT&T are -&#x2d; well?> -&#x2d; ok.")
-        self.EQ(XStr.escapeComment(
+        self.assertEqual(XStr.escapeComment(
             "some <p>s fr-om AT&T are -- well?> -- ok.", replaceWith="- -"),
             "some <p>s fr-om AT&T are - - well?> - - ok.")
 
-        self.EQ(XStr.escapePI(
+        self.assertEqual(XStr.escapePI(
             "Pis should?> not have this?>", replaceWith="?&gt;"),
             "Pis should?&gt; not have this?&gt;")
-        self.EQ(XStr.escapePI(
+        self.assertEqual(XStr.escapePI(
             "Pis should?> not have this?>", replaceWith=""),
             "Pis should not have this")
 
-        self.EQ(XStr.escapeASCII(
+        self.assertEqual(XStr.escapeASCII(
             "abc\u2022xyz.\u278e.", width=6, base=16, htmlNames=True),
             "abc&bull;xyz.&#x00278e;.")
-        self.EQ(XStr.escapeASCII(
+        self.assertEqual(XStr.escapeASCII(
             "abc\u2022xyz.\u278e.", width=2, base=10, htmlNames=False),
             "abc&#8226;xyz.&#10126;.")
-        self.EQ(XStr.escapeASCII(
+        self.assertEqual(XStr.escapeASCII(
             "abc\u2022xyz.\u278e.", width=2, base=10, htmlNames=False),
             "abc&#8226;xyz.&#10126;.")
 
-        self.EQ(XStr.dropNonXmlChars("abc\x05d\x1Ee\x02f"), "abcdef")
-        self.EQ(XStr.unescapeXml("a&#65;-&bull;-&lt;.&#x2022;"), "aA-•-<.•")
-        #self.TR(XStr.unescapeXmlFunction(mat))
+    def testXStrOther(self):
+        allNS = XStr.allNameStartChars()
+        allNCA = XStr.allNameCharAddls()
+        allNC = XStr.allNameChars()
+        self.assertEqual(XStr.dropNonXmlChars("abc\x05d\x1Ee\x02f"), "abcdef")
+        self.assertEqual(XStr.unescapeXml("a&#65;-&bull;-&lt;.&#x2022;"), "aA-•-<.•")
+        with self.assertRaises(ValueError):
+            XStr.unescapeXml("a&zerg;-&lt;.")
 
         self.assertTrue(c in XStr.xmlSpaces_list for c in " \t\r\n")
-        self.EQ(XStr.normalizeSpace("  a   b\t\n c\rd  ", allUnicode=False), "a b c d")
-        self.EQ(XStr.stripSpace("\r\n\t  a b  \t\n \r  ", allUnicode=False), "a b")
-        self.EQ(XStr.stripSpace("  a\n \rb  ", allUnicode=False), "a\n \rb")
+        self.assertTrue(c not in XStr.xmlSpaces_list for c in "z4-.\xA0\u2003")
 
-        self.EQ(XStr.makeStartTag(
+        self.assertEqual(XStr.normalizeSpace(
+            "  a   b\t\n c\rd  ", allUnicode=False), "a b c d")
+        self.assertEqual(XStr.normalizeSpace(
+            "  \u2007a   b\t\u2002\n\u2003\u2004\u2005 c\rd  \u2006\u2008\u2009\u200A",
+            allUnicode=True), "a b c d")
+
+        self.assertEqual(XStr.replaceSpace(
+            "  a   b\t\n c\rd  ", allUnicode=False),
+            "  a   b   c d  ")
+        self.assertEqual(XStr.replaceSpace(
+            "  \u2007ab\t\u2002\n\u2003\u2004\u2005 c\rd\u2006\u2008\u2009\u200A\u200b",
+            allUnicode=True),
+            "   ab       c d    \u200b")
+
+        self.assertEqual(XStr.stripSpace("\r\n\t  a b  \t\n \r  ", allUnicode=False), "a b")
+        self.assertEqual(XStr.stripSpace("  a\n \rb  ", allUnicode=False), "a\n \rb")
+        self.assertEqual(XStr.stripSpace(
+            "  \u2007a   b\t\u2002\n\u2003\u2004\u2005 c\rd  \u2006\u2008\u2009\u200A",
+            allUnicode=True),
+            "a   b\t\u2002\n\u2003\u2004\u2005 c\rd")
+
+        # TODO Make these handle attribute re-ordering.
+        self.assertEqual(XStr.makeStartTag(
             "spline", attrs="", empty=False, sort=False), "<spline>")
-        self.EQ(XStr.makeStartTag(
+        self.assertEqual(XStr.makeStartTag(
             "spline", attrs={"id":"A1", "class":"foo"}, empty=True, sort=False),
             '<spline id="A1" class="foo"/>')
-        self.EQ(XStr.makeStartTag(
-            "spline", attrs={"id":"A1", "class":"foo"}, empty=True, sort=True),
-            '<spline class="foo" id="A1"/>')
-        self.EQ(XStr.dictToAttrs(
+        self.assertEqual(XStr.makeStartTag(
+            "spline", attrs={"id":"A1", "class":"foo&bar"}, empty=True, sort=True),
+            '<spline class="foo&amp;bar" id="A1"/>')
+        self.assertEqual(XStr.makeStartTag(
+            "spline", attrs='id="A1" class="foo and bar"', empty=True, sort=True),
+            '<spline id="A1" class="foo and bar"/>')
+        self.assertEqual(XStr.dictToAttrs(
             { "id":"foo", "border":"border<1 " }, sort=True, normValues=False),
             ' border="border&lt;1 " id="foo"')
-        self.EQ(XStr.makeEndTag("DiV"), "</DiV>")
+        self.assertEqual(XStr.makeEndTag("DiV"), "</DiV>")
 
-        self.EQ(XStr.getLocalPart("foo:bar"), "bar")
-        self.EQ(XStr.getPrefixPart("foo:bar"), "foo")
+        self.assertEqual(XStr.getLocalPart("foo:bar"), "bar")
+        self.assertEqual(XStr.getPrefixPart("foo:bar"), "foo")
 
         failed = []
         for c in allNS:
@@ -288,9 +341,9 @@ class testByMethod(MyTestCase):
             self.assertFalse(
                 print("Chars should not be namestart but are: [ %s ]" % (" ".join(failed))))
 
-        self.TR(XStr.isXmlName(allNS*2))
+        self.assertTrue(XStr.isXmlName(allNS*2))
 
-        self.TR(XStr.isXmlName("A"+allNC))
+        self.assertTrue(XStr.isXmlName("A"+allNC))
 
 
 if __name__ == '__main__':

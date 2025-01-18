@@ -2,7 +2,8 @@
 # DocementType class: split from basedom 2024-06-28 sjd.
 #
 import re
-from datetime import datetime, timedelta  # date, time,
+import datetime
+from datetime import timedelta
 from enum import Enum
 from typing import List, Any, Union, Iterable
 import base64
@@ -84,23 +85,23 @@ class Duration:
     def tostring(self) -> str:
         """Turn the object back into XSD lexical/text form.
         """
-        buf = ""
+        buf = "P"
         #self.duSign
-        if self.duYearFrag   is not None: buf += "%dY"
-        if self.duMonthFrag  is not None: buf += "%dM"
-        if self.duDayFrag    is not None: buf += "%dD"
+        if self.duYearFrag   is not None: buf += "%dY" % (self.duYearFrag)
+        if self.duMonthFrag  is not None: buf += "%dM" % (self.duMonthFrag)
+        if self.duDayFrag    is not None: buf += "%dD" % (self.duDayFrag)
         if self.duHourFrag   is not None:
             buf += "T"
-            buf += "%dH"
+            buf += "%dH" % (self.duHourFrag)
         if self.duMinuteFrag is not None:
             if "T" not in buf: buf += "T"
-            buf += "%dM"
+            buf += "%dM" % (self.duMinuteFrag)
         if self.duSecondFrag is not None:
             if "T" not in buf: buf += "T"
-            buf += "%fS"
+            buf += "%fS" % (self.duSecondFrag)
         return buf
 
-    def gettimedeltaobject(self) -> timedelta:
+    def getPythonTimedelta(self) -> timedelta:
         # where does the sign go?
         td = timedelta(
             years   = self.duYearFrag,
@@ -113,6 +114,10 @@ class Duration:
         )
         return td
 
+
+
+###############################################################################
+#
 class DateTimeFrag:
     """Support XSD date and time types. This structure can handle any
     subset of the usual time fields, and convert to/from XSD types as well
@@ -124,6 +129,8 @@ class DateTimeFrag:
         * There is no real provision for approximate or uncertain dates yet.
 
     """
+    #pylint: disable=W0212
+
     def __init__(self, timestring:str=None):
         self._year:int      = None
         self._month:int     = None
@@ -132,58 +139,48 @@ class DateTimeFrag:
         self._minute:int    = None
         self._second:float  = None
         self._zone:int      = None  # In minutes
-        self.precision:DatePrecision = None
-        self.annotation:Any = None
+
+        #self.precision:DatePrecision = None
+        #self.annotation:Any = None
+
         if timestring: self.set_any(timestring)
+
+    def copy(self):
+        newDTF = DateTimeFrag()
+        newDTF._year      = self._year
+        newDTF._month     = self._month
+        newDTF._day       = self._day
+        newDTF._hour      = self._hour
+        newDTF._minute    = self._minute
+        newDTF._second    = self._second
+        newDTF._zone      = self._zone
+
+        #newDTF.precision  = self.precision
+        #newDTF.annotation = self.annotation
+        return newDTF
+
+    def __eq__(self, other:'DateTimeFrag') -> bool:
+        assert isinstance(other, DateTimeFrag)
+        if other._year   != self._year:   return False
+        if other._month  != self._month:  return False
+        if other._day    != self._day:    return False
+        if other._hour   != self._hour:   return False
+        if other._minute != self._minute: return False
+        if other._second != self._second: return False
+        if other._zone   != self._zone:   return False
+        return True
 
     def check(self) -> bool:
         """Check by self-assigning, since the property-setters check.
         """
-        if self._year is not None: self.year = self.year
-        if self._month is not None: self.month = self.month
-        if self._day is not None: self.day = self.day
-        if self._hour is not None: self.hour = self.hour
+        if self._year   is not None: self.year   = self.year
+        if self._month  is not None: self.month  = self.month
+        if self._day    is not None: self.day    = self.day
+        if self._hour   is not None: self.hour   = self.hour
         if self._minute is not None: self.minute = self.minute
         if self._second is not None: self.second = self.second
-        if self._zone is not None: self.zone = self.zone
+        if self._zone   is not None: self.zone   = self.zone
         return True
-
-    def getdatetimeobject(self) -> datetime:
-        """Convert to a standard Python datetime object.
-        """
-        if self._zone:
-            tzoff = datetime.timedelta(minutes=self._zone)
-            tzone = datetime.timezone(tzoff)
-        else:
-            tzone = None
-
-        dt = datetime(
-            year   = self._year,
-            month  = self._month,
-            day    = self._day,
-            hour   = self._hour,
-            minute = self._minute,
-            second = int(self._second),
-            microsecond = int((self.second - int(self._second)) * 1000000),
-            zone   = tzone
-        )
-        return dt
-
-    def setfromdatetimeobject(self, dto:datetime) -> None:
-        """Set to the equivalent of a Python datetime object.
-        NOTE: Python timezones allow fractional minutes, and offsets
-        up to 24 hours, unlike max 12 hours here. There can also be rounding
-        error on microseconds vs. float seconds.
-        """
-        self._year   = dto.year,
-        self._month  = dto.month,
-        self._day    = dto.day,
-        self._hour   = dto.hour,
-        self._minute = dto.minute,
-        self._second = dto.second + (self.microsecond / 1000000.0)
-        if dto.tzinfo:
-            tzdelta = dto.tzinfo.utcoffset()
-            self._zone = tzdelta.minutes
 
     @property
     def includesDate(self) -> bool:
@@ -223,7 +220,7 @@ class DateTimeFrag:
         if d == 31 and self.month in (2, 4, 6, 9, 11): return False
         if self.month == 2:
             if d == 30: return False
-            if (d == 29 and datetime(self.year, 2, self.month).month != 2):
+            if (d == 29 and datetime.datetime(self.year, 2, self.month).month != 2):
                 return False
         self._day = d
 
@@ -271,47 +268,129 @@ class DateTimeFrag:
         if not self.second: return self.second
         return (self.second - int(self.second)) * 1000000
 
-    # Convert to the usual Python objects.
-    #
-    def get_datetime(self) -> datetime:
-        """Incomplete data just gets passed along to the constructor.
-        What it *means* is not entirely clear, e.g. if there's no year.
-        TODO: If only date fields are set, should it return just yyyy-mm-dd
-        (plus maybe zone), or fill in T00:00:00 too?
-        TODO: Time zone can shift the day when moved to Z....
-        """
-        return self.get_date(includeZone=False) + "T" + self.get_time()
-
-    def get_date(self, includeZone:bool=True) -> datetime.date:
-        if not self.includesDate: raise ValueError("No date info.")
-        buf = datetime.date(self.year, self.month, self.day)
-        if includeZone and self._zone: buf += self.get_tzinfo()
-        return buf
-
-    def get_time(self, includeZone:bool=True) -> datetime.time:
-        if not self.includesTime: raise ValueError("No time info.")
-        buf = datetime.time(self.hour, self.minute, self.second,
-            int(self.microsecond))
-        if includeZone and self._zone: buf += self.get_tzinfo()
-        return buf
-
-    def get_tzinfo(self) -> str:
-        zinfo = None
-        if self.zone:
-            tdelta = datetime.timedelta(minutes=self.zone)
-            zinfo = datetime.tzinfo.utcoffset(tdelta)
-        return zinfo
-
     def shiftToUTC(self) -> None:
         """If the object has a time zone attached, move the time by that much
         and set zone offset to 0. Of course this can carry into the date, and
         dates are not totally ordered without consistent zones....
         """
         if not self._zone: return
-        dto = self.getdatetimeobject()
+        dto = self.getPythonDatetime()
         tdelta = datetime.timedelta(minutes=self._zone)
         dto += tdelta
-        self.setfromdatetimeobject(dto)
+        self.setFromPythonDatetime(dto)
+
+
+    ##########################################################################
+    # Convert to the usual Python objects.
+    #
+    def setFromPythonDatetime(self,
+        dto:Union[datetime.datetime, datetime.date, datetime.time]) -> None:
+        """Set to the equivalent of a Python datetime ``object``.
+        NOTE: Python timezones allow fractional minutes, and offsets
+        up to 24 hours, unlike max 12 hours here. There can also be rounding
+        error on microseconds vs. float seconds.
+        """
+        if isinstance(dto, (datetime.datetime, datetime.date)):
+            self._year   = dto.year
+            self._month  = dto.month
+            self._day    = dto.day
+        else:
+            self._year = self._month = self._day = None
+
+        if isinstance(dto, (datetime.datetime, datetime.time)):
+            self._hour   = dto.hour
+            self._minute = dto.minute
+            self._second = dto.second + (dto.microsecond / 1000000.0)
+            if dto.tzinfo:
+                tzdelta = dto.tzinfo.utcoffset()
+                self._zone = tzdelta.minutes
+        else:
+            self._hour = self._minute = self._second = self._zone = None
+
+    def getPythonDatetime(self) -> datetime.datetime:
+        """Convert to a standard Python datetime object.
+        """
+        if self._zone:
+            tzoff = datetime.timedelta(minutes=self._zone)
+            tzone = datetime.timezone(tzoff)
+        else:
+            tzone = None
+
+        pdt = datetime.datetime(
+            year   = self._year,
+            month  = self._month,
+            day    = self._day,
+            hour   = self._hour,
+            minute = self._minute,
+            second = int(self._second),
+            microsecond = int((self.second - int(self._second)) * 1000000),
+            zone   = tzone
+        )
+        return pdt
+
+    def getPythonDate(self, includeZone:bool=True) -> datetime.date:
+        # Python date does not handle tz
+        if not self.includesDate: raise ValueError("No date info.")
+        if includeZone and self._zone:
+            zulu = self.copy()
+            zulu.shiftToUTC()
+        else:
+            zulu = self
+        pd = datetime.date(zulu._year, zulu._month, zulu._day)
+        return pd
+
+    def getPythonTime(self, includeZone:bool=True) -> datetime.time:
+        if not self.includesTime: raise ValueError("No time info.")
+        if includeZone and self._zone:
+            zulu = self.copy()
+            zulu.shiftToUTC()
+        else:
+            zulu = self
+        pt = datetime.time(zulu._hour, zulu._minute, int(zulu._second),
+            int(zulu.microsecond))
+        return pt
+
+
+    ##########################################################################
+    # Convert to XSD string forms
+    #
+    def getXsdDatetime(self) -> str:
+        """Incomplete data just gets passed along to the constructor.
+        What it *means* is not entirely clear, e.g. if there's no year.
+        TODO: If only date fields are set, should it return just yyyy-mm-dd
+        (plus maybe zone), or fill in T00:00:00 too?
+        TODO: Time zone can shift the day when moved to Z....
+        """
+        return self.getXsdDate(includeZone=False) + "T" + self.getXsdTime()
+
+    def getXsdDate(self, includeZone:bool=False) -> str:
+        if not self.includesDate: raise ValueError("No date info.")
+        buf = "%04d-%02d-%02d" % (
+            self._year or 0, self._month or 0, self._day or 0)
+        if includeZone: buf += self.getXsdTzinfo()
+        return buf
+
+    def getXsdTime(self, includeZone:bool=False) -> str:
+        if not self.includesTime: raise ValueError("No time info.")
+        buf = "%02d:%02d:%f" % (
+            self._hour or 0, self._minute or 0, self._second or 0)
+        if includeZone: buf += self.getXsdTzinfo()
+        return buf
+
+    def getXsdTzinfo(self) -> str:
+        if self.zone is None: return ""
+        if self.zone == 0: return "Z"
+        tzabs = abs(self._zone)
+        hr = tzabs // 60
+        mn = tzabs % 60
+        buf = "%1s%2d:%2d" % ("+" if self._zone > 0 else "-", hr, mn)
+        return buf
+
+    def tostring(self) -> str:
+        d = self.getXsdDate() if self.includesDate else ""
+        t = ("T" + self.getXsdTime()) if self.includesTime else ""
+        z = self.getXsdTzinfo() if self._zone else ""
+        return d + t + z
 
     # Setters for the XSD types, coming in as strings
     #
@@ -364,12 +443,15 @@ class DateTimeFrag:
 
     def set_datetime(self, s:str) -> bool:      # 2024-01-31T11:59:59.12-05:00
         self.set_any(s)
+        return True
 
     def set_time(self, s:str) -> bool:          # 11:59:59.12-05:00
         self.set_any(s)
+        return True
 
     def set_date(self, s:str) -> bool:          # 2024-01-31
         self.set_any(s)
+        return True
 
     def set_gYearMonth(self, s:str) -> bool:    # 2024-01
         y, _dash, m = s[2:].partition("-")
@@ -416,7 +498,7 @@ class DateTimeFrag:
         return True
 
     def set_gDay(self, s:str) -> bool:          # ---31
-        if not s.startswith("--3"): return False
+        if not s.startswith("---"): return False
         try:
             d = int(s[3:])
             if d < 1 or d > 31: return False
@@ -442,7 +524,17 @@ class DateTimeFrag:
 
 
 ###########################################################################
-# See [https://www.w3.org/TR/xml/]
+#
+class hexBinary(bytes):
+    def __init__(self, s:str):
+        super().__init__(bytes.fromhex(s))
+
+class base64Binary(bytes):
+    def __init__(self, s:str):
+        super().__init__(base64.b64decode(s))
+
+
+###########################################################################
 # iscastable; iscanonical; ispybaseof;
 # tocanonical; lists/unions? inheritable fetch?
 # TODO: Integrate w/ NewType items in basedomtypes?
@@ -488,7 +580,7 @@ class XsdType(dict):
         problem = facetCheck(val, self)
         return (problem is None)
 
-AttrTypes = {
+XSDDatatypes = {
     "string": XsdType({
         "pybase": str,
         "base": None,
@@ -747,12 +839,12 @@ AttrTypes = {
 
     ###########################################################################
     "hexBinary": XsdType({
-        "pybase": lambda x: bytes.fromhex(x),  # TODO Is this good enough?
+        "pybase": hexBinary,
         "base": "string",
         "pattern": r"([0-9a-fA-F]{2})*",
     }),
     "base64Binary": XsdType({
-        "pybase": lambda x: base64.b64decode(x),
+        "pybase": base64Binary,
         "base": "string",
         "pattern": (
             r"((([A-Za-z0-9+/] ?){4})*(([A-Za-z0-9+/] ?){3}" +
@@ -767,43 +859,130 @@ AttrTypes = {
         #"pattern": r".*",  # TODO How lenient to be?
         "pattern": r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?$",
     }),
-}  # AttrTypes
+}  # XSDDatatypes
+
+# "CDATA" is the only XML attr type not copied in XSD.
+# For convenience mostly in xsparser, we add it:
+XSDDatatypes["CDATA"] = XsdType({
+    "pybase": str,
+    "base": "string",
+    "pattern": r".*",
+    "length": None,
+    "whiteSpace": "preserve"
+})
+
+xmlAttrTypes = {
+    "ENTITY":   XSDDatatypes["ENTITY"],
+    "ENTITIES": XSDDatatypes["ENTITIES"],
+    "NOTATION": XSDDatatypes["NOTATION"],
+    "ID":       XSDDatatypes["ID"],
+    "IDREF":    XSDDatatypes["IDREF"],
+    "IDREFS":   XSDDatatypes["IDREFS"],
+    "NMTOKEN":  XSDDatatypes["NMTOKEN"],
+    "NMTOKENS": XSDDatatypes["NMTOKENS"],
+    "CDATA":    XSDDatatypes["CDATA"],
+    # plus enumerations
+}
+
+# TODO These exprs are imprecise.  Add reality to xmlstrings.
+sgmlAttrTypes = xmlAttrTypes.copy()
+sgmlAttrTypes.update({
+    "NAME": XsdType({       # (namechar+)
+        "pybase": str,
+        "base": "token",
+        "pattern": r".+",
+    }),
+    "NAMES": XsdType({
+        "pybase": str,
+        "base": "token",
+        "pattern": r".+",
+        "variety": "list",
+    }),
+    "NUMBER": XsdType({     # (digits)
+        "pybase": int,
+        "base": "nonNegativeInteger",
+        "pattern": r"\d+",
+    }),
+    "NUMBERS": XsdType({
+        "pybase": int,
+        "base": "nonNegativeInteger",
+        "pattern": r"\d+",
+        "variety": "list",
+    }),
+    "NUTOKEN": XsdType({    # (digits then namechars)
+        "pybase": str,
+        "base": "token",
+        "pattern": r"\d\S*",
+    }),
+    "NUTOKENS": XsdType({
+        "pybase": str,
+        "base": "token",
+        "pattern": r"\d\S*",
+        "variety": "list",
+    }),
+    # plus enumerations
+})
+
+
+sgmlAttrDefaults = {
+    "#IMPLIED":1, "#REQUIRED":1, "#FIXED":1, "#CURRENT":1, "#CONREF":1,
+}
+
+xmlAttrDefaults = {
+    "#IMPLIED":1, "#REQUIRED":1, "#FIXED":1,
+}
 
 requiredFacets = [ "pybase", "base", "pattern" ]
 
 # Check and add defaults
-for _atype, _ainfo in AttrTypes.items():
-    for rf in requiredFacets:
-        if rf not in _ainfo: raise DOMException(
-            f"Missing required facet '{rf}' for XSD type '{_atype}'.")
-    if "variety" not in _ainfo: _ainfo["variety"] = "atom"
-    if "whiteSpace" not in _ainfo: _ainfo["whiteSpace"] = "collapse"
-    for prop in _ainfo.keys():
+for typ0, facet in XSDDatatypes.items():
+    if not isinstance(facet, XsdType): raise DOMException(
+        f"XSD type '{typ0}' has {type(facet)}, not XsdType.")
+    # Required facets
+    if "pybase" not in facet: raise DOMException(
+        f"Missing required facet 'pybase' for XSD type '{typ0}'.")
+    elif not isinstance(facet["pybase"], type): raise DOMException(
+        f"Facet 'pybase' for XSD type '{typ0}' is not a Python type, but '{type(facet['pybase'])}.")
+    if "base" not in facet: raise DOMException(
+        f"Missing required facet 'base' for XSD type '{typ0}'.")
+    elif facet["base"] is not None and facet["base"] not in XSDDatatypes:
+        raise DOMException(
+            f"Facet 'base' for XSD type '{typ0}' not an XSD type: {facet['base']}")
+    if "pattern" not in facet: raise DOMException(
+        f"Missing required facet 'pattern' for XSD type '{typ0}'.")
+    else:
+        try:
+            re.compile(facet["pattern"])
+        except re.error as e0:
+            raise DOMException(
+                f"Facet 'pattern' for XSD type '{typ0}' not an ok regex.") from e0
+
+    # Default facets
+    if "variety" not in facet: facet["variety"] = "atom"
+    if "whiteSpace" not in facet: facet["whiteSpace"] = "collapse"
+    for prop in facet.keys():
         if prop not in XsdFacet.__members__: raise DOMException(
-            f"Unrecognized facet '{prop}' for XSD type '{_atype}'.")
-    #try:
-    #    re.compile(_ainfo["pattern"])
-    #except re.error as e:
-    #    raise DOMException("Could not compile pattern facet for XSD type %s: %s"
-    #        % (_atype, _ainfo["pattern"])) from e
+            f"Unrecognized facet '{prop}' for XSD type '{typ0}'.")
 
 def facetCheck(val:str, typ:Union[str, XsdType]) -> XsdFacet:
-    """Returns the first XsdFacet that the value violates (if any),
+    """Return the first XsdFacet that the value violates (if any),
     or None if all its facet constraints are satisfied.
     TODO: Issues:
+        Do a recursive check for the chain of base types (except string).
+        Should this return all violated facets? Positions in lists?
         *be* of the type, or just castable?
-        Does normalizedstring mean it is noramlizable, or already normed?
-        What about case and unorm?
-        What about None and ""?
+            Almost anything can cast to bool or string; float casts to int.
+            Should int 31 (vs. "31") count as GDay (etc.)?
         Should there be a configurable bool normalizer?
             (yes/no, 1/0, T/F, True/False, true/false, on/off,...)
-        Almost anything can cast to bool or string, and float casts to int.
-        Should int 31 (vs. "31") count as GDay (etc.)
         Must the value *directly* cast to its pybase?
+        Does normalizedstring mean it is normalizable, or already normed?
+        What about case and unorm?
+        What about None and ""?
     """
     if not isinstance(typ, XsdType):
         try:
-            typ = AttrTypes[typ]
+            typ = XSDDatatypes[typ]
         except KeyError as e:
             raise TypeError(
                 f"Unrecognized XSD type name '{typ}' for value '{val}'.") from e
@@ -815,18 +994,22 @@ def facetCheck(val:str, typ:Union[str, XsdType]) -> XsdFacet:
     typeSpec = typ
     sval = str(val)
 
+    if "variety" in typeSpec:
+        if typeSpec["variety"] == "list":  # TODO list or just space-sep str?
+            if not isinstance(val, Iterable): return XsdFacet.variety
+            for v in val:
+                fc = facetCheck(v, typeSpec["base"])
+                if fc: return fc
+        elif typeSpec["variety"] == "union":
+            # TODO  How best to represent union types?
+            return XsdFacet.variety  # TODO Finish variety=union
+
     if "pybase" in typeSpec and typeSpec["pybase"] is not None:
         try:
             # TODO Figure out what to do with base64 types
             _castVal = typeSpec["pybase"](sval)
         except (TypeError, ValueError):
             return XsdFacet.pybase
-    if "variety" in typeSpec:
-        if typeSpec["variety"] == "list":
-            if not isinstance(val, Iterable): return XsdFacet.variety
-        elif typeSpec["variety"] == "union":
-            # How best to represent union types? set of names -> check all?
-            return XsdFacet.variety  # TODO Finish variety=union
     if "whiteSpace" in typeSpec:
         if typeSpec["whiteSpace"] == "collapse":
             sval = WSHandler.xcollapseSpace(sval)

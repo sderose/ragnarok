@@ -1,3 +1,9 @@
+==TO DO==
+
+* make NewType via traversing XSDDatatypes (?)
+* more testing for xsparser, documenttype, jsonx
+
+
 ==Construction and setup API==
 
 It's a mess -- can I support all of them?
@@ -37,9 +43,9 @@ It's a mess -- can I support all of them?
 
 ==General DOM Issues==
 
-* import; getDomImpl; createDoc; parse; use
+* import; getDomImplementation; createDocument; parse; use
 * Issue of creating doc vs. docElement
-* Case is not factored out
+* Case is not fully factored out
 * Lack of DTD and schema integration
     * Hence weakening attribute typing, ID finding
 * Variety of SAX event names and usage
@@ -48,12 +54,9 @@ It's a mess -- can I support all of them?
 parentNode, previousSibling, nextSibling (and vs. preceding/following),
 ownerDocument, CharacterData, [exception names],...
 * Why should documentElement have to be a singleton?
-    ** XML requires it, but there's no reason it had to; the grammar would be
-just fine.
-    ** It forces a Document/DocumentFragment distinction, which complicates
-the class structure for little gain (and arguable loss).
-    ** Without that rule, Document would just be an Element with no parent,
-which is normal for trees. Oh, and a few added properties vars (encoding, etc).
+    ** XML requires it, but there's no reason it had to.
+    ** It forces unnecessary Document/DocumentFragment distinction.
+    ** Without that rule, Document would just be an Element with a few added properties.
 
 
 ==DOM 3==
@@ -65,13 +68,11 @@ which is normal for trees. Oh, and a few added properties vars (encoding, etc).
     renameNode()
     adoptNode()
     strict error checking modes
-    Most of the DOM Level 3 Load and Save capabilities
+    DOM 3 Load and Save
 
-==issues with contains==
+==Issues with contains==
 
 * __contains__ vs. contains
-
-* removeNode vs. removeSelf vs. del
 
 * empty lists are falsish -- but it seems like empty nodes/elements shouldn't be.
 
@@ -102,9 +103,10 @@ to avoid confusion the author recommends you use the synonymous
 ==Semantic questions==
 
 * ABC or Protocols?
-* Should Node be constructable?
+* Should PlainNode/Node be constructable?
 * Should lack of attrs/ns/etc be empty or None?
 * Should removeAttribute___ unlink from ownerDoc/ownerEl?
+* removeNode vs. removeSelf vs. del
 
     # A Node is its own context manager, to ensure that an unlink() call occurs.
     # This is similar to how a file object works.
@@ -114,13 +116,20 @@ to avoid confusion the author recommends you use the synonymous
     def __exit__(self, et, ev, tb):
         self.unlink()
 
+* Should entities declarations have an encoding parameter?
+
+* Parameter entity references cannot occur within declarations in the internal DTD subset - they're only allowed between declarations there. (4.4.1?)
+
+* Should there be a little gadget for giving you the open element stack
+disaggregated by namespace? sort of like XCONCUR?
+
 
 ==ID extensions==
 
 ** StackID (accumulate down tree, only need to be unique in context)
 ** CoID (for overlap or other co-indexing)
 ** How to trigger update of IdIndex?
-** IDs take namespace prefixes?
+** Option for IDs with namespace prefixes?
 
 
 ==Namespaces==
@@ -137,29 +146,28 @@ to avoid confusion the author recommends you use the synonymous
 ** hierarchical ns
 ** inherit element ns onto attrs
 
+==Entity stuff==
+
+* Should extEntities and CharEntities be on/off or reject/preserve/expand?
 
 ==Classes==
 
-* Perhaps derive from UserList instead of list?
-
-* Should PlainNode include the list dunders?
+* Should PlainNode include the list dunders? Merge PlainNode w/ Node?
 
 * Split PlainNode and Node from rest of file?
 
-* Whether/how to support EntityRef nodes==
+* Whether/how to support EntityRef, DocFrag nodes
 
-* auto entities, unicode-name ents
+* auto entities, unicode-name entities
 
 
 ==Methods==
 
-* Should toprettyxml() offer options to wrap text/comments?
+* Should `cloneNode()` copy `userData`?
 
-* should `cloneNode()` copy `userData`?
+* Charset vs. inputencoding vs. encoding
 
-* charset vs. inputencoding vs. encoding
-
-* Should things test for bad names?
+* What should test for bad names? Maybe only on write.
     has/get/set/removeAttribute
     create Element / Attr / Document / PI target
     ID methods???
@@ -169,20 +177,17 @@ Range errors? Negatives?
 
 * Sync forEachSaxEvent with lxml.sax.saxify
 
-* How best to make case, whitespace, etc. switchable?
+* How best to make case, whitespace, unorm, name def switchable?
 
 * Should useNodePath() count from the node it's invoked on? Or maybe it should
 only be on Document anyway?
 
 * What should eq/ne/lt/le/ge/gt do?
-For Elements document order seems far
-more useful; but what of text, attrs, maybe other CharacterData, where
-normal string compare might be better? Order on Attrs is weird -- all attrs
-of same node would compare equal. Maybe hide these for CharacterData?
+For Elements, document order; for Character data, like for str.
 
-* set operations for class-like atttrs.
+* set operations for class-like atttrs?
 
-* xml.etree.ElementTree.canonicalize()?
+* xml.etree.ElementTree.canonicalize()? No.
 
 
 ==Exceptions==
@@ -190,12 +195,7 @@ of same node would compare equal. Maybe hide these for CharacterData?
 * Should inner/outerXml
 raise HierarchyRequestError, TypeError, or NotSupportedError?
 
-* Should (e.g.) child-related calls on CharacterData raise
-HierarchyRequestError (as now and in minidom),
-or NotImplementedError vs. DOM NotSupportedError
-or InvalidModificationError or TypeError or InvalidNodeTypeError?
-
-* build in xinclude (switchable)?
+* build in xinclude (switchable)? meh
 
 
 ==Schema stuff==
@@ -206,33 +206,33 @@ or InvalidModificationError or TypeError or InvalidNodeTypeError?
 
 * Option to make plural attrs be list/dicts/sets? cf xsd
 
-* global attributes?
+* finish global attribute support
 
-* Vector attrs (maybe just float{3,3}?)
+* Vector attrs (maybe just float{n} xsd list type with bounded length?)
 
 * typed attributes: when to cast. Lose or keep original string?
-Semantics for isEqualNode? Can't quite use Pythonesque duck typing, since
-it wants "5" != 5 (etc.).
+Semantics for isEqualNode? Separate methods/options for cast vs. str values?
+
+* abbreviated attr names? meh
 
 * JsonX mapping for DTDs?
+
+* Something like "+ANY(namespace, namespace)" -- useful enough to bother?
+
+* Compact way to declare special-char entities:
+    ** HTML ones en masse
+    ** Unicode-name-derived ones (stock abbrs, or min unique tokens?)
+    ** <!SDATA [ name int, ... ]>  Maybe allow multiple ints, and/or 'c'?
 
 
 ==Other==
 
-* Should I add back sibling threading as an option? Say,
-    @property
-    def nextSibling:
-        return self._NSib if hasattr(self, '_NSib') else self.findNSib()
-        getattr(self, '_NSib', self.findNSib())
-    @nextSibling.setter:
-    def nextSibling(self, theSib:Node):
-        if hasattr(self, '_NSib'): self._NSib = theSib
-    Could a transclusion node be introduced, to allow DAGs or even graphs?
-        Traversal would have to prevent circularities; affected methods?
-        childInex works if you can only transclude one subtree per
-        nodeSteps, parentNode, depth
-        searches
-        ?subclass of characterData so it doesn't "have" children
+* Could a transclusion node be introduced, to allow DAGs or even graphs?
+    Traversal would have to prevent circularities; affected methods?
+    childInex works if you can only transclude one subtree per
+    nodeSteps, parentNode, depth
+    searches
+    ?subclass of characterData so it doesn't "have" children
 
 * Should getitem work for virtual XPath axes? Not just childNodes, but
 maybe: Ancestors, PSibs, FSibs, Prec, Foll, Desc, Attrs (and |self)
@@ -240,7 +240,7 @@ maybe: Ancestors, PSibs, FSibs, Prec, Foll, Desc, Attrs (and |self)
 * Change RepType.... prob. not an Enum, just a small obj, with a
 smart constructor. Add the {} parsing to xsparser.
 
-* with getitem and registerFilterSchema, don't use ":" for the schema sep
+* With getitem and registerFilterSchema, don't use ":" for the schema sep
 because it's also the qname sep. maybe "::" or "?"
 
-* XML allow stuff outside the document element, why shouldn't DOM?
+* XML allows stuff outside the document element, why shouldn't DOM?

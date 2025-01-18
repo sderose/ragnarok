@@ -6,7 +6,7 @@ import logging
 #from xml.dom.minidom import getDOMImplementation
 #from basedom import getDOMImplementation
 
-from makeTestDoc import makeTestDoc0, DAT, DBG
+from makeTestDoc import makeTestDoc0, DAT  #, DBG
 
 lg = logging.getLogger("testNode")
 #logging.basicConfig(level=logging.INFO)
@@ -27,13 +27,13 @@ class TestDOMNode(unittest.TestCase):
         child = self.n.doc.createElement("child")
         self.assertEqual(len(self.n.docEl.childNodes), 0)
         self.n.docEl.appendChild(child)
-        DBG.dumpNode(self.n.docEl, msg="test_child_nodes")
+        #DBG.dumpNode(self.n.docEl, msg="test_child_nodes")
         self.assertIs(child.parentNode, self.n.docEl)
         self.assertEqual(child.getChildIndex(), 0)
         self.assertEqual(len(self.n.docEl.childNodes), 1)
-        for i, x in enumerate(self.n.docEl.childNodes):
-            DBG.msg("  %2d: %s" % (i, x.toxml()))
-        DBG.msg("Eh? " + self.n.docEl.childNodes[0].toxml())
+        #for i, x in enumerate(self.n.docEl.childNodes):
+        #    DBG.msg("  %2d: %s" % (i, x.toxml()))
+        #DBG.msg("Eh? " + self.n.docEl.childNodes[0].toxml())
         self.assertEqual(self.n.docEl.childNodes[0], child)
         self.assertEqual(self.n.docEl.firstChild, child)
         self.assertEqual(self.n.docEl.lastChild, child)
@@ -53,7 +53,7 @@ class TestDOMNode(unittest.TestCase):
         child1 = self.n.doc.createElement(DAT.child1_name)
         self.n.docEl.appendChild(child0)
         self.n.docEl.appendChild(child1)
-        DBG.dumpNode(self.n.docEl, msg="test_sibling_nodes")
+        #DBG.dumpNode(self.n.docEl, msg="test_sibling_nodes")
 
         self.assertEqual(child1.getChildIndex(), 1)
         self.assertEqual(child1.parentNode, self.n.docEl)

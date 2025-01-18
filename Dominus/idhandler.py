@@ -138,7 +138,7 @@ class IdHandler:
         """
         self.theIndex = {}
         nNodes = nElements = nIds = 0
-        for node in self.ownerDocument.documentElement.eachNode(excludeNodeNames="#"):
+        for node in self.ownerDocument.documentElement.eachNode(excludeNames="#"):
             #print(f"Node: {node.nodeName}")
             nNodes += 1
             if not node.isElement: continue
@@ -150,8 +150,8 @@ class IdHandler:
                 nIds += 1
                 self.theIndex[idVal] = node
 
-        print(f"\nFound {nNodes} nodes, {nElements} elements, {nIds} Ids.")
-        print("Choices:\n" + self.choicestostring())
+        #print(f"\nFound {nNodes} nodes, {nElements} elements, {nIds} Ids.")
+        #print("Choices:\n" + self.choicestostring())
         return self.theIndex
 
     def removeElementFromIndex(self, node:'Element') -> None:

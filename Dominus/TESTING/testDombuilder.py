@@ -14,12 +14,13 @@ from xml.parsers import expat
 import basedom
 import dombuilder
 
-from makeTestDoc import packXml, checkXmlEqual, isEqualNode
+from makeTestDoc import isEqualNode  # packXml
 
 # See https://stackoverflow.com/questions/43842675/
 #
 if 'unittest.util' in __import__('sys').modules:
     # Show full diff in self.assertEqual.
+    #pylint: disable=W0212
     __import__('sys').modules['unittest.util']._MAX_LENGTH = 32000
 
 # Can't trivially test CDATA since it isn't preserved.
@@ -61,6 +62,36 @@ def countStuff(doc) -> dict:
             counts[n.nodeName] += 1
     return counts
 
+def roundTrip(s1:str, domService) -> bool:
+    # Set up 2 copies of our DomBuilder, over the chosen DOM Impl.
+    if domService == minidom:
+        db1 = dombuilder.DomBuilder(
+            domImpl=domService.getDOMImplementation())
+        db2 = dombuilder.DomBuilder(
+            domImpl=domService.getDOMImplementation())
+    elif domService == basedom:
+        db1 = dombuilder.DomBuilder(
+            parserCreator=expat.ParserCreate,
+            domImpl=domService.getDOMImplementation())
+        db2 = dombuilder.DomBuilder(
+            parserCreator=expat.ParserCreate,
+            domImpl=domService.getDOMImplementation())
+    else:
+        assert False, "Unknown DOM implementation provider: %s." % (domService)
+
+    doc1 = db1.parse_string(s1)
+    s2 = doc1.toprettyxml(indent="  ")
+    db2 = dombuilder.DomBuilder()
+    doc2 = db2.parse_string(s2)
+
+    # dombuilder can use minidom.Node, which lacks isEqualNode. So use ours.
+    if isEqualNode(doc1.documentElement,doc2.documentElement):
+        return True
+
+    print("\n\nDocument as read:\n" + s1)
+    print("\n\nDocument as regenerated:\n" + s2)
+    return False
+
 
 ###############################################################################
 # Test the implementation
@@ -68,111 +99,82 @@ def countStuff(doc) -> dict:
 class TestDomBuilderM(unittest.TestCase):  # using minidom
     def setUp(self):
         self.maxDiff = 9999
-        self.db = None
-        self.doc = None
-        with codecs.open("sample01.xml", "rb", encoding="utf-8") as ifh:
+        with codecs.open("../DATA/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
 
-        #print("\n\nDocument as read:\n" + self.xmlText)
-        #self.xmlPacked = packXml(self.xmlText)
-        #print("\n\nDocument packed: \n" + self.xmlPacked)
-
-        print("\n")
-
-    def testDefault(self):
-        db1 = dombuilder.DomBuilder()
-        doc1 = db1.parse_string(self.xmlText)
-
-        print("\n")
-        xmlText2 = doc1.toprettyxml(indent="  ")
-        db2 = dombuilder.DomBuilder()
-        doc2 = db2.parse_string(xmlText2)
-        isEqualNode(doc1.documentElement, doc2.documentElement)
+    def testTiny(self):
+        x = """<?xml version="1.1" encoding="utf-8"?><doc>Hello</doc>"""
+        self.assertTrue(roundTrip(x, domService=minidom))
 
     def testEmptyRoot(self):
-        xml = """<emptyDoc class="spam baked_beans"/>"""
-        self.db = dombuilder.DomBuilder()
-        self.doc = self.db.parse_string(xml)
-        xml2 = self.doc.documentElement.toprettyxml()
-        checkXmlEqual(xml, xml2)
+        x = """<emptyDoc class="spam baked_beans"/>"""
+        self.assertTrue(roundTrip(x, domService=minidom))
 
     def testRootSiblings(self):
-        xml = """<!-- My document -->
+        x = """<!-- My document -->
 <?zoot sister="dingo"?>
 <article><p>Naughty, bad, evil Zoot!</p>
 </article>
 <!-- Not to mention &dingo;. -->
 """
-        self.db = dombuilder.DomBuilder()
         with self.assertRaises(SyntaxError):
-            self.doc = self.db.parse_string(xml)
-
-    def testExplicitChoice(self):
-        self.db = dombuilder.DomBuilder(
-            parserCreator=expat.ParserCreate,
-            domImpl=minidom.getDOMImplementation())
-        self.doc = self.db.parse_string(self.xmlText)
-        xmlText2 = self.doc.toxml()
-        self.assertEqual(packXml(self.xmlText), packXml(xmlText2))
+            roundTrip(x, domService=minidom)
 
 
 ###############################################################################
 #
 class TestDomBuilderB(unittest.TestCase):
     def setUp(self):
-        self.maxDiff = 9999
-        self.db = None
-        self.doc = None
-        with codecs.open("sample01.xml", "rb", encoding="utf-8") as ifh:
+        self.testPath = "../DATA/sampleHTML.xml"
+        with codecs.open(self.testPath, "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
 
-        #print("\n\nDocument as read:\n" + self.xmlText)
-        #self.xmlPacked = packXml(self.xmlText)
-        #print("\n\nDocument packed: \n" + self.xmlPacked)
+    def testTiny(self):
+        x = """<?xml version="1.1" encoding="utf-8"?><doc>Hello</doc>"""
+        self.assertTrue(roundTrip(x, domService=basedom))
 
-        print("\n")
+    def testEmptyRoot(self):
+        x = """<emptyDoc class="spam baked_beans"/>"""
+        self.assertTrue(roundTrip(x, domService=basedom))
 
-    def testDefault(self):
-        db1 = dombuilder.DomBuilder(
-            parserCreator=expat.ParserCreate,
-            domImpl=basedom.getDOMImplementation(),
-)
-        try:
-            doc1 = db1.parse_string(self.xmlText)
-        except expat.ExpatError as e:
-            print(f"\n======= Initial parse failed\n{self.xmlText}\n=======\n{e}\n")
-            raise expat.ExpatError from e
+    def testRootSiblings(self):
+        x = """<!-- My document -->
+<?zoot sister="dingo"?>
+<article><p>Naughty, bad, evil Zoot!</p>
+</article>
+<!-- Not to mention &dingo;. -->
+"""
+        with self.assertRaises(SyntaxError):
+            roundTrip(x, domService=basedom)
 
-        print("\n")
-        xmlText2 = doc1.toprettyxml(indent="  ")
-        db2 = dombuilder.DomBuilder()
-        try:
-            doc2 = db2.parse_string(xmlText2)
-        except expat.ExpatError as e:
-            print(f"\n=======Re-parse of output failed\n{xmlText2}\n=======\n{e}\n")
-            raise expat.ExpatError from e
-
-        isEqualNode(doc1.documentElement, doc2.documentElement)
+class TestSelectors(unittest.TestCase):
+    def setUp(self):
+        self.testPath = "../DATA/sampleHTML.xml"
+        with codecs.open(self.testPath, "rb", encoding="utf-8") as ifh:
+            self.xmlText = ifh.read()
 
     @unittest.skip
     def test_selectorsB(self):
-        self.assertIsInstance(self.doc, basedom.Document)
+        db1 = dombuilder.DomBuilder(
+            parserCreator=expat.ParserCreate,
+            domImpl=basedom.getDOMImplementation())
+        doc1 = db1.parse(self.testPath)
+        self.assertIsInstance(doc1, basedom.Document)
         #import pudb; pudb.set_trace()
-        self.assertEqual(self.doc.documentElement, self.doc.childNodes[0])
-        docEl = self.doc.documentElement
-        self.assertIsInstance(docEl, basedom.Element)
-        xml2 = docEl.toxml()
-        self.assertEqual(packXml(sampleDoc), packXml(xml2))
 
-        cts = countStuff(self.doc)
+        self.assertEqual(doc1.documentElement, doc1.childNodes[0])
+        docEl1 = doc1.documentElement
+        self.assertIsInstance(docEl1, basedom.Element)
+
+        cts = countStuff(doc1)
         if (cts != expectedCts):
-            for k, v in expectedCts.items():
-                print("%-12s  expected %3d, found %3d %s"
-                    % (k, v, cts[k], "***" if v != cts[k] else ""))
-            for k, v in cts.items():
-                if k in expectedCts: continue
-                print("%-12s  expected %3d, found %3d %s"
-                    % (k, 0, v, "***"))
+            #for k, v in expectedCts.items():
+                #print("%-12s  expected %3d, found %3d %s"
+                #    % (k, v, cts[k], "***" if v != cts[k] else ""))
+            #for k, v in cts.items():
+                #if k in expectedCts: continue
+                #print("%-12s  expected %3d, found %3d %s"
+                #    % (k, 0, v, "***"))
             self.maxDiff = None
             self.assertEqual(dict(cts), dict(expectedCts))
 

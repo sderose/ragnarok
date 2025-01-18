@@ -13,7 +13,7 @@ from typing import Any, Union, IO, Callable  # Dict,
 import logging
 
 from basedomtypes import (NMTOKEN_t, NCName_t, XMLParser_P, NodeType,
-    DOMImplementation_P)
+    DOMImplementation_P, DOMException)
 from domenums import RWord
 from xmlstrings import XmlStrings as XStr
 
@@ -384,10 +384,12 @@ class DomBuilder():
                 el.setAttribute(n, v)
 
         if self.domDoc.documentElement is None:
-            assert len(self.nodeStack) == 0
+            if self.nodeStack: raise DOMException(
+                "No document element, but stack has [%s]." % (self.nodeStack))
             self.domDoc.appendChild(el)
         else:
-            assert len(self.nodeStack) > 0
+            if not self.nodeStack: raise DOMException(
+                f"Document element is {self.domDoc.documentElement} but no stack.")
             self.nodeStack[-1].appendChild(el)
         self.nodeStack.append(el)
 
@@ -405,10 +407,8 @@ class DomBuilder():
 
     def EndElementHandler(self, name:NMTOKEN_t) -> None:
         lg.info("EndElement '%s'.", name)
-        if not self.nodeStack:
-            raise IndexError(
-                f"EndElement '{name}' but no elements open.")
-
+        if not self.nodeStack: raise IndexError(
+            f"EndElement '{name}' but no elements open.")
         if self.nodeStack[-1].nodeName != name:  # TODO use nodeNameMatches
             raise ValueError(
                 "EndElement '%s' but open element is '%s'" %
@@ -434,8 +434,8 @@ class DomBuilder():
         if not re.match(r"\S", data):  # whitespace-only
             if not self.wsn: return
         else:
-            if not self.nodeStack:
-                raise("CharacterData outside any element: '%s'." % (data))
+            if not self.nodeStack: raise SyntaxError(
+                f"CharacterData found outside any element: '{data}'.")
         curNode = self.nodeStack[-1]
         if (len(curNode.childNodes) > 0
             and curNode.childNodes[-1].nodeType == NodeType.TEXT_NODE):
@@ -448,12 +448,16 @@ class DomBuilder():
     def CommentHandler(self, data:str) -> None:
         lg.info("Comment '%s'", data)
         newCom = self.domDoc.createComment(data)
+        if not self.nodeStack: raise SyntaxError(
+            "Comment found with no root element open.")
         self.nodeStack[-1].appendChild(newCom)
         return
 
     def ProcessingInstructionHandler(self, target:NCName_t, data:str) -> None:
         lg.info("ProcessingInstruction: got '%s'", data)
         newPI = self.domDoc.createProcessingInstruction(target, data)
+        if not self.nodeStack: raise SyntaxError(
+            "PI found with no root element open.")
         self.nodeStack[-1].appendChild(newPI)
         return
 
@@ -461,6 +465,8 @@ class DomBuilder():
         lg.warning("Unknown_decl: got '%s'", data)
         # raise ValueError("Unknown markup declaration: '%s'" % (data))
         newDcl = self.domDoc.createComment(data)
+        if not self.nodeStack: raise SyntaxError(
+            "Unknown dcl found with no root element open.")
         self.nodeStack[-1].appendChild(newDcl)
         return
 

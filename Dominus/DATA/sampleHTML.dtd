@@ -30,6 +30,8 @@
    <!NOTATION png   SYSTEM "pblort">
    <!NOTATION jpg   PUBLIC "-//jblort" "jblort">
 
+   <!-- And a few random things. -->
+   <?someTarget just a pi="nil"?>
    <!ENTITY spam      "eggs">
    <!ENTITY scene24   SYSTEM "zork.xml">
    <!ENTITY scene25   SYSTEM "zork.png" NDATA png>

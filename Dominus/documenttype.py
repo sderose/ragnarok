@@ -2,15 +2,20 @@
 # DocementType class: split from basedom 2024-06-28 sjd.
 #
 #
+import os
+import codecs
 from collections import defaultdict, namedtuple
-from typing import List, Set, Dict, Any, Union, Iterable
+from typing import List, Set, Dict, Union  # Any,
+import logging
 
-from basedomtypes import (NMTOKEN_t, QName_t, NodeType, FlexibleEnum,
-    NSuppE, DOMException, ICharE)
+from basedomtypes import (NMTOKEN_t, QName_t, FlexibleEnum,
+    NSuppE, DOMException, ICharE)  # NodeType
 from domenums import RWord
-from xmlstrings import XmlStrings as XStr, CaseHandler, WSHandler
+from xmlstrings import XmlStrings as XStr, CaseHandler, UNormHandler, WSHandler
 from basedom import Node
-from xsdtypes import AttrTypes
+from xsdtypes import XSDDatatypes
+
+lg = logging.getLogger("documenttype")
 
 descr = """
 This library provides a basic interface to schema information, whether created
@@ -70,15 +75,14 @@ the Doctype, and to their element(s)
 
 * Entity stuff
 
-    ** EntityType(FlexibleEnum): What kinds of entities we got?
+    ** EntitySpace(FlexibleEnum): What kinds of entities we got?
     parameter, general, ndata, maybe sdata
 
-    ** EntityParseType(FlexibleEnum): Parsing constraint on entity
+    ** EntityParsing(FlexibleEnum): Parsing constraint on entity
 
     ** DataSource: A QLit or PUBLIC/SYSTEM ID(s)
 
-    ** EntityDef: An entity declaration (name plus
-    EntityType, ParseType, and DataSource)
+    ** EntityDef: An entity declaration
 
 
 * Notation stuff (treated as a quasi-entity)
@@ -156,14 +160,18 @@ class AttributeDef:
 
     This does NOT save/attach the definition anywhere. Caller must do that.
     """
-    def __init__(self, ens:NMTOKEN_t, ename:NMTOKEN_t, ans:NMTOKEN_t, aname:NMTOKEN_t,
-        atype:NMTOKEN_t, adefault:Any, readOrder:int=0):
+    def __init__(self,
+        ens:NMTOKEN_t, ename:NMTOKEN_t,
+        ans:NMTOKEN_t, aname:NMTOKEN_t,
+        atype:NMTOKEN_t, adfttype:DftType,
+        literal:str=None, readOrder:int=0):
         self.ens = ens
         self.ename = ename  # TODO Provide for element name lists? What about NS?
         self.ans = ans
         self.aname = aname
         self.atype = atype   # TODO string or a type object?
-        self.adefault = adefault
+        self.adfttype = adfttype
+        self.literal = literal
         self.readOrder = readOrder
 
         self.caseTx = "NONE"
@@ -172,9 +180,9 @@ class AttributeDef:
 
         if not XStr.isXmlQName(aname): raise ICharE(
              "Bad name '{aname}' for attribute.")
-        if atype not in AttrTypes and not isinstance(atype, type): raise TypeError(
+        if atype not in XSDDatatypes and not isinstance(atype, type): raise TypeError(
             "Unrecognized type for attribute {aname} for {self.name}.")
-        if adefault is not None:
+        if adfttype is not None:
             pass  # TODO
 
     def enumSpec(self) -> str:
@@ -199,7 +207,7 @@ class AttlistDef(dict):
         because in case of duplicates attr names for a single elements, 1st applies.
         Eventually
         """
-        self.enames = enames if isinstance(enames, Iterable) else [ enames ]
+        self.enames = enames if isinstance(enames, list) else [ enames ]
         bads = []
         for ename in self.enames:
             if not XStr.isXmlQName(ename): bads.append(ename)
@@ -208,20 +216,20 @@ class AttlistDef(dict):
         self.readOrder = readOrder
         self.attributes = {}
 
-    def __setitem__(self, aname:NMTOKEN_t, atype:str, adefault:Any=None) -> AttributeDef:
+    def __setitem__(self, aname:NMTOKEN_t, atype:str, adfttype:DftType=None) -> AttributeDef:
         """Just makes an attribute; caller must attach to element, doctype.
         """
         if aname in self.attributes:
             raise KeyError("Attribute {aname} already defined for {self.name}.")
         adef = AttributeDef(ens=None, ename=None, ans=RWord.NS_ANY, aname=aname,
-            atype=atype, adefault=adefault, readOrder=len(self.attributes))
+            atype=atype, adfttype=adfttype, readOrder=len(self.attributes))
         self.attributes[(RWord.NS_ANY, aname)] = adef
         return adef
 
     def tostring(self) -> str:
         buf = "<!ATTLIST (%s) " % (", ".join(self.enames))
         for aname, aobj in self.items():
-            buf += "\n    %16s %16s %s" % (aname, aobj.enumSpec(), aobj.adefault)
+            buf += "\n    %16s %16s %s" % (aname, aobj.enumSpec(), aobj.adfttype)
         buf += ">\n"
         return buf
 
@@ -316,8 +324,8 @@ class ModelItem:
         self.name = name
         self.rep = rep
 
-    def tostring(self, indent:str=None) -> str:
-        return self.name + self.rep.tostring()
+    def tostring(self, indent:str="") -> str:
+        return indent + self.name + self.rep.tostring()
 
 class ModelGroup:
     """Any parenthesized group, with ModelItem and/or ModelGroup members,
@@ -338,9 +346,9 @@ class ModelGroup:
         names = set()
         for childItem in self.childItems:
             if isinstance(childItem, ModelItem):
-                names = names.add(childItem.name)
+                names.add(childItem.name)
             elif isinstance(childItem, ModelGroup):
-                names = names.union(childItem.getNames())
+                names.union(childItem.getNames())
             else:
                 raise NSuppE(f"Unexpected type '{type(childItem)}' in ModelGroup.")
         return names
@@ -378,8 +386,8 @@ class Model(ModelGroup):
 
         # Model, not declared content
         #
-        if not isinstance(tokens, Iterable): raise TypeError(
-            f"token list is a {type(tokens)}, not Iterable.")
+        if not isinstance(tokens, list): raise TypeError(
+            f"token list is a {type(tokens)}, not list.")
         if self.contentType != ContentType.X_MODEL: raise TypeError(
             f"Token list incompatible w/ dcl content '{self.contentType}'.")
 
@@ -387,8 +395,8 @@ class Model(ModelGroup):
             "Don't pass seq or rep to Model, only to ModelGroup or ModelItem.")
         if self.contentType != ContentType.X_MODEL: raise SyntaxError(
             f"Expected contentType X_MODEL (not {self.contentType}) with tokens = {tokens}")
-        if not isinstance(tokens, Iterable): raise SyntaxError(
-            f"Model tokens arg is not Iterable, but {type(tokens)}.")
+        if not isinstance(tokens, list): raise SyntaxError(
+            f"Model tokens arg is not list, but {type(tokens)}.")
 
         # Make a proper AST from the model tokens
         #   TODO What does tokens get for {1:2}?
@@ -465,81 +473,171 @@ class ElementDef(ComplexType):
 
 ###############################################################################
 #
-class EntityType(FlexibleEnum):
-    GENERAL = 1
-    PARAMETER = 2
-    NOTATION = 4  # Treat as special entity, or not?
-
-    # Names for possible extensions
-    SDATA = 8
-    NAMESET = 16
-
-class EntityParseType(FlexibleEnum):  # Includes extras...
-    NDATA   = 0
-    CDATA   = 1
-    RCDATA  = 2
-    PCDATA  = 3
-
-    # Names for possible additions
-    XINCLUDE = 100
-    SUBDOC   = 101
-    STARTTAG = 102
-    ENDTAG   = 103
-    PI       = 104
-    XMSKEY   = 105
-
 class DataSource:
-    """PUBLIC and/or SYSTEM identifier or (for ENTITY but not NOTATION) QLit.
+    """Encapsulate a source of characters, generally one of:
+        * A string(typically originating in a qlit in an ENTITY dcl.
+        * A set of public/system ids that should identify
+            ** a file object (perhaps to resolve via a catalog or similar)
+            ** a possibly-abstract identifier, as from a NOTATION dcl.
 
-    TODO: Distinguish non-local resources?
+    TODO: Who owns the catalog or path, the pwd,....?
     """
     def __init__(self,
         literal:str=None,
         publicId:str=None,
-        systemId:Union[str, List]=None):
+        systemId:Union[str, List]=None,
+        encoding:str="utf-8"):
         self.literal = literal
         self.publicId = publicId
-        if not isinstance(systemId, List): systemId = [ systemId ]
-        self.systemId = systemId
+        self.systemId = systemId if isinstance(systemId, list) else [ systemId ]
+        self.encoding = encoding
+        self.foundPath = None
+        self.ifh = None
+
+    def open(self) -> None:
+        """Make the source ready to read:
+            * If it's already open, rewind it.
+            * If it's already been resolved to a path, open it.
+            * Otherwise resolve it, save the resolution, then open it.
+        """
+        if self.literal is not None:
+            return self.literal
+        if not self.foundPath:
+            self.foundPath = self.findPath()
+            if not self.foundPath: raise IOError(
+                "Cannot resolve ids: PUBLIC '{self.publicId}', {self.systemID}.")
+        self.ifh = codecs.open(self.foundPath, "rb", encoding=self.encoding)
+
+    def findPath(self) -> str:  # TODO Connect to better resolver, entDirs,....
+        for s in self.systemId:
+            if os.path.isfile(s): return s
+        return None
+
+    def findLocalPath(self, eDef:'EntityDef', dirs:List[str]=None, trace:bool=1) -> str:
+        """Resolve a set of publicID/systemID(s) to an actual absolute path.
+        TODO: Pulled from xsparser, finish integrating
+        Who holds the catalog, pwd, whatever?
+        """
+        old_level = lg.getEffectiveLevel()
+        if (trace): lg.setLevel(logging.INFO)
+
+        if not self.systemId:
+            raise IOError("No system ID for %s." % (eDef.entName))
+        if isinstance(self.systemId, list): systemIds = self.systemId
+        else: systemIds = [ self.systemId ]
+
+        lg.info("Seeking entity '%s':", eDef.entName)
+        for systemId in systemIds:
+            lg.info("  System id '%s'", systemId)
+            if os.path.isfile(systemId):
+                lg.info("    FOUND")
+                lg.setLevel(old_level)
+                return systemId
+            if dirs:
+                for epath in dirs:
+                    cand = os.path.join(epath, systemId)
+                    lg.info("    Trying dir '%s'", cand)
+                    if os.path.isfile(cand):
+                        lg.info("      FOUND")
+                        lg.setLevel(old_level)
+                        return cand
+        raise OSError("No file found for %s (systemIds %s)."
+            % (eDef.entName, systemIds))
+
+    def close(self) -> None:
+        if self.ifh:
+            self.ifh.close()
+            self.ifh = None
 
     def tostring(self) -> str:
-        if self.literal:
-            return '"%s"' % (XStr.escapeAttribute(self.literal))
-        if self.publicId:
-            src = 'PUBLIC "%s"' % (XStr.escapeAttribute(self.literal))
-        else:
-            src = 'SYSTEM'
-        if not self.systemId:
-            src += ' ""'
-        else:
-            for s in self.systemId:
-                src += ' "%s"' % (XStr.escapeAttribute(s.literal))
-        return src
+        """Get the entire content of the source in one gulp
+        (this is just read() except that we rewind and restore).
+        """
+        if self.literal is not None: return self.literal
+        origPos = self.ifh.tell()
+        self.ifh.seek(0, 0)
+        s = self.ifh.read()
+        self.ifh.seek(origPos, 0)
+        return s
+
+
+###############################################################################
+#
+EOF = -1
+
+class EntitySpace(FlexibleEnum):
+    """Where/how the entity can be referenced.
+    Yeah, notations aren't technically entities.
+    """
+    GENERAL   = 1   # &: Only these have meaningful EntityParsing choices
+    PARAMETER = 2   # %:
+    NOTATION  = 4   # ...NDATA x and <obj notn="x">
+
+class EntityParsing(FlexibleEnum):
+    """Whether/how the data in an entity is parsed.
+    """
+    NDATA   = 0     # A General entity in a specific named notation
+    CDATA   = 1     # No markup recognized
+    RCDATA  = 2     # Only entity refs recognized
+    PCDATA  = 3     # Usual XML parsing
+    SDATA   = 4     # Always their own thing
+
+    # Names for possible additions (some from SGML)
+    #XINCLUDE = 100
+    #SUBDOC   = 101
+    #STARTTAG = 102
+    #ENDTAG   = 103
+    #PI       = 104
+    #NAMESET  = 205 # Possible addition to parameters, for complexType dcls?
 
 class EntityDef:
-    """Any of several subtypes.
+    """Represent a declared entity, of several kinds. An entity has:
+        * an entName,
+        * an entSpace from EntitySpace (general, parameter, sdata, etc.
+        * a dataSource (literal string or public + system ids)
+        * parsing rules from EntityParsing (when this is NDATA, also the name)
+        * an encoding (not necessarily applicable to NDATA)
     """
-    def __init__(self, name:NMTOKEN_t,
-        etype:EntityType,
-        dataSource:DataSource,
-        parseType:EntityParseType=EntityParseType.PCDATA,
-        notation:NMTOKEN_t=None,
+    def __init__(self,
+        entName:NMTOKEN_t,
+        entSpace:EntitySpace,
+        entParsing:EntityParsing=EntityParsing.PCDATA,
+        publicId:str=None,
+        systemId:str=None,
+        data:str=None,
+        notationName:NMTOKEN_t=None,
+        encoding:str="utf-8",
         ownerSchema:'DocumentType'=None,
         readOrder:int=0
         ):
-        self.name = name
-        self.etype = etype
-        self.dataSource = dataSource
-        self.parseType = parseType
-        self.notation = notation
-        self.localPath = None
+        self.entName = entName
+        assert isinstance(entSpace, EntitySpace)
+        self.entSpace = entSpace
+        hasId = bool(publicId) or bool(systemId)
+        if not (bool(data) ^ hasId): raise DOMException(
+            "Specify exactly one: literal XOR public/system id.")
+        self.dataSource = DataSource(
+            literal=data, publicId=publicId, systemId=systemId)
+        assert isinstance(entParsing, EntityParsing)
+        self.entParsing = entParsing
+
+        if (notationName and entSpace != EntityParsing.NDATA): raise DOMException(
+            "Notation name '%s' given for non-NDATA entity '%s'."
+            % (notationName, entName))
+        self.notationName = notationName
+        self.encoding = encoding
         self.ownerSchema = ownerSchema
         self.readOrder = readOrder
 
+        self.wsTx = WSHandler("XML")
+        self.caseTx = CaseHandler("NONE")
+        self.uNormTx = UNormHandler("NONE")
+        self.localPath = None  # Resolved on first reference
+
     def tostring(self) -> str:
         src = self.dataSource.tostring()
-        pct = "% " if self.etype == EntityType.PARAMETER else ""
-        return "<!ENTITY %s%s %s>\n" % (pct, self.name, src)
+        pct = "% " if self.entSpace == EntitySpace.PARAMETER else ""
+        return "<!ENTITY %s%s %s>\n" % (pct, self.entName, src)
 
 class Notation:
     """This is for data notation/format applicable to entities. They are normally
@@ -547,8 +645,11 @@ class Notation:
     mentioning that entity name (not actually referencing the entity) as
     the value of an attribute that was declared as being of type ENTITY.
     """
-    def __init__(self, name:NMTOKEN_t, dataSource:DataSource,
-        ownerSchema:'DocumentType'=None, readOrder:int=0):
+    def __init__(self,
+        name:NMTOKEN_t,
+        dataSource:DataSource,
+        ownerSchema:'DocumentType'=None,
+        readOrder:int=0):
         if dataSource.literal is not None:
             raise SyntaxError("NOTATION {nname} has QLit, not PUBLIC or SYSTEM.")
         self.name = name
@@ -569,8 +670,8 @@ class DocumentType(Node):
     """
     def __init__(self, qualifiedName:QName_t=None,
         publicId:str='', systemId:str='', htmlEntities:bool=True):
-        super().__init__(nodeName="#doctype")
-        self.nodeType = NodeType.DOCUMENT_TYPE_NODE
+        super().__init__(nodeName=RWord.NN_DOCTYPE)
+        self.nodeType = Node.DOCUMENT_TYPE_NODE
 
         self.name = self.nodeName = qualifiedName  # TODO Get from DOCTYPE
         self.publicId = publicId  # TODO Switch to DataSource
@@ -649,7 +750,7 @@ class DocumentType(Node):
             if isinstance(ch, ElementDef): self.elementDefs[ch.name] = ch
             elif isinstance(ch, AttributeDef): self.attributeDefs[ch.name] = ch
             elif isinstance(ch, EntityDef):
-                self.entityDefs[ch.etype][ch.name] = ch
+                self.entityDefs[ch.entSpace][ch.name] = ch
             else:
                 assert False, "Unknown declaration type %s." % (type(ch))
         return
@@ -670,22 +771,28 @@ class DocumentType(Node):
         return None
 
     def defineAttribute(self, ename:NMTOKEN_t, aname:NMTOKEN_t,
-        atype:NMTOKEN_t="CDATA", adefault:NMTOKEN_t="IMPLIED") -> None:
+        atype:NMTOKEN_t="CDATA", adfttype:DftType=DftType.IMPLIED,
+        literal:str=None) -> None:
         assert aname not in self.attributeDefs
-        self.elementDefs[(ename)].attributeDefs[aname] = [ atype, adefault ]
+        self.elementDefs[(ename)].attributeDefs[aname] = AttributeDef(
+            ens=None, ename=ename, ans=None, aname=aname,
+            atype=atype, adfttype=adfttype, literal=literal, readOrder=None)
 
     # Entity (subtypes for General, Parameter, Notation, and NameSet)
     def getEntityDef(self, name:NMTOKEN_t) -> EntityDef:
         return self.entityDefs[name] if name in self.entityDefs else None
 
-    def defineEntity(self, name:NMTOKEN_t,
+    def defineEntity(self,
+        name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None,
-        parseType:EntityParseType=EntityParseType.PCDATA, notation:NMTOKEN_t=None) -> None:
+        entParsing:EntityParsing=EntityParsing.PCDATA,
+        notationName:NMTOKEN_t=None) -> None:
         assert name not in self.entityDefs
-        assert isinstance(parseType, EntityParseType)
-        ds = DataSource(literal, publicId, systemId)
-        self.entityDefs[name] = EntityDef(name, EntityType.GENERAL,
-            dataSource=ds, parseType=parseType, notation=notation)
+        assert isinstance(entParsing, EntityParsing)
+        self.entityDefs[name] = EntityDef(
+            name, entSpace=EntitySpace.GENERAL,
+            data=literal, publicId=publicId, systemId=systemId,
+            entParsing=EntityParsing, notationName=notationName)
 
     def getPEntityDef(self, name:NMTOKEN_t) -> EntityDef:
         return self.pentityDefs[name] if name in self.pentityDefs else None
@@ -694,7 +801,7 @@ class DocumentType(Node):
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
         assert name not in self.pentityDefs
         self.entityDefs[name] = EntityDef(name,
-            EntityType.PARAMETER, literal, publicId, systemId)
+            EntitySpace.PARAMETER, literal, publicId, systemId)
 
     def getNotationDef(self, name:NMTOKEN_t) -> EntityDef:
         return self.notationDefs[name] if name in self.notationDefs else None
@@ -703,7 +810,7 @@ class DocumentType(Node):
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
         assert name not in self.notationDefs
         self.notationDefs[name] = EntityDef(name,
-            EntityType.NOTATION, literal, publicId, systemId)
+            EntitySpace.NOTATION, literal, publicId, systemId)
 
     # Basic operations
     #

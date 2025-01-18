@@ -5,9 +5,9 @@ import logging
 from typing import Any
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation,Element
-from basedomtypes import NodeType, HReqE, ICharE, NamespaceError
+from basedomtypes import HReqE, ICharE, NamespaceError
 
-from basedom import NodeList, Element
+from basedom import Node, NodeList, Element
 
 from makeTestDoc import makeTestDoc0, DAT_DocBook, DBG
 
@@ -57,7 +57,7 @@ class TestDOMNode(unittest.TestCase):
             prv = self.n.docEl.childNodes[i-1]
             cur = self.n.docEl.childNodes[i]
             nxt = self.n.docEl.childNodes[i+1]
-            self.assertEqual(cur.nodeType, NodeType.ELEMENT_NODE)
+            self.assertEqual(cur.nodeType, Node.ELEMENT_NODE)
             self.assertEqual(cur.nodeName, pType)
             self.assertEqual(len(cur.childNodes), 1)
 
@@ -69,10 +69,25 @@ class TestDOMNode(unittest.TestCase):
             self.assertEqual(cur.ownerDocument, self.n.doc)
 
     def test_checkNode(self):
+        """This builds a pretty big tree...
+        """
         doc = self.n.doc
         docEl = self.n.docEl
-        self.makeDocObj.addFullTree(node=docEl, n=10, depth=3, withText=True)
+        self.makeDocObj.addFullTree(
+            node=docEl, n=10, depth=3,
+            withText="Some text.",
+            withAttr={ "class":"fig", "data":"9"})
         doc.checkNode(deep=True)
+
+    def testDeep(self):
+        doc = self.n.doc
+        docEl = self.n.docEl
+        self.makeDocObj.addFullTree(
+            node=docEl, n=2, depth=6,
+            withText="Some text.",
+            withAttr={ "class":"fig", "data":"9" })
+        doc.checkNode(deep=True)
+        #print(doc.toprettyxml(newl="\n", indent="  "))
 
     def testAttrStatus(self):
         """A lot of tree mutators get basic testing just by making the tree
@@ -91,7 +106,7 @@ class TestDOMNode(unittest.TestCase):
         doc = self.n.doc
         docEl = self.n.docEl
         self.assertFalse(docEl.hasChildNodes)
-        self.makeDocObj.addChildren(node=docEl, n=10, withText=True)
+        self.makeDocObj.addChildren(node=docEl, n=10, withText="")
         self.assertTrue(docEl.hasChildNodes)
         ch = docEl.childNodes[5]
 
@@ -113,22 +128,22 @@ class TestDOMNode(unittest.TestCase):
          cf makeTestDoc2.addAllTypes(troot)
         """
         troot = self.n.doc.createElement("div")
-        self.tryAllIsA(troot, NodeType.ELEMENT_NODE)
+        self.tryAllIsA(troot, Node.ELEMENT_NODE)
 
         ncd = self.n.doc.createCDATASection("Whew, I'm a <section>.")
-        self.tryAllIsA(ncd, NodeType.CDATA_SECTION_NODE)
+        self.tryAllIsA(ncd, Node.CDATA_SECTION_NODE)
         troot.appendChild(ncd)
 
         nco = self.n.doc.createComment("So, comments are needed, too.")
-        self.tryAllIsA(nco, NodeType.COMMENT_NODE)
+        self.tryAllIsA(nco, Node.COMMENT_NODE)
         troot.appendChild(nco)
 
         npi = self.n.doc.createProcessingInstruction(target="myTarget", data="duh")
-        self.tryAllIsA(npi, NodeType.PROCESSING_INSTRUCTION_NODE)
+        self.tryAllIsA(npi, Node.PROCESSING_INSTRUCTION_NODE)
         troot.appendChild(npi)
 
         nat = self.n.doc.createAttribute("class", "someClass", parentNode=None)
-        self.tryAllIsA(nat, NodeType.ATTRIBUTE_NODE)
+        self.tryAllIsA(nat, Node.ATTRIBUTE_NODE)
 
         with self.assertRaises(ICharE):
             self.n.impl.createDocument(qualifiedName="abc\xb6")
@@ -137,14 +152,14 @@ class TestDOMNode(unittest.TestCase):
                 qualifiedName="xml:somdoc")
 
         #ndf = createDocumentFragment()
-        #self.tryAllIsA(ndf, NodeType.FRAGMENT_NODE)
+        #self.tryAllIsA(ndf, Node.FRAGMENT_NODE)
 
         #ndt = self.n.impl.createDocumentType("docbook")
-        #self.tryAllIsA(ndt, NodeType.DOCTYPE_NODE)
+        #self.tryAllIsA(ndt, Node.DOCTYPE_NODE)
 
         # NodeList, NamedNodeMap, ....
 
-    def tryAllIsA(self, node, expectedNodeType:NodeType):
+    def tryAllIsA(self, node, expectedNodeType:int):
         """Try all the nodeType test properties; only one should be true.
         But they're properties.
         """

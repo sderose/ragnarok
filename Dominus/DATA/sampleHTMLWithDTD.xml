@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html [
+    <!-- The root element -->
+    <!ELEMENT html   (head, body)>
+    <!ELEMENT head   (title)>
+    <!ELEMENT body   (div|p)*>
+
+    <!ELEMENT div        (#PCDATA | p | ul | ol | dl | h1 | h2 | h3 | h4 | h5 | img)*>
+    <!ELEMENT p          (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
+    <!ELEMENT ul         (li*)>
+    <!ELEMENT ol         (li*)>
+    <!ELEMENT li         (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
+    <!ELEMENT img        EMPTY>
+
+    <!ELEMENT dl         (dt, dd)* >
+
+    <!ATTLIST p
+        lang      CDATA    'en'
+        class     NMTOKENS #IMPLIED
+        id        ID       #IMPLIED
+        alt       CDATA    #IMPLIED
+        greens    IDREFS   #IMPLIED
+        ent       ENTITY   #IMPLIED
+        ents      ENTITIES #IMPLIED
+        nt        NMTOKEN  #IMPLIED
+
+        egg       (foo)         "foo"
+        eggs      (ban|bar|baz) "bar"
+
+        monty     CDATA    #FIXED "python&#65;&lt;"
+        >
+
+    <!ATTLIST img
+        id        ID       #IMPLIED
+        href      CDATA    #REQUIRED
+        alt       CDATA    #REQUIRED>
+
+    <!NOTATION png   SYSTEM "pblort">
+    <!NOTATION jpg   PUBLIC "-//jblort" "jblort">
+
+    <!ENTITY spam      "eggs">
+    <!ENTITY scene24   SYSTEM "zork.xml">
+    <!ENTITY scene25   SYSTEM "zork.png" NDATA png>
+]>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="content-type" content="application/xhtml+xml; charset=utf-8" />
+    <title>The page title</title>
+    <style type="text/css"><!--
+    body { margin-left:24pt; background-color:#AAAAAA; }
+    li p { margin:0pt; }
+    --></style>
+</head>
+
+<body>
+  <h1>A sample of HTML</h1>
+
+  <div id="chap1" class="important">
+    <h1>Introduction</h1>
+    <!-- a comment -->
+
+    <div id="sec1">
+      <h2 id="h2-1">Section 1, on entities</h2>
+      <p id="p1" class="wow">Hello, <i id="smallID">small</i> world.</p>
+      <p>Character references can be Hexadecimal like '&#x68;'</p>
+      <p>Character references can be Decimal like '&#100;'</p>
+      <p>Entity references can be &lt; &#x2022; handy. </p>
+      <blockquote><p>Meaning, they say, is in the eye of the beholder.
+      <br />
+      <cite style="text-align:right;">G. Gygax</cite></p></blockquote>
+    </div>
+
+    <div id="sec2">
+      <h2 id="h2-2">Section 2, on inlines</h2>
+      <p>There are <i>font-ish</i> things that may be <b>bad<sup>1</sup></b>, and
+      <big>size</big> <small>competitions</small>. But sometimes they're
+      <i>useful</i> for things like <tt>code<sup>2</sup>.</tt></p>
+      <p>Then there are <em>so-called</em> <q>generic</q> requivalents, but
+      they don't make <strong>much</strong> <tt>difference</tt>.</p>
+      <p>Then the are actual ones for things like abbreviations (<abbr>Dr. Smith</abbr>),
+      acronyms (<acronym>NASA</acronym>), addresses (<b>1 Main St.</b>),
+      code (<code>x := y++</code>),
+      keyboardables (<kbd>ENTER</kbd>), variables (<var>argc</var>), etc.</p>
+    </div>
+
+    <div id="sec3">
+      <h2 id="h2-3">Section 3, on lists</h2>
+      <p id="p2" class="wow">Hello, <i id="smallID2">small</i> world.</p>
+      <h3>Unordered</h3>
+      <ul>
+          <li><p>Apteryx</p></li>
+          <li><p>Basilisk</p></li>
+          <li><p>Catoblepas</p></li>
+          <li><p>Dingo</p>
+              <ul>
+                  <li><p>Anaximander</p></li>
+                  <li><p>Boustrophedon</p></li>
+                  <li><p>Carpe</p></li>
+                  <li><p>Diem</p></li>
+              </ul>
+          </li>
+      </ul>
+
+      <h3>Ordered</h3>
+      <ol>
+          <li><p>Apteryx</p></li>
+          <li><p>Basilisk</p></li>
+          <li><p>Catoblepas</p></li>
+          <li><p>Dingo</p>
+              <ol>
+                  <li><p>Anaximander</p></li>
+                  <li><p>Boustrophedon</p></li>
+                  <li><p>Carpe</p></li>
+                  <li><p>Diem</p></li>
+              </ol>
+          </li>
+      </ol>
+
+    <h3>Definition</h3>
+    <dl>
+        <dt>Apteryx</dt><dd>A creature.</dd>
+        <dt>Basilisk</dt><dd>A creature.</dd>
+        <dt>Catoblepas</dt><dd>A creature.</dd>
+        <dt>Dingo</dt><dd><h6>And some nested definitions (this is an H6):</h6>
+            <dl>
+                <dt>Anaximander</dt><dd>A creature.</dd>
+                <dt>Boustrophedon</dt><dd>A creature.</dd>
+                <dt>Carpe</dt><dd>A creature.</dd>
+                <dt>Diem</dt><dd>A creature.</dd>
+            </dl>
+        </dd>
+    </dl>
+    </div>
+
+    <hr />
+
+    <div id="sec4">
+      <h2 id="h2-4">Section 4, on Tables</h2>
+      <table class="wikitable sortable" id="iso-codes" border="1" summary="Lots of codes">
+      <thead>
+      <tr style="background-color: #efefef;">
+          <th>ISO 639-2/5</th>
+          <th>ISO 639-3</th>
+          <th>ISO 639-1</th>
+          <th>Language name</th>
+          <th>Scope</th>
+          <th>Type</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr id="A">
+      <td>aar</td>
+      <td>aar</td>
+      <td>aa</td>
+      <td><a href="/wiki/Afar_language" title="Afar language">Afar</a></td>
+      <td>Individual</td>
+      <td>Living</td>
+      </tr>
+      <tr>
+      <td>aav</td>
+      <td></td>
+      <td></td>
+      <td><a href="/wiki/Austro-Asiatic_languages" title="Austro-Asiatic languages">Austro-Asiatic languages</a></td>
+      <td>Collective</td>
+      <td></td>
+      </tr>
+      <tr>
+      <td>abk</td>
+      <td>abk</td>
+      <td>ab</td>
+      <td><a href="/wiki/Abkhazian_language" title="Abkhazian language">Abkhazian</a></td>
+      <td>Individual</td>
+      <td>Living</td>
+      </tr>
+      <tr>
+      <td>ace</td>
+      <td>ace</td>
+      <td></td>
+      <td><a href="/wiki/Achinese_language" title="Achinese language">Achinese</a></td>
+      <td>Individual</td>
+      <td>Living</td>
+      </tr>
+      <tr>
+      <td>ach</td>
+      <td>ach</td>
+      <td></td>
+      <td><a href="/wiki/Acoli_language" title="Acoli language">Acoli</a></td>
+      <td>Individual</td>
+      <td>Living</td>
+      </tr>
+      <tr>
+      <td>ada</td>
+      <td>ada</td>
+      <td></td>
+      <td><a href="/wiki/Adangme_language" title="Adangme language">Adangme</a></td>
+      <td>Individual</td>
+      <td>Living</td>
+      </tr>
+      </tbody>
+      <tfoot><tr><td colspan="6" style="text-align:center; color:#FF00FF;">And a table footer.</td></tr></tfoot>
+      </table>
+      </div>
+
+      <div id="sec5">
+        <h2 id="h2-5">Section 5, on pre</h2>
+        <p>Code shouldn't line-break:</p>
+<pre>
+def renameAttribute(root, oldName, newName, ename=None):
+    for node in root.eachElement():
+        if (ename and node.nodeName != ename):
+            continue
+        if (node.hasAttribute(oldName)):
+            v = node.getAttribute(oldName)
+            node.removeAttribute(oldName)
+            node.setAttribute(newName, v)
+</pre>
+      </div>
+
+      <div id="sec6">
+        <h2 id="h2-6">Section 6, on Forms</h2>
+        <span style="color:red;">Not included.</span>
+      </div>
+  </div>
+ </body>
+</html>

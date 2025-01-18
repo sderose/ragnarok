@@ -7,7 +7,7 @@
 #     Protocols
 #
 from typing import NewType, Union, TextIO, IO, Protocol, Any
-from enum import Enum
+from enum import Enum, IntEnum
 import re
 from datetime import datetime, date, time, timedelta
 
@@ -65,7 +65,7 @@ class OperationError(DE): pass  # operation-specific failure.
 class NotAllowedError(DE): pass # not allowed by user agent/platform/user.
 class OptOutError(DE): pass
 
-### Abbreviations
+### Exception Abbreviations
 #
 HReqE = HierarchyRequestError
 ICharE = InvalidCharacterError
@@ -109,12 +109,12 @@ class DTrace:
     State:  0 = do nothing; 1 = log; 2 = display.
     """
     def __init__(self, state:int=0):
-        self.state = 0
+        self.state = state
         self.msgLog = []
 
     def msg(self, m:str) -> None:
         if self.state == 0: return
-        elif self.state == 1: self.msgLog.push(m)
+        elif self.state == 1: self.msgLog.append(m)
         else: print(m)
 
     def clear(self) -> None:
@@ -127,6 +127,7 @@ dtr = DTrace(0)
 
 
 ###############################################################################
+# Tweaks related to enums.
 #
 class FlexibleEnum(Enum):
     """Subclass from this to make enums that can construct from any of:
@@ -191,8 +192,8 @@ class OpenEnum(Enum):
 
 ###############################################################################
 #
-class NodeType(FlexibleEnum):
-    ABSTRACT_NODE                = 0  # (PLainNode ABC) Not in DOM
+class NodeType(IntEnum):
+    ABSTRACT_NODE                = -1  # (PlainNode/Node) Not in DOM nodeType
     ELEMENT_NODE                 = 1
     ATTRIBUTE_NODE               = 2
     TEXT_NODE                    = 3
@@ -231,69 +232,68 @@ class NodeType(FlexibleEnum):
 
 
 ###############################################################################
-# XSD builtin datatypes.
-# They are all named ending "_t" to be clear vs. "_re" for pattern
-# constraints, and vs. conflicts like "int", "decimal", "float".
+# XSD builtin datatypes (see mainly xsdtypes.py)
+# They are all named ending "_t" to be clear (vs. "_re" for pattern
+# constraints and vs. conflicts like "int", "decimal", "float").
 #
 ### Bits
-base64Binary_t      = NewType("base64Binary_t", bytes)
-hexBinary_t         = NewType("hexBinary_t", bytes)
+base64Binary_t       = NewType("base64Binary_t", bytes)
+hexBinary_t          = NewType("hexBinary_t", bytes)
 
 ### Truth values
-boolean_t           = NewType("boolean_t", bool)
+boolean_t            = NewType("boolean_t", bool)
 
 ### Integers
-byte_t              = NewType("byte_t", int)
-short_t             = NewType("short_t", int)
-int_t               = NewType("int_t", int)
-integer_t           = NewType("integer_t", int)
-long_t              = NewType("long_t", int)
-nonPositiveInteger_t= NewType("nonPositiveInteger_t", int)
-negativeInteger_t   = NewType("negativeInteger_t", int)
-nonNegativeInteger  = NewType("nonNegativeInteger_t", int)
-positiveInteger_t   = NewType("positiveInteger_t", int)
-unsignedByte_t      = NewType("unsignedByte_t", int)
-unsignedShort_t     = NewType("unsignedShort_t", int)
-unsignedInt_t       = NewType("unsignedInt_t", int)
-unsignedLong_t      = NewType("unsignedLong_t", int)
+byte_t               = NewType("byte_t", int)
+short_t              = NewType("short_t", int)
+int_t                = NewType("int_t", int)
+integer_t            = NewType("integer_t", int)
+long_t               = NewType("long_t", int)
+nonPositiveInteger_t = NewType("nonPositiveInteger_t", int)
+negativeInteger_t    = NewType("negativeInteger_t", int)
+nonNegativeInteger   = NewType("nonNegativeInteger_t", int)
+positiveInteger_t    = NewType("positiveInteger_t", int)
+unsignedByte_t       = NewType("unsignedByte_t", int)
+unsignedShort_t      = NewType("unsignedShort_t", int)
+unsignedInt_t        = NewType("unsignedInt_t", int)
+unsignedLong_t       = NewType("unsignedLong_t", int)
 
 ### Real numbers
-decimal_t           = NewType("decimal_t", float)
-double_t            = NewType("double_t", float)
-float_t             = NewType("float_t", float)
+decimal_t            = NewType("decimal_t", float)
+double_t             = NewType("double_t", float)
+float_t              = NewType("float_t", float)
 
 ### Dates and times
-gDay_t              = NewType("gDay_t", int)
-gMonth_t            = NewType("gMonth_t", int)
-gMonthDay_t         = NewType("gMonthDay_t", str)
-gYear_t             = NewType("gYear_t", date)
-gYearMonth_t        = NewType("gYearMonth_t", date)
-date_t              = NewType("date_t", date)
-dateTime_t          = NewType("dateTime_t", datetime)
-time_t              = NewType("time_t", time)
-duration_t          = NewType("duration_t", timedelta)
+gDay_t               = NewType("gDay_t", int)
+gMonth_t             = NewType("gMonth_t", int)
+gMonthDay_t          = NewType("gMonthDay_t", str)
+gYear_t              = NewType("gYear_t", date)
+gYearMonth_t         = NewType("gYearMonth_t", date)
+date_t               = NewType("date_t", date)
+dateTime_t           = NewType("dateTime_t", datetime)
+time_t               = NewType("time_t", time)
+duration_t           = NewType("duration_t", timedelta)
 
 ### Strings
-language_t          = NewType("language_t", str)
-normalizedString_t  = NewType("normalizedString_t", str)
-string_t            = NewType("string_t", str)
-token_t             = NewType("token_t", str)
-anyURI_t            = NewType("anyURI_t", str)
+language_t           = NewType("language_t", str)
+normalizedString_t   = NewType("normalizedString_t", str)
+string_t             = NewType("string_t", str)
+token_t              = NewType("token_t", str)
+anyURI_t             = NewType("anyURI_t", str)
 
 ### XML constructs (note caps)
-Name_t              = NewType("Name_t", str)
-NCName_t            = NewType("NCName_t", str)
-QName_t             = NewType("QName_t", str)
+Name_t               = NewType("Name_t", str)
+NCName_t             = NewType("NCName_t", str)
+QName_t              = NewType("QName_t", str)
+ID_t                 = NewType("ID_t", str)
+IDREF_t              = NewType("IDREF_t", str)
+NMTOKEN_t            = NewType("NMTOKEN_t", str)    # Heavily used in hints
+ENTITY_t             = NewType("ENTITY_t", str)
 
-ID_t                = NewType("ID_t", str)
-IDREF_t             = NewType("IDREF_t", str)
-NMTOKEN_t           = NewType("NMTOKEN_t", str)
-ENTITY_t            = NewType("ENTITY_t", str)
-
-# List types
-IDREFS_t            = NewType("IDREFS_t", str)  # [str]
-NMTOKENS_t          = NewType("NMTOKENS_t", str)  # [str]
-ENTITIES_t          = NewType("ENTITIES_t", str)  # [str]
+# List types (TODO Make these be true lists?)
+IDREFS_t             = NewType("IDREFS_t", str)     # [str]
+NMTOKENS_t           = NewType("NMTOKENS_t", str)   # [str]
+ENTITIES_t           = NewType("ENTITIES_t", str)   # [str]
 
 
 ###############################################################################

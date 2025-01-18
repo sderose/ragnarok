@@ -760,7 +760,7 @@ class WSHandler(FlexibleEnum):
         return s.lstrip(self.value)
 
     def rstrip(self, s:str) -> str:
-        return s.lstrip(self.value)
+        return s.rstrip(self.value)
 
     def strip(self, s:str) -> str:
         return s.strip(self.value)

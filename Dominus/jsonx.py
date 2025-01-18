@@ -80,7 +80,7 @@ An example:
 
 
 ###############################################################################
-# Constants for JSONX format.
+# Constants for JSONX format (similar to domenums.RWord)
 #
 JKeys = SimpleNamespace(**{
     # Reserved JsonX pseudo-attribute *names*
@@ -104,12 +104,13 @@ JKeys = SimpleNamespace(**{
     "J_JSONX_VER"      : "0.9",
 
 
-    # Reserved node-name ("J_NAME_KEY") *values* (save as for DOM nodeNames)
+    # Reserved node-name ("J_NAME_KEY") *values* (cf DOM nodeNames)
     "J_NN_TEXT"        : "#text",
     "J_NN_CDATA"       : "#cdata",
     "J_NN_PI"          : "#pi",
     "J_NN_DOCUMENT"    : "#document",
     "J_NN_COMMENT"     : "#comment",
+    "J_NN_ENTREF"      : "#entref",
 
     # Potential properties (not in JSON, might add for navigation):
     "J_PARENT"         : "#parent",
@@ -190,11 +191,15 @@ class Loader:
         assert isinstance(jDocEl, list)
         self.domDoc = self.domImpl.createDocument(None, None, None)
 
-        self.domDoc.version = jroot[0]["#version"]
-        self.domDoc.standalone = jroot[0]["#standalone"]
-        self.domDoc.doctype = jroot[0]["#doctype"]
-        self.domDoc.encoding = jroot[0]["#encoding"]
-        self.domDoc.systemId = jroot[0]["#systemId"]
+        self.domDoc.version = jroot[0][JKeys.J_XML_VER_KEY]
+        self.domDoc.encoding = jroot[0][JKeys.J_ENCODING_KEY]
+        self.domDoc.standalone = jroot[0][JKeys.J_STANDALONE_KEY]
+        self.domDoc.doctype = jroot[0][JKeys.J_DOCTYPE_KEY]
+        try:
+            self.domDoc.doctype = jroot[0][JKeys.J_PUBLICID_KEY]
+        except KeyError:
+            pass
+        self.domDoc.systemId = jroot[0][JKeys.J_SYSTEMID_KEY]
 
         self.jsonSax_R(
             od=self.domDoc, par=self.domDoc.documentElement, jnode=jroot[1])
@@ -203,23 +208,23 @@ class Loader:
     def jsonSax_R(self, od:'Document', par:'Node', jnode:Any):
         if isinstance(jnode, list):
             nodeName = jnode[0][JKeys.J_NAME_KEY]
-            if nodeName == "#text":
+            if nodeName == JKeys.J_NN_TEXT:
                 # Save (below) doesn't produce these, but someone could, and
                 # it's no sweat to allow it.
                 txt = self.gatherAtomTexts(jnode)
                 node = self.domDoc.createTextNode(ownerDocument=od, data=txt)
                 par.appendChild(node)
-            elif nodeName == "#cdata":
+            elif nodeName == JKeys.J_NN_CDATA:
                 txt = self.gatherAtomTexts(jnode)
                 node = self.domDoc.createCDATASection(
                     ownerDocument=od, data=txt)
                 par.appendChild(node)
-            elif nodeName == "#comment":
+            elif nodeName == JKeys.J_NN_COMMENT:
                 txt = self.gatherAtomTexts(jnode)
                 node = self.domDoc.createComment(
                     ownerDocument=od, data=txt)
                 par.appendChild(node)
-            elif nodeName == "#pi":
+            elif nodeName == JKeys.J_NN_PI:
                 tgt = jnode[0][JKeys.J_TARGET_KEY]
                 txt = self.gatherAtomTexts(jnode)
                 node = self.domDoc.createprocessingInstruction(
@@ -235,7 +240,7 @@ class Loader:
                 for cNum in range(1, len(jnode)):
                     self.jsonSax_R(od=od, par=node, jnode=jnode[cNum])
             else:
-                raise SyntaxError("Unrecognized #name='{nodeName}'.")
+                raise SyntaxError(f"Unrecognized {JKeys.J_NAME_KEY}='{nodeName}'.")
         else: # Scalars
             node = self.domDoc.createTextNode(ownerDocument=od, data=str(jnode))
             par.appendChild(node)
@@ -287,7 +292,7 @@ class Saver:
         elif node.isComment: return self.CommentToJsonX(node, depth)
         elif node.isEntRef: return self.EntRefToJsonX(node, depth)
         else:
-            raise SyntaxError("Unknown node type {node.nodeType}.")
+            raise SyntaxError(f"Unknown node type {node.nodeType}.")
 
     def DocumentToJsonX(self, domDoc:'Document', indent:str=None, depth:int=0) -> str:
         """Intended to be idempotently round-trippable.
@@ -319,7 +324,7 @@ class Saver:
 
     def ElementToJsonX(self, node:'Node', depth:int=0) -> str:
         istr = self.indent * depth
-        buf = '%s[ { "#name":"%s"' % (istr, node.nodeName)
+        buf = '%s[ { "%s":"%s"' % (istr, JKeys.J_NAME_KEY, node.nodeName)
         if node.attributes:
             for k in node.attributes:
                 anode = node.getAttributeNode(k)
@@ -340,22 +345,25 @@ class Saver:
 
     def CDATAToJsonX(self, node:'Node', depth:int=0) -> str:
         istr = self.indent * depth
-        return istr + '[ {"#name":"#cdata"}, "%s"]' % (escapeJsonStr(node.data))
+        return ("""%s[ { "%s":"%s" }, "%s" ]"""
+            % (istr, JKeys.J_NAME_KEY, JKeys.J_NN_CDATA, escapeJsonStr(node.data)))
 
     def PIToJsonX(self, node:'Node', depth:int=0) -> str:
         istr = self.indent * depth
-        return (istr + '[ { "#name":"#pi", "#target":"%s", "#data":"%s" } ]'
-             % (escapeJsonStr(node.target), escapeJsonStr(node.data)))
+        return ("""%s[ { "%s":"%s", "%s":"%s" }, "%s" ]"""
+            % (istr, JKeys.J_NAME_KEY, JKeys.J_NN_PI,
+            JKeys.J_TARGET_KEY, escapeJsonStr(node.target),
+            escapeJsonStr(node.data)))
 
     def CommentToJsonX(self, node:'Node', depth:int=0) -> str:
         istr = self.indent * depth
-        return (istr + '[ { "#name":"#comment", "#data":"%s" } ]'
-            % (escapeJsonStr(node.data)))
+        return ("""%s[ { "%s":"%s" }, "%s" ]"""
+            % (istr, JKeys.J_NAME_KEY, JKeys.J_NN_COMMENT, escapeJsonStr(node.data)))
 
     def EntRefToJsonX(self, node:'Node', depth:int=0) -> str:
         istr = self.indent * depth
-        return istr + '[ { "#name":"#entref, "#ref":"%s" } ]' % (
-            escapeJsonStr(node.data))
+        return ("""%s[ { "%s":"%s" }, "%s" ]"""
+            % (istr, JKeys.J_NAME_KEY, JKeys.J_NN_ENTREF, escapeJsonStr(node.data)))
 
     def attrToJson(self, anode:'Attr', listAttrs:bool=False) -> str:
         """This uses JSON non-string types iff the value is actually

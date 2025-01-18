@@ -53,8 +53,8 @@ RWord = SimpleNamespace(**{
     "NN_COMMENT"     : "#comment",
     "NN_CDATA"       : "#cdata",
     "NN_DOCTYPE"     : "#doctype",
-    "NN_DOCUMENT"    : "#document",
-    "NN_FRAGMENT"    : "#document-fragment",
+    #"NN_DOCUMENT"    : "#document",
+    #"NN_FRAGMENT"    : "#document-fragment",
 
     "NN_PI_JSONX"    : "#pi",
 })

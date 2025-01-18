@@ -63,7 +63,7 @@ class TestIdHandler(unittest.TestCase):
             prv = self.n.docEl.childNodes[i-1]
             cur = self.n.docEl.childNodes[i]
             nxt = self.n.docEl.childNodes[i+1]
-            self.assertEqual(cur.nodeType, NodeType.ELEMENT_NODE)
+            self.assertEqual(cur.nodeType, NodeType.ELEMENT_NODE.value)
             self.assertEqual(cur.nodeName, pType)
             self.assertEqual(len(cur.childNodes), 1)
 

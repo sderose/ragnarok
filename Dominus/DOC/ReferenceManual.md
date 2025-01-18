@@ -20,24 +20,60 @@ including one that produces Canonical XML.
 
 This package focuses on a few main goals:
 
-* Pythonic -- for example, you can get at the children of any node
-with [], and do the other Python list operations. Enums and generators
-are available where appropriate, everything is type-hinted and has unit-tests,
-and so on.
+* Pythonic -- for example, getting/setting children of a node with [] just works
+(including negative offsets and slices).
+So do the other Python list operations.
+Enums and generators are available where appropriate.
 
-* Fast -- my benchmarks show the DOM replacement about 40% faster than minidom.
+* Fast -- my benchmarks on fairly large structures show basedom is about
+40% faster than minidom.
+Of course this will vary depending on countless factors.
 
-* Reliable -- there is an accompanying unittest suite, which provides over
-80% coverage so far.
+* Configurable space/time tradeoffs. Profiling showed that for typical
+DOM structures it costs more to create and maintain sibling chains, than
+they save. basedom can be set to handle siblings three different ways,
+by changing _siblingImpl before creating a document (you cannot safely
+change it later, though that wouldn't be too bad to add).
+
+** SiblingImpl.PARENT (the default): siblings are found by searching
+the (typically fairly short) parent.childNodes. This saves space and update
+time, but will be slow on very wide/bushy trees.
+
+** SiblingImpl.CHNUM: each node stores its position among its siblings. This
+makes it things like previousSibling and nextSibling really fast, but
+inserting and deleting nodes is slower (all following siblings have to have
+their position numbers updated). Operations like getChildIndex() just return
+the value instead of having to search.
+
+** SiblingImpl.LINKS: each node stores a direct pointer to its previousSibling
+and nextSibling. This costs a little space, and non-trivial update time
+when the tree is modified (including during the initial build. NOT doing
+this accounts for much of the speed buff over minidom.
+
+* Reliable. Nearly everything is type-hinted. Lint scores are
+nearly all 10 (excluding deductions for "TODO" notes).
+There is an accompanying unittest suite with about 80% coverage so far.
 
 * Backward compatible -- this should work as a drop-in replacement
 for minidom, lxml, and some other tools. Even obsolete features are
-usually included where they don't lead to direct conflicts.
-If you find places where it doesn't work as expected, please let me know.
+usually included where they don't lead to direct conflicts. A few methods
+support additional (optional) keyword parameters (for example, a FormatOptions
+object can be passed to toprettyxml() to give much more layout and syntax
+control.
 
-* Modern -- the API includes a lot of more modern features. It follows much
-more recent DOM versions than xml.dom.minidom.
-Obvious cases include
+* Sideways compatible -- basedom provides roundtrippable mapping to and
+from JSON. This is implemented in jsonx.py, and
+can be hooked to this or another DOM implementation. It uses a specific
+mapping for XML structure and semantics, which I call "JSON-X".
+It supports all XML node types, such that XML always becomes valid JSON,
+and the JSON can be reloaded to get the same DOM back. I have been unable to
+find any other XML-to-JSON convertor that handles everything and can round-trip.
+If you find places where JSON-X doesn't work as expected, please let me know.
+
+* Modern -- the API includes a lot of more modern features. It supports the
+features of more recent DOM versions than does xml.dom.minidom, and includes
+many methods from whatWG, HTML DOM, etree, and so on.
+Obvious cases include:
     ** whatwg exception names (though the older ones are available as synonyms)
     ** innerXML and outerXML (similar to the HTML DOM),
     ** predicates like node.isElement (instead of node.nodeType == Node.ELEMENT_NODE)
@@ -46,19 +82,41 @@ of CSS selectors, XPointers, and several of ETree's query features.
     ** additional tree operations such as leftmost and rightmost descendants,
 non-sibling previous/next, etc.
 
+* Character-set aware: SGML (with optional settings), XML,
+and HTML (in various versions), have slightly different definitions for
+case-ignoring and definition of whitespace and names. None of them directly
+support Unicode normalization (for example, you can't set any of them up in
+a standard way to handle tags like "fieldset" if the "fi" is a ligature, or countless
+other cases. Probably such cases "should" not happen -- but with auto-correct
+and many layers of text processing and conversion, they do. If you want,
+you can turn on Unicode normalization as well as case-folding (though this may
+not yet work in every corner of the API -- it hasn't been a testing priority).
+
 * Extensible -- the parser is handcrafted recursive descent, with specific
 Python methods directly corresponding to XML concepts.
 Extensions typically sit inside one such method each, under one "if" to
 test if they are active. It's really easy to experiment, and with the test suite
-you're likely to catch it if something breaks.
+you're likely to catch it if something breaks. even [] support for elements
+provides a way to register new filter syntaxes, with a prefix scheme so that
+many can be supported at once (like URL or XPointer schemes).
 
-* Provides many separately-choosable extensions. All of them that affect
+* Conforming by default -- basedom provides many separately-choosable
+extensions, but ones that affect
 what/how XML is parsed (as opposed, say, to added optional arguments
 to methods), are off by default.
 So unless you specifically turn them on the package
-follows all the normal rules. The mechanism for turning them on goes inside
-the document and ensures that an unaware XML processor will find a WF error
-and stop (rather than incorrectly processing a document that uses extensions).
+follows all the normal rules, things should be just as you'd expect.
+The mechanism for turning them on goes inside
+the document (specifically, inside the XML declaration) so that an unaware
+XML processor will find a WF error and stop
+rather than incorrectly processing a document that uses extensions. If other
+tools want to support one or more of the extensions (á la carte), they can recognize
+the setting(s) in the XML declaration and interoperate, without messing up
+their handling of unextended data.
+
+* Helpful -- Exception messages display offending values or types, and often
+say what values or types are expected. I think this saves time,
+whether the problem is in my code or the user's.
 
 
 ===Extensions related to attributes===
@@ -66,21 +124,23 @@ and stop (rather than incorrectly processing a document that uses extensions).
     * attribute datatypes (optionally including all the XSD builtin types,
 whose names can also be specified in ATTLIST declarations). With XSD floats,
 the IEEE special values such as NaN and -Inf are recognized.
-    * Unquoted attributes where the value is an XML NAME or NUMBER.
-    * Boolean attributes abbreviated to just +name or -name
+    * Unquoted attributes where the value is an XML NMTOKEN or
+unsigned integer.
+    * Attributes to be set to "0" or "1" can be abbreviated to just +name or -name.
     * The very first use of an attribute may use "!=" instead of "=", to
 make the given value the default thereafter.
-    * The API supports a notion of inherited attributes, so you can request
-a named attribute and get the value from the nearest ancestor (or self) with it.
-    * Methods to get attributes can be passed a "default" argument, which is
+    * Methods to get attributes can be passed a "default" argument, as common
+    in modern programming languages, which is
 returned if the requested attribute does not exist.
     * Id attributes have optional features available throughout the system.
 In short:
-    ** You can have multiple independent ID spaces.
+    ** You can have ID namespaces.
     ** A few simple types of compound IDs are defined, such as IDs that
 are accumulated from the like-named attribute on all ancestors, and only
 need to be unique in that aggregate form, and "COID"s, with the specific
 intent of support co-indexing of elements for overlapping and discontiguous markup.
+    ** The API supports a notion of inherited attributes, so you can request
+a named attribute and get the value from the nearest ancestor (or self) with it.
     ** Flexible choice of attributes to be treated as IDs:
     AttrChoice = namedtuple("AttChoice", [
         "ens",     # Element's namespace URI, or "##any"
@@ -93,19 +153,19 @@ intent of support co-indexing of elements for overlapping and discontiguous mark
 
 ===Extensions related to Schemas and DTDs===
 
-    * DOCTYPE accepts an NDATA argument to specify a schema language,
-and predefines DTD, XSD, RelaxNG, and Schematron.
-    * There is a new validator that leverages Python regex processing.
+    * DOCTYPE can have (when the option is activated)
+an NDATA argument to specify a schema language.
+DTD, XSD, RelaxNG, and Schematron are predefined.
     * The API suppports getting at schema/DTD info, and setting it up
 or changing it at will (for example, even without a DTD you can tell the API
-that certain attributes are IDs, ints, have defaults, etc.).
+that certain attributes are ID or other XML or XSD types, have defaults, etc.).
     * Loaded doctypes retain the order of declarations so exports can mimic it.
     * ELEMENT and ATTLIST declarations allow name-groups, so you can declare
 multiple names at once.
     * Element declarations accept not just the keywords EMPTY and ANY, but
 also ANY_ELEMENTS (which is like ANY but does not include #PCDATA).
     * The usual *, +, and ? repetition operators in content models
-are joined by {min,max} (like PCRE regexes and like XML Schema min/maxOccurs).
+are joined by {min,max} (like PCRE regexes and XML Schema min/maxOccurs).
     * A new <!IDSPACE spaceName attrName> to declare what attribute
 name (other than the special xml:id case) holds IDs. 'spaceName' can be
 used to define multiple, non-interacting ID spaces (that is, IDs in one
@@ -116,57 +176,74 @@ support declaring any number of names (simple for brevity).
     ** CTYPE is added to distinguish parameter entities that consist of
 a list of names (possibly with connectors, as in SGML) -- this is to
 make it much easier to map between XSD and DTD.
+    * There is a new content model validator that leverages Python regex processing.
 
 ===Extensions related to document markup syntax===
 
     * </> ends the current element regardless of name.
     * <|> ends the current element and starts a new one of the same name.
-    * Slightly more powerful marked sections, such as the IGNORE keyword
-(including control via entities). May add a nesting option.
+    * Marked sections can do slightly more, such as the IGNORE keyword
+(including control via entities).
     * Case-folding can be turned on and off separately for element/attribute
-names, entity names, and reserved words (like #PCDATA). There is a choice of
+names, entity names, reserved words (like #PCDATA), and namespace URIs.
+There is a choice of
 folding to upper, to lower, or via case_fold, all of which have slightly
 different effects in Unicode edge cases.
     * Whitespace can be switched between the definitions used in XML, HTML,
 WHATWG, etc.), so tokenizing and normalizing List attributes adjusts.
     * SYSTEM identifiers can have multiple following qlits, to be tried in
 order. This is because I constantly have to swap them out when sending
-documents back and forth with colleagues; this way we can both put our paths
+documents back and forth with colleagues, and this way we can both put our paths
 in there and forget about it.
-    * For those who dislike colons for namespaces, you can swap in a different
-character.
 
 
 ===Extensions related to overlapping markup===
 
-A few accommodations may be provided for specialized applications involving
-markup overlap.
-    * You can switch the parser "olist" mode, in which is it possible to close
+A few accommodations are provided, mosty in the parser, for specialized
+applications involving markup overlap.
+    * You can switch the parser to "olist" mode, in which is it possible to close
 any element type that is open, not just the current element. The closed element
 is removed from the list of open elements (hence the name), but the list
 is not popped back to there. This allows certain kinds of overlapping
 structures, discussed in various papers on the MECS system.
     * You can open or close multiple elements truly simultaneously, via syntax
 like <b~i> and </b~i>.
-    * I am considering adding suspend and resume (inspired by but not
-identical to TagML), like <p>...<-p>...<+p>...</p>, and/or direct support for
-Trojan-style milestones. The DOM++ implementation will daisy-chain the
+    * The parse can track suspend and resume events (inspired by but not
+identical to TagML), like <p>...<-p>...<+p>...</p>.
+    * I plan to add support for these features and for
+Trojan-style milestones in the DOM++ implementation, such as daisy-chain the
 items (tbd).
 
-
-==Conventions==
 
 ===Layout===
 
 * Everybody gets a shebang line.
 
-* 1 blank lines ahead of defs (skipped for groups of one-liners).
+* 1 blank line ahead of defs (skipped for groups of one-liners).
 2 blank lines and a line of "#" before classes or other major divisions.
 
 * If-conditions and return values not parenthesized; for and while usually are.
 
 * If there is a bunch of inits together, I line up the values for readability.
 Yeah, I know I'm weird on that.
+
+and often labelled on the "def" line with a comment giving the class. I find
+this helpful for readability.
+
+* Methods that are not part of DOM proper, are tagged by a comment on their
+"def" lines, saying where they're from. For
+
+    isElement(self) -> bool:  # HERE
+    innerXML(self) -> str:  # HTML
+    Text(text:str) -> TextNode:  # WHATWG
+    tail(self) -> str:  # ETREE
+    writexml(self):  # MINIDOM
+
+This is not done everywhere yet, and I'm debating how best to flag methods
+that are in (say) DOM but here added to other classes, methods that add new
+parameters, and infrastructure (like Enums, XStrings, etc). I have not
+generally labelled methods that are normal Python ones, such as built-in
+list or dict operations that Node and NamedNodeMap (respectively) get.
 
 
 ===Names===
@@ -178,9 +255,12 @@ For example, class XmlStrings is found in xmlstrings.py.
 a preexisting one to follow (such as innerHTML going to innerXML, not innerXml).
 
 * Names I find too long (such as "createProcessingInstruction"
-have synonyms (such as "createPI").
+commonly have synonyms (such as "createPI").
 
-* Attr vs. Attribute
+* I don't like that XPath uses "preceding" and "following" but
+DOM uses "previous" and "next". So either form works.
+
+* Attr vs. Attribute, DocType vs. Documenttype, cdataMarkedSection,...
 
 * Variables for character lists, syntactic constructs, etc.
 (such as namechars, spacechars, etc.:
@@ -193,46 +273,16 @@ start characters end in "_rangelist" (these are all in xmlstrings).
 ** Variables holding regexes end in "_re".
 
 ** Types created by NewType to help with type-hinting (these generally
-correspond to XSD built-in datatypes) end in "_t".
+correspond to XSD built-in datatypes) end in "_t". These exist but are not
+fully integrated with the XSD type handling in general (yet), since NewType
+normally only affects things like pylint.
 
-** Protocol classes are defined above class that are expected to be
+** Protocol or ABC classes are defined above class that are expected to be
 "pluggable", and are named the same but with "_P" appended:
     DOMImplementation_P --> DOMImplementation
     XMLParser_P --> XMLParser
 
 TODO: I may switch PlainNode to be a protocol class or ABC.
-
-
-===Types===
-
-* Typehints everywhere.
-
-* XSD types are defined as NewTypes (in typesForHints.py). They are named
-by the (casely-correct) XSD names, plus "_t" to be clear they're types.
-Regexes to match them (ending in "_re"), constraints, etc. are defined in xmlstrings.py.
-
-
-===Classes and subclasses===
-
-* Methods that are defined in multiple classes (for example, serializers),
-and often labelled on the "def" line with a comment giving the class. I find
-this helpful for readability.
-
-* Methods that are not part of DOM proper, are tagged by a comment on their
-"def" lines, saying where they're from.
-
-    isElement(self) -> bool
-    innerXML(self) -> str
-    Text(text:str) -> TextNode
-    checkNode(self)
-    tail(self) -> str
-    writexml(self): # MINIDOM
-
-This is not done everywhere yet, and I'm debating how best to flag methods
-that are in (say) DOM but here added to other classes, methods that add new
-parameters, and infrastructure (like Enums, XStrings, etc). I have not
-generally labelled methods that are normal Python ones, such as built-in
-list or dict operations that Node and NamedNodeMap (respectively) get.
 
 
 ===Methods vs. Properties vs. Instance variables===
@@ -244,7 +294,7 @@ same but with "_" added on the front.
 
 ===Enumerated options===
 
-* Keyword options that take reserved string values here use an Enum
+* Keyword options that take reserved string values mostly use an Enum
 (defined in basedomtypes.py except for some done locally where used).
 They subclass from FlexibleEnu, so that methods that take them accept
 either an instance of the enum, or the equivalent string or value:
@@ -271,17 +321,15 @@ backward compatibility.
 
 
 ========================================================================
-====class FormatOptions====
-
-    (see below)
-
-
-========================================================================
 ====class NodeList(list)====
 
 This is essentially just a list of Node objects. It is never the parent of those
 nodes. However, as with Node, __contains__() is non-recursive, while
 contains() is recursive, and synonymous with hasDescendant().
+
+A NodeList can be passed to a left-hand side [] slice (though not (yet) with
+a "step" argument):
+    myNode[2:-5] = NodeList(...)
 
 
 ========================================================================
@@ -810,16 +858,6 @@ it works ok even for just text.
     innerXML(self) -> str
     innerXML(self, xml:str) -> None
     _string2doc(self, xml:str) -> Document
-
-Roundtrippable mapping to and from JSON is also available, implement in jsonx.py,
-which can be hooked to this or another DOM implementation. This is a mapping
-for XML structure and semantics -- it supports all the node types. JSONX is a
-set of conventions for the mapping, so XML always becomes valid JSON using those
-conventions, and can be reloaded -- but not
-just *any* JSON fulfills those conventions. There are other tools that can do
-arbitrary JSON-to-XML conversion (essentially tunneling JSON in XML); such a tool
-could be used to move JSON to XML, after which JSONX could be used to roundtrip
-if desired.
 
 Convenience functions create the correct start or end tag for Elements. If you
 want options (including FormatOptions options that apply), use _startTag instead

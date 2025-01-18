@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 #
 import sys
-#import unittest
-#import logging
 import re
 import html
 import random
 import math
+from typing import Dict
 from types import SimpleNamespace
 import logging
 
@@ -107,7 +106,7 @@ class DBG:
 
     @staticmethod
     def dumpNode(node:Node, msg:str=""):
-        lg.warning("\n####### %s\n",  msg)
+        lg.warning("\n####### %s: ",  msg)
         node.writexml(sys.stderr, indent='    ', addindent='  ', newl='\n')
 
     @staticmethod
@@ -174,7 +173,7 @@ class DBG:
 class DAT:
     """Element names and other consts used in the sample document.
     """
-    sampleXmlPath = "sample01.xml"
+    sampleXmlPath = "../DATA/sampleHTML.xml"
     ns_uri = "https://example.com/namespaces/foo"
 
     root_name = 'html'
@@ -297,40 +296,49 @@ class makeTestDoc0:
         lg.warning(*args, "\n")
 
     @staticmethod
-    def addFullTree(node:Node, n:int=10, depth:int=3, types:list=None,
-        withText:bool=False, withAttr:bool=False) -> None:
-        """Recursively create a subtree, adding 'n' more levels (possibly plus
-        one for text nodes at the bottom), each node having n children.
+    def addFullTree(node:Node, n:int=10, depth:int=2, types:list=None,
+        withText:Dict=None, withAttr:Dict=None) -> None:
+        """Recursively create a subtree, adding 'depth' levels, with the tags
+        for each level taken from 'types', and each node having 'n' children.
+        If 'withText' is set, add a level for text nodes at the bottom.
+        If 'withAttrs' is set, also add attributes.
         """
-        if not types: types = [ "p", "bq" ]
-        od = node.ownerDocument
-        makeTestDoc0.addChildren(node, n, types,
-            withText=depth == 0 and withText, withAttr=withAttr)
-        if depth <= 0: return
-        for ch in node.childNodes:
-            if ch.isText: continue
-            makeTestDoc0.addFullTree(ch, n, depth-1, types,
-                withText=depth == 0 and withText, withAttr=withAttr)
-            return
+        if not types: types = [ f"para{d}" for d in range(depth+1) ]
+        makeTestDoc0.addChildren(
+            node, n, types[0],
+            withText=withText if depth == 0 else None,
+            withAttr=withAttr)
+        if depth > 0:
+            for ch in node.childNodes:
+                assert ch.isElement
+                makeTestDoc0.addFullTree(ch, n, depth-1, types[1:],
+                    withText=withText, withAttr=withAttr)
         return
 
     @staticmethod
-    def addChildren(node:Node, n:int=10, types:list=None,
-        withText:bool=False, withAttr:bool=False):
-        """Add n children to the node, alternating among the given types,
-        and optionally with some (merely constant) text.
+    def addChildren(node:Node, n:int=10, nodeName:str="p",
+        withText:str=None, withAttr:Dict=None):
+        """Add 'n' children to the node, of a given nodeName.
+        If 'withText' is set, add text under each new node. Specific text can
+        be passed, or if it is "" (not None), default text is used.
+        Similarly, if 'withAttr' is set, add its members as attributes, or
+        if it is empty ({}, not None), default attrs are used.
         """
         if not isinstance(node, Element):
             raise TypeError(f"addChildren requires an Element, not {type(node)}.")
-        if not types: types = [ "p", "bq" ]
+        if withText == "":
+            withText = "for the snark was a boojum"
+        if withAttr == {}:
+            withAttr = { "speaker":"narr" }
         d = node.ownerDocument
+
         for i in range(n):
-            ename = types[i % len(types)]
-            newEl = d.createElement(ename)
-            if (withText):
-                newEl.appendChild(d.createTextNode("for the snark was a boojum"))
-            if (withAttr):
-                newEl.setAttribute("speaker", "narr")
+            newEl = d.createElement(nodeName)
+            if withText:
+                newEl.appendChild(d.createTextNode(withText))
+            if withAttr:
+                for k, v in withAttr.items():
+                    newEl.setAttribute(k, v)
             node.appendChild(newEl)
 
     @staticmethod

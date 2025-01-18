@@ -18,8 +18,8 @@ from test4 import makeTestDocEachMethod, K
 
 lg = logging.getLogger("testJsonX.py")
 
-sampleJ = "jsample.jsonx"
-sampleX = "jsample.xml"
+sampleJ = "../DATA/jsample.jsonx"
+sampleX = "../DATA/jsample.xml"
 
 
 class TestJsonX(unittest.TestCase):

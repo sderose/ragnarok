@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+    "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="content-type" content="application/xhtml+xml; charset=utf-8" />
+    <title>The page title</title>
+    <style type="text/css"><!--
+    body { margin-left:24pt; background-color:#AAAAAA; }
+    li p { margin:0pt; }
+    --></style>
+</head>
+
+<body>
+  <h1>A sample of HTML</h1>
+
+  <div id="chap1" class="important">
+    <h1>Introduction</h1>
+    <!-- a comment -->
+
+    <div id="sec1">
+      <h2 id="h2-1">Section 1, on entities</h2>
+      <p id="p1" class="wow">Hello, <i id="smallID">small</i> world.</p>
+      <p>Character references can be Hexadecimal like '&#x68;'</p>
+      <p>Character references can be Decimal like '&#100;'</p>
+      <p>Entity references can be &lt; &#x2022; handy. </p>
+      <blockquote><p>Meaning, they say, is in the eye of the beholder.
+      <br />
+      <cite style="text-align:right;">G. Gygax</cite></p></blockquote>
+    </div>
+
+    <div id="sec2">
+      <h2 id="h2-2">Section 2, on inlines</h2>
+      <p>There are <i>font-ish</i> things that may be <b>bad<sup>1</sup></b>, and
+      <big>size</big> <small>competitions</small>. But sometimes they're
+      <i>useful</i> for things like <tt>code<sup>2</sup>.</tt></p>
+      <p>Then there are <em>so-called</em> <q>generic</q> requivalents, but
+      they don't make <strong>much</strong> <tt>difference</tt>.</p>
+      <p>Then the are actual ones for things like abbreviations (<abbr>Dr. Smith</abbr>),
+      acronyms (<acronym>NASA</acronym>), addresses (<b>1 Main St.</b>),
+      code (<code>x := y++</code>),
+      keyboardables (<kbd>ENTER</kbd>), variables (<var>argc</var>), etc.</p>
+    </div>
+
+    <div id="sec5">
+        <h2 id="h2-5">Section 5, on pre</h2>
+        <p>Code:</p>
+<pre>
+def renameAttribute(root, oldName, newName, ename=None):
+    for node in root.eachElement():
+        if (ename and node.nodeName != ename):
+            continue
+        if (node.hasAttribute(oldName)):
+            v = node.getAttribute(oldName)
+            node.removeAttribute(oldName)
+            node.setAttribute(newName, v)
+</pre>
+    </div>
+  </div>
+ </body>
+</html>

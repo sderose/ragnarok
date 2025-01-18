@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Try out some general entities. -->
+<!DOCTYPE html [
+    <!ENTITY nasa "National Aeronautics and Space Administration">
+    <!ENTITY warn "<blockquote>Flying planes can be dangerous.</blockquote>"
+    <!ENTITY ext  SYSTEM "sampleExtEntity.xml">
+    <!ENTITY pStart "<p>">
+
+]>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>The page title</title>
+</head>
+
+<body>
+  <h1>A sample not from &nasa.</h1>
+
+  <div id="chap1" class="important">
+    <h1>Introduction</h1>
+    <!-- a comment -->&warn;
+
+    <p>And now pull in an external entity.</p>
+    &ext;
+
+    &pStart;Is this recognized?</p>
+</body>
+</html>
