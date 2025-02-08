@@ -5,12 +5,12 @@
 # 2024-08: Separated from rest of DOMExtensions.
 #
 import re
-from typing import Union, Match, Dict, List, Final
+from typing import Match, List, Final
 
 import unicodedata
-from html.entities import codepoint2name, name2codepoint
+from html.entities import name2codepoint
 
-from basedomtypes import NMTOKEN_t, FlexibleEnum
+from basedomtypes import FlexibleEnum
 
 __metadata__ = {
     "title"        : "xmlstrings",
@@ -395,97 +395,6 @@ class XmlStrings:
 
 
     ###########################################################################
-    # Escapers
-    #
-    @staticmethod
-    def escapeAttribute(s:str, quoteChar:str='"', addQuotes:bool=True) -> str:
-        """Turn characters special in (double-quoted) attributes, into char refs.
-        If 'addQuotes' is set, also add the quotes.
-        Set quoteChar if you prefer other than '"', in which case
-        that character is replaced by a character reference instead.
-        """
-        s = XmlStrings.dropNonXmlChars(s)
-        s = s.replace('&', "&amp;")
-        s = s.replace('<', "&lt;")
-        # TODO Impl fo.escapeGT
-        if quoteChar == '"': s = s.replace('"', "&quot;",)
-        else: s = s.replace(quoteChar, "&#x%04x;" % (ord(quoteChar)))
-        if (addQuotes): return quoteChar + s + quoteChar
-        return s
-    escapeXmlAttribute = escapeAttribute
-
-    @staticmethod
-    def escapeText(s:str, escapeAllGT:bool=False, escapeAllPast:int=None) -> str:
-        """Turn things special in text content, into char refs.
-        This always uses the predefined XML named special character references.
-        TODO Config entity type, etc. Maybe -> EscapeHandler? Handle chars > FFFF
-        """
-        s = XmlStrings.dropNonXmlChars(s)
-        s = s.replace('&',   "&amp;")
-        s = s.replace('<',   "&lt;")
-        if escapeAllGT: s = s.replace('>', "&gt;")
-        else: s = s.replace(']]>', "]]&gt;")
-        if escapeAllPast is not None:
-            assert 0xFF < escapeAllPast < 0x10000
-            expr = r"[%s-%s]" % (chr(escapeAllPast), chr(0xFFFF))
-            s = re.sub(expr, lambda m: "&#x%04x;" % (ord(m.group())), s)
-        return s
-    escapeXmlText = escapeText
-
-    @staticmethod
-    def escapeCDATA(s:str, replaceWith:str="]]&gt;") -> str:
-        """XML Defines no particular escaping for this, we use char-ref syntax,
-        although that's not recognized within CDATA.
-        """
-        s = XmlStrings.dropNonXmlChars(s)
-        s = s.replace(']]>', replaceWith)
-        return s
-
-    @staticmethod
-    def escapeComment(s:str, replaceWith:str="-&#x2d;") -> str:
-        """XML Defines no particular escaping for this, we use char-ref syntax,
-        although that's not recognized within CDATA.
-        """
-        s = XmlStrings.dropNonXmlChars(s)
-        s = s.replace('--', replaceWith)
-        return s
-
-    @staticmethod
-    def escapePI(s:str, replaceWith:str="?&gt;") -> str:
-        """XML Defines no particular escaping for this, we use char-ref syntax,
-        although that's not recognized within CDATA.
-        """
-        s = XmlStrings.dropNonXmlChars(s)
-        s = s.replace('?>', replaceWith)
-        return s
-
-    @staticmethod
-    def escapeASCII(s:str, width:int=4, base:int=16, htmlNames:bool=True) -> str:
-        """Delete truly prohibited chars, turn all non-ASCII characters
-        into character references, including the usual escapeText().
-        Also escaped: U+7E since it's weird (DEL)
-        @param width: zero-pad numbers to at least this many digits.
-        @param base: 10 for decimal, 16 for hexadecimal.
-        @param htmlNames: If True, use HTML 4 named entities when applicable.
-        """
-        assert base in [ 10, 16 ]
-        def escASCIIFunction(mat:Match) -> str:
-            """Turn all non-ASCII chars to character refs.
-            """
-            code = ord(mat.group(1))
-            nonlocal width, base, htmlNames
-            if htmlNames and code in codepoint2name:
-                return "&%s;" % (codepoint2name[code])
-            if base == 10:
-                return "&#%0*d;" % (width, code)
-            return "&#x%0*x;" % (width, code)
-
-        s = XmlStrings.dropNonXmlChars(s)
-        s = re.sub(r'([^\x00-\x7E])', escASCIIFunction, s)
-        #s = XmlStrings.escapeText(s)
-        return s
-
-    ###########################################################################
     # Unescapers and cleaners
     #
     @staticmethod
@@ -521,40 +430,8 @@ class XmlStrings:
 
 
     ###########################################################################
-    # XML syntax builders
+    # XML syntax builders  (TODO Move into prettyxml)
     #
-    @staticmethod
-    def makeStartTag(gi:str, attrs:Union[str, Dict]="",
-        empty:bool=False, sort:bool=False) -> str:
-        tag = "<" + gi
-        if attrs:
-            if isinstance(attrs, str):
-                tag += " " + attrs.strip()
-            else:
-                tag += XmlStrings.dictToAttrs(attrs, sort=sort)
-        tag += "/>" if empty else ">"
-        return tag
-
-    @staticmethod
-    def dictToAttrs(dct:Dict, sort:bool=False, normValues:bool=False) -> str:
-        """Turn a dict into a serialized attribute list (possibly sorted
-        and/or space-normalized). Escape as needed.
-        """
-        sep = " "
-        anames = dct.keys()
-        if sort: anames = sorted(list(anames))
-        attrString = ""
-        for a in (anames):
-            v = dct[a]
-            if normValues: v = XmlStrings.normalizeSpace(v)
-            attrString += f"{sep}{a}={XmlStrings.escapeAttribute(v)}"
-        return attrString
-
-    @staticmethod
-    def makeEndTag(name:NMTOKEN_t) -> str:
-        return f"</{name}>"
-
-
     ### TODO Integrate with more general space-handling below.
     #
     @staticmethod
@@ -637,6 +514,13 @@ class UNormHandler(FlexibleEnum):
         if self.value is None: return s
         return unicodedata.normalize(self.value, s)
 
+    def strnormcmp(self, s1:str, s2:str) -> int:
+        s1c = self.normalize(s1)
+        s2c = self.normalize(s2)
+        if s1c == s2c: return 0
+        if s1c < s2c: return -1
+        return 1
+
 
 ###############################################################################
 #
@@ -655,7 +539,8 @@ class CaseHandler(FlexibleEnum):
     UPPER = "UPPER"
 
     def normalize(self, s: str) -> str:
-        """Normalize the string according to the selected case handling method."""
+        """Normalize the string according to the selected method.
+        """
         if self == CaseHandler.NONE: return s
         if self == CaseHandler.FOLD: return s.casefold()
         elif self == CaseHandler.LOWER: return s.lower()
@@ -793,7 +678,7 @@ class WSHandler(FlexibleEnum):
 class Normalizer:
     """Do a selected set of normalizations (case, unicode, and/or whitespace).
 
-    TODO Is this all that useful?
+    TODO Integrate
 
     Nobody realizes that some people expend tremendous energy
     merely to be normal.
@@ -812,7 +697,9 @@ class Normalizer:
         s = self.wsHandler.normalize(s)
         return s
 
-    def cmp(self, s1:str, s2:str) -> int:
-        s1 = self.normalize(s1)
-        s2 = self.normalize(s2)
-        return (s1 > s2) - (s1 < s2)
+    def strnormcmp(self, s1:str, s2:str) -> int:
+        s1c = self.normalize(s1)
+        s2c = self.normalize(s2)
+        if s1c == s2c: return 0
+        if s1c < s2c: return -1
+        return 1

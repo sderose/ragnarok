@@ -11,8 +11,7 @@ from xsdtypes import facetCheck, XsdFacet, DateTimeFrag, Duration
 from documenttype import (
     SimpleType, ComplexType, SeqType,
     ElementDef, RepType, ModelGroup, ModelItem, Model,
-    AttributeDef, DftType,
-    DataSource, EntityDef, EntitySpace, EntityParsing)
+    AttributeDef, DftType, EntityDef, EntitySpace, EntityParsing)
 import xsparser
 #from basedomtypes import HierarchyRequestError
 #from basedomtypes import NotFoundError
@@ -501,14 +500,14 @@ class testEntityDef(unittest.TestCase):
         pub1 = "-//foo//bar//EN"
         sys2 = "/home/jsmith/docs/foo.xml"
 
-        # Some DataSource objects
-        ds1 = DataSource(literal=lit1)
+        # Some kinds of identifiers
+        ds1 = EntityDef("ds1", entSpace=EntitySpace.GENERAL, literal=lit1)
         self.assertEqual(ds1.tostring(), "")
-        ds2 = DataSource(systemId=sys1)
+        ds2 = EntityDef("ds2", entSpace=EntitySpace.GENERAL, systemId=sys1)
         self.assertEqual(ds2.tostring(), "")
-        ds3 = DataSource(publicId=pub1, systemId=sys2)
+        ds3 = EntityDef("ds3", entSpace=EntitySpace.GENERAL, publicId=pub1, systemId=sys2)
         self.assertEqual(ds3.tostring(), "")
-        ds4 = DataSource(systemId=[ sys1, sys2 ])
+        ds4 = EntityDef("ds4", entSpace=EntitySpace.GENERAL, systemId=[ sys1, sys2 ])
         self.assertEqual(ds4.tostring(), "")
 
         # By space/type

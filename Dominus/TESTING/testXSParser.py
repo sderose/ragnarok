@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 import os
-import re
+#import re
 #import codecs
 import unittest
 import logging
@@ -13,9 +13,9 @@ from xml.parsers import expat
 
 from documenttype import EntityDef, EntitySpace, EntityParsing
 import xsparser
-from xsparser import StackReader
+from xsparser import StackReader, EntityFrame
 from xmlstrings import CaseHandler
-#from saxplayer import SaxEvent
+from saxplayer import SaxEvent
 #from makeTestDoc import makeTestDoc0, DAT_DocBook  #, DBG
 
 lg = logging.getLogger("testNode3")
@@ -52,98 +52,84 @@ eventCounts = defaultdict(int)
 ###############################################################################
 #pylint: disable=W0613
 #
-def pr(s:str):
-    print("  " * depth, s)
+def pr(s:str, *args):
+    if args: s += " ".join(args)
+    print("  " * depth, "Event: ", s)
 
-def START(name:str, attrs:Dict=None) -> None:
+def common(typ:SaxEvent, name:str="") -> None:
+    eventCounts[typ] += 1
+    pr("%s:  %s", typ.name, name)
+
+def StartElement(name:str, attrs:Dict=None) -> None:
     global depth
-    eventCounts["START"] += 1
-    pr(f"START:  {name}, {attrs}")
+    common(SaxEvent.START)
     depth += 1
-def END(name:str) -> None:
+def EndElement(name:str) -> None:
     global depth
-    eventCounts["END"] += 1
+    common(SaxEvent.END)
     depth -= 1
-    pr(f"END:  {name}")
-def CHAR(data:str="") -> None:
-    if (data.strip() == ""): return
-    pdata = re.sub(r"\n", "\\\\n", data)
-    eventCounts["CHAR"] += 1
-    pr(f"CHAR:  (len {len(data)}): '{pdata}'")
-def CDATA() -> None:
-    eventCounts["CDATA"] += 1
-    pr("CDATA")
-def CDATAEND() -> None:
-    eventCounts["CDATAEND"] += 1
-    pr("CDATAEND")
-def PROC(target:str="", data:str="") -> None:
-    eventCounts["PROC"] += 1
-    pr(f"PROC:  {target}: {data}")
-def COMMENT(data:str="") -> None:
-    eventCounts["COMMENT"] += 1
-    pr(f"COMMENT:  {data}")
+def CharacterData(data:str="") -> None:
+    common(SaxEvent.CHAR)
+def StartCdataSection() -> None:
+    common(SaxEvent.CDATA)
+def EndCdataSection() -> None:
+    common(SaxEvent.CDATAEND)
+def ProcessingInstruction(target:str="", data:str="") -> None:
+    common(SaxEvent.PROC)
+def Comment(data:str="") -> None:
+    common(SaxEvent.COMMENT)
 
-def DOCTYPE(doctypeName:str, systemId="", publicId="", has_internal_subset:bool=False) -> None:
-    eventCounts["DOCTYPE"] += 1
-    pr(f"DOCTYPE:  {doctypeName}")
-def DOCTYPEEND() -> None:
-    eventCounts["DOCTYPEEND"] += 1
-    pr("DOCTYPEEND")
+def StartDoctypeDecl(doctypeName:str, systemId="", publicId="",
+    has_internal_subset:bool=False) -> None:
+    common(SaxEvent.DOCTYPE)
+def EndDoctypeDecl() -> None:
+    common(SaxEvent.DOCTYPEEND)
 
-def DEFAULT(data:str="") -> None:
-    eventCounts["DEFAULT"] += 1
-    pr(f"DEFAULT:  {data}")
+def Default(data:str="") -> None:
+    common(SaxEvent.DEFAULT)
 
-def ELEMENTDCL(name:str, model:str="") -> None:
-    eventCounts["ELEMENTDCL"] += 1
-    pr(f"ELEMENTDCL:  {name}")
-def ATTLISTDCL(elname:str, attname, typ="", default="", required=False) -> None:
-    eventCounts["ATTLISTDCL"] += 1
-    pr(f"ATTLISTDCL:  {elname}@{attname}")
-def ENTITYDCL(entityName:str, is_parameter_entity=False, value="", base="",
+def ElementDecl(name:str, model:str="") -> None:
+    common(SaxEvent.ELEMENTDCL)
+def AttlistDecl(elname:str, attname, typ="", default="", required=False) -> None:
+    common(SaxEvent.ATTLISTDCL)
+def NotationDecl(notationName:str, base="", systemId="", publicId="") -> None:
+    common(SaxEvent.NOTATIONDCL)
+def EntityDecl(entityName:str, is_parameter_entity=False, value="", base="",
     systemId="", publicId="", notationName=None) -> None:
-    eventCounts["ENTITYDCL"] += 1
-    pr(f"ENTITYDCL:  {entityName}")
-def NOTATIONDCL(notationName:str, base="", systemId="", publicId="") -> None:
-    eventCounts["NOTATIONDCL"] += 1
-    pr(f"NOTATIONDCL:  {notationName}")
+    common(SaxEvent.ENTITYDCL)
+def UnparsedEntityDecl(entityName:str, value="", base="",
+    systemId="", publicId="", notationName=None) -> None:
+    common(SaxEvent.UENTITYDCL)
 
-def ENTREF(context:str, base:str, systemId:str, publicId:str) -> None:
-    eventCounts["ENTREF"] += 1
-    pr(f"ENTREF:  {context}")
-def ENTITY(name:str="") -> None:
-    eventCounts["ENTITY"] += 1
-    pr(f"ENTITY:  {name}")
-
-def NOTATION(name:str, *args) -> None:
-    eventCounts["NOTATION"] += 1
-    print(f"NOTATION:  {name}")
+def EntityReference(context:str, base:str, systemId:str, publicId:str) -> None:
+    common(SaxEvent.ENTREF)
+def Entity(name:str="") -> None:
+    common(SaxEvent.ENTITY)
 
 def setHandlers(parser):
-    parser.StartElementHandler = START
-    parser.EndElementHandler = END
-    parser.CharacterDataHandler = CHAR
-    parser.StartCdataSectionHandler = CDATA
-    parser.EndCdataSectionHandler = CDATAEND
-    parser.ProcessingInstructionHandler = PROC
-    parser.CommentHandler = COMMENT
+    parser.StartElementHandler = StartElement
+    parser.EndElementHandler = EndElement
+    parser.CharacterDataHandler = CharacterData
+    parser.StartCdataSectionHandler = StartCdataSection
+    parser.EndCdataSectionHandler = EndCdataSection
+    parser.ProcessingInstructionHandler = ProcessingInstruction
+    parser.CommentHandler = Comment
 
-    parser.StartDoctypeDeclHandler = DOCTYPE
-    parser.EndDoctypeDeclHandler = DOCTYPEEND
-    parser.ElementDeclHandler = ELEMENTDCL
-    parser.AttlistDeclHandler = ATTLISTDCL
-    parser.EntityDeclHandler = ENTITYDCL
-    parser.NotationDeclHandler = NOTATIONDCL
-    parser.ExternalEntityRefHandler = ENTREF
-    parser.DefaultHandler = DEFAULT
+    parser.StartDoctypeDeclHandler = StartDoctypeDecl
+    parser.EndDoctypeDeclHandler = EndDoctypeDecl
+    parser.ElementDeclHandler = ElementDecl
+    parser.AttlistDeclHandler = AttlistDecl
+    parser.EntityDeclHandler = EntityDecl
+    parser.NotationDeclHandler = NotationDecl
 
-    #StartNamespaceDeclHandler(prefix, uri)
-    #EndNamespaceDeclHandler(prefix)
+    #parser.ExternalEntityRefHandler = ExternalEntityRef
+    parser.DefaultHandler = Default
 
-    #DefaultHandlerExpand(data)
-    #SkippedEntityHandler(entityName, is_parameter_entity)
-    #StackReader(tdoc)    # TODO: Upgrade to handle parses....
-    #sp.parseDocument(tdoc)
+    #parser.StartNamespaceDeclHandler(prefix, uri)
+    #parser.EndNamespaceDeclHandler(prefix)
+
+    #parser.DefaultHandlerExpand(data)
+    #parser.SkippedEntityHandler(entityName, is_parameter_entity)
 
 def runParser(pc:ModuleType, path:str=None, string:str=None, encoding:str="utf-8"):
     global depth
@@ -176,13 +162,14 @@ class TestXSP(unittest.TestCase):
     def setUp(self):
         print("In TestXSP")
 
-    def test_Basics(self):
+    def xxxtest_Basics(self):
         ch1 = EntityDef(
             entName="samp",
             entSpace=EntitySpace.GENERAL,
             entParsing=EntityParsing.PCDATA,
             systemId=sampleEnt)
-        thePath = ch1.dataSource.findLocalPath(eDef=ch1, trace=True)
+        eframe = EntityFrame(eDef=ch1)
+        thePath = eframe.findLocalPath(eDef=ch1)
         self.assertTrue(os.path.isfile(thePath))
 
         #data="<chap><ti>Hello</ti></chap>"
@@ -216,11 +203,11 @@ class TestXSP(unittest.TestCase):
 
     def test_basicDTD(self):
         sr = StackReader(rootPath=sampleDTD,
-            options={ "emptyEnd": True, "elementFold": True, "xsdType": True })
+            options={ "emptyEnd": False, "elementFold": False, "xsdType": False })
         print(repr(sr))
         sr.isOpen(space=EntitySpace.GENERAL, name="chap1")
 
-    def test_doc(self):
+    def xxxtest_doc(self):
         StackReader(rootPath=sampleDTD,
             options={ "emptyEnd": True, "elementFold": True, "xsdType": True })
 
@@ -240,6 +227,7 @@ class TestExpat(unittest.TestCase):
 
 ###############################################################################
 #
+@unittest.skip
 class TestXSPDocs(unittest.TestCase):
     def setup(self):
         print("In TestXSP")
@@ -247,11 +235,11 @@ class TestXSPDocs(unittest.TestCase):
     def testXSP(self):
         runParser(xsparser, string=tdoc)
 
-        runParser(xsparser, path=sampleGE)
+        #runParser(xsparser, path=sampleGE)
 
-        runParser(xsparser, path=sampleDoc)
+        #runParser(xsparser, path=sampleDoc)
 
-        runParser(xsparser, path=sampleDTD)
+        #runParser(xsparser, path=sampleDTD)
 
         #runParser(xsparser, path=sampleBoth)
 

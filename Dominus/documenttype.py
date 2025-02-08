@@ -80,15 +80,12 @@ the Doctype, and to their element(s)
 
     ** EntityParsing(FlexibleEnum): Parsing constraint on entity
 
-    ** DataSource: A QLit or PUBLIC/SYSTEM ID(s)
-
     ** EntityDef: An entity declaration
 
 
 * Notation stuff (treated as a quasi-entity)
 
-    ** Notation: A notation declaration: name, plus
-    a DataSource (which should always be a PUBLIC/SYSTEM ID(s), not QLit)
+    ** Notation: A notation declaration: name, publicID, systemID(s)
 
 * Document stuff
 
@@ -116,8 +113,6 @@ class SimpleType(dict):
         self.restrictions = {}
         self.memberTypes = None  # For list and union types
         self.caseTx = CaseHandler.NONE
-        self.unormTx = CaseHandler.NONE
-        self.wsTx = WSHandler.XML
 
 
 ###########################################################################
@@ -175,7 +170,6 @@ class AttributeDef:
         self.readOrder = readOrder
 
         self.caseTx = "NONE"
-        self.wsTx = "NONE"
         self.enumValues:dict = None
 
         if not XStr.isXmlQName(aname): raise ICharE(
@@ -473,7 +467,7 @@ class ElementDef(ComplexType):
 
 ###############################################################################
 #
-class DataSource:
+class DataSourceOBS:
     """Encapsulate a source of characters, generally one of:
         * A string(typically originating in a qlit in an ENTITY dcl.
         * A set of public/system ids that should identify
@@ -613,13 +607,15 @@ class EntityDef:
         self.entName = entName
         assert isinstance(entSpace, EntitySpace)
         self.entSpace = entSpace
+        assert isinstance(entParsing, EntityParsing)
+        self.entParsing = entParsing
+
         hasId = bool(publicId) or bool(systemId)
         if not (bool(data) ^ hasId): raise DOMException(
             "Specify exactly one: literal XOR public/system id.")
-        self.dataSource = DataSource(
-            literal=data, publicId=publicId, systemId=systemId)
-        assert isinstance(entParsing, EntityParsing)
-        self.entParsing = entParsing
+        self.publicId = publicId
+        self.systemId = systemId if isinstance(systemId, list) else [ systemId ]
+        self.literal = data
 
         if (notationName and entSpace != EntityParsing.NDATA): raise DOMException(
             "Notation name '%s' given for non-NDATA entity '%s'."
@@ -629,17 +625,18 @@ class EntityDef:
         self.ownerSchema = ownerSchema
         self.readOrder = readOrder
 
-        self.wsTx = WSHandler("XML")
         self.caseTx = CaseHandler("NONE")
-        self.uNormTx = UNormHandler("NONE")
         self.localPath = None  # Resolved on first reference
 
     def tostring(self) -> str:
-        src = self.dataSource.tostring()
+        if self.literal is not None:
+            data = f'"{self.literal}"'
+        else:
+            data = f'PUBLIC "{self.publicId}" "{self.systemId}"'
         pct = "% " if self.entSpace == EntitySpace.PARAMETER else ""
-        return "<!ENTITY %s%s %s>\n" % (pct, self.entName, src)
+        return "<!ENTITY %s%s %s>\n" % (pct, self.entName, data)
 
-class Notation:
+class NotationDef:
     """This is for data notation/format applicable to entities. They are normally
     embedded by declaring an external file or object as an ENTITY, and then
     mentioning that entity name (not actually referencing the entity) as
@@ -647,18 +644,19 @@ class Notation:
     """
     def __init__(self,
         name:NMTOKEN_t,
-        dataSource:DataSource,
+        publicId:str=None,
+        systemId:Union[str, List]=None,
         ownerSchema:'DocumentType'=None,
         readOrder:int=0):
-        if dataSource.literal is not None:
-            raise SyntaxError("NOTATION {nname} has QLit, not PUBLIC or SYSTEM.")
         self.name = name
-        self.dataSource = dataSource
+        self.publicId = publicId
+        self.systemId = systemId if isinstance(systemId, list) else [ systemId ]
         self.ownerSchema = ownerSchema
         self.readOrder = readOrder
 
     def tostring(self) -> str:
-        return "<!NOTATION %-12s %s>\n" % (self.name, self.dataSource.tostring())
+        data = f'PUBLIC "{self.publicId}" "{self.systemId}"'
+        return "<!NOTATION %-12s %s>\n" % (self.name, data)
 
 
 ###############################################################################
@@ -669,13 +667,13 @@ class DocumentType(Node):
     TODO Also keep track of who was defined by which ATTLISTs.
     """
     def __init__(self, qualifiedName:QName_t=None,
-        publicId:str='', systemId:str='', htmlEntities:bool=True):
+        publicId:str='', systemId:Union[str, List]=None, htmlEntities:bool=True):
         super().__init__(nodeName=RWord.NN_DOCTYPE)
         self.nodeType = Node.DOCUMENT_TYPE_NODE
 
         self.name = self.nodeName = qualifiedName  # TODO Get from DOCTYPE
-        self.publicId = publicId  # TODO Switch to DataSource
-        self.systemId = systemId
+        self.publicId = publicId
+        self.systemId = systemId if isinstance(systemId, list) else [ systemId ]
         self.htmlEntities = htmlEntities
 
         self.elementDefs:dict[NMTOKEN_t, 'ElementDef'] = {}

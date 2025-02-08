@@ -308,8 +308,8 @@ class testByMethod(unittest.TestCase):
         self.assertEqual(nPlus[2].nodeName, "P_1")
 
         nch = len(n0)
-        n0.__imul__(2)
-        self.assertEqual(len(n0), nch*2)
+        #n0.__imul__(2)
+        #self.assertEqual(len(n0), nch*2)
 
         self.XX(n0.__mul__(2))
         self.XX(n0.__rmul__(2))

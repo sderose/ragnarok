@@ -62,30 +62,20 @@ def countStuff(doc) -> dict:
             counts[n.nodeName] += 1
     return counts
 
-def roundTrip(s1:str, domService) -> bool:
+def roundTrip(s1:str, domImpl) -> bool:
     # Set up 2 copies of our DomBuilder, over the chosen DOM Impl.
-    if domService == minidom:
-        db1 = dombuilder.DomBuilder(
-            domImpl=domService.getDOMImplementation())
-        db2 = dombuilder.DomBuilder(
-            domImpl=domService.getDOMImplementation())
-    elif domService == basedom:
-        db1 = dombuilder.DomBuilder(
-            parserCreator=expat.ParserCreate,
-            domImpl=domService.getDOMImplementation())
-        db2 = dombuilder.DomBuilder(
-            parserCreator=expat.ParserCreate,
-            domImpl=domService.getDOMImplementation())
-    else:
-        assert False, "Unknown DOM implementation provider: %s." % (domService)
+    db1 = dombuilder.DomBuilder(
+        parserClass=expat, domImpl=domImpl)
+    db2 = dombuilder.DomBuilder(
+        parserClass=expat, domImpl=domImpl)
 
     doc1 = db1.parse_string(s1)
     s2 = doc1.toprettyxml(indent="  ")
-    db2 = dombuilder.DomBuilder()
+    db2 = dombuilder.DomBuilder(parserClass=expat, domImpl=domImpl)
     doc2 = db2.parse_string(s2)
 
     # dombuilder can use minidom.Node, which lacks isEqualNode. So use ours.
-    if isEqualNode(doc1.documentElement,doc2.documentElement):
+    if isEqualNode(doc1.documentElement, doc2.documentElement):
         return True
 
     print("\n\nDocument as read:\n" + s1)
@@ -104,11 +94,13 @@ class TestDomBuilderM(unittest.TestCase):  # using minidom
 
     def testTiny(self):
         x = """<?xml version="1.1" encoding="utf-8"?><doc>Hello</doc>"""
-        self.assertTrue(roundTrip(x, domService=minidom))
+        di = minidom.getDOMImplementation()
+        self.assertTrue(roundTrip(x, domImpl=di))
 
     def testEmptyRoot(self):
         x = """<emptyDoc class="spam baked_beans"/>"""
-        self.assertTrue(roundTrip(x, domService=minidom))
+        di = minidom.getDOMImplementation()
+        self.assertTrue(roundTrip(x, domImpl=di))
 
     def testRootSiblings(self):
         x = """<!-- My document -->
@@ -118,7 +110,8 @@ class TestDomBuilderM(unittest.TestCase):  # using minidom
 <!-- Not to mention &dingo;. -->
 """
         with self.assertRaises(SyntaxError):
-            roundTrip(x, domService=minidom)
+            di = minidom.getDOMImplementation()
+            roundTrip(x, domImpl=di)
 
 
 ###############################################################################
@@ -131,11 +124,13 @@ class TestDomBuilderB(unittest.TestCase):
 
     def testTiny(self):
         x = """<?xml version="1.1" encoding="utf-8"?><doc>Hello</doc>"""
-        self.assertTrue(roundTrip(x, domService=basedom))
+        di = basedom.getDOMImplementation()
+        self.assertTrue(roundTrip(x, domImpl=di))
 
     def testEmptyRoot(self):
         x = """<emptyDoc class="spam baked_beans"/>"""
-        self.assertTrue(roundTrip(x, domService=basedom))
+        di = basedom.getDOMImplementation()
+        self.assertTrue(roundTrip(x, domImpl=di))
 
     def testRootSiblings(self):
         x = """<!-- My document -->
@@ -145,7 +140,8 @@ class TestDomBuilderB(unittest.TestCase):
 <!-- Not to mention &dingo;. -->
 """
         with self.assertRaises(SyntaxError):
-            roundTrip(x, domService=basedom)
+            di = basedom.getDOMImplementation()
+            roundTrip(x, domImpl=di)
 
 class TestSelectors(unittest.TestCase):
     def setUp(self):
@@ -155,9 +151,9 @@ class TestSelectors(unittest.TestCase):
 
     @unittest.skip
     def test_selectorsB(self):
+        di = basedom.getDOMImplementation()
         db1 = dombuilder.DomBuilder(
-            parserCreator=expat.ParserCreate,
-            domImpl=basedom.getDOMImplementation())
+            parserClass=expat, domImpl=di)
         doc1 = db1.parse(self.testPath)
         self.assertIsInstance(doc1, basedom.Document)
         #import pudb; pudb.set_trace()

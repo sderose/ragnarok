@@ -16,7 +16,7 @@ from saxplayer import SaxEvent
 
 from basedom import DOMImplementation, getDOMImplementation
 from basedom import PlainNode, Node, Document, Element
-from basedom import Attr, NamedNodeMap, NodeList
+from basedom import Attr, NamedNodeMap, NodeList, RelPosition
 
 from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
 
@@ -194,16 +194,6 @@ class TestDOMImplementation(unittest.TestCase):
         x = self.n.impl.parse_string(
             s="<article id='a1'>foo></article>", parser=None)
         self.assertTrue(x.isDocument)
-
-
-###############################################################################
-#
-@unittest.skip
-class testDomBuilder(unittest.TestCase):
-    """See separate file.
-    """
-    def setUp(self):
-        pass
 
 
 ###############################################################################
@@ -850,8 +840,8 @@ class testElement(unittest.TestCase):
         self.assertIsInstance(nl, NodeList)
         self.assertEqual(len(nl), 3)
 
-        self.assertEqual(docEl["#text"], [])
-        self.assertEqual(docEl["nope"], [])
+        self.assertEqual(len(docEl["#text"]), 0)
+        self.assertEqual(len(docEl["nope"]), 0)
         #print(f"\nself.dc.p_name: {self.dc.p_name}: {docEl.toprettyxml()}")
         #import pudb; pudb.set_trace()
         nl = docEl[self.dc.p_name]
@@ -864,17 +854,23 @@ class testElement(unittest.TestCase):
         with self.assertRaises(TypeError):
             docEl[3.14+4j] = doc.createElement("p")
 
-        self.assertTrue(docEl["*"])
-        self.assertTrue(docEl["p"])
-        self.assertTrue(docEl["#text"])
-        self.assertTrue(docEl["#pi"])
-        self.assertTrue(docEl["#comment"])
-        self.assertTrue(docEl["@id"])
+        self.assertFalse(docEl.isEqualNode(None))
+
+    def test_getitem(self):
+        doc = self.n.doc
+        docEl = self.n.docEl
+        self.assertEqual(len(docEl), 10)
+        txt = doc.createTextNode("hmmmm")
+        docEl.appendChild(txt)
+        #print(docEl.toprettyxml())
+        self.assertEqual(docEl[1]["@n"], "1")
+        self.assertEqual(len(docEl["para"]), 10)
+        self.assertEqual(len(docEl["#text"]), 1)
+        self.assertEqual(len(docEl["#pi"]), 0)
+        self.assertEqual(len(docEl["#comment"]), 0)
 
         with self.assertRaises(TypeError):
-            self.assertTrue(docEl["unknown:oracle(99)"])
-
-        self.assertFalse(docEl.isEqualNode(None))
+            _ = docEl["unknown:oracle(99)"]
 
         # TODO SchemeHandlers
 
@@ -903,7 +899,6 @@ class testElement(unittest.TestCase):
         self.assertEqual(len(docEl), prevLen - 2 + 5)
         docEl.checkNode(deep=True)
 
-    @unittest.skip
     def test_fetchers(self):
         doc = self.n.doc
         docEl = self.n.docEl
@@ -913,13 +908,14 @@ class testElement(unittest.TestCase):
         zzz = doc.createTextNode("xyzzy")
         el8.appendChild(zzz)
 
-        # TODO Add fetcher tests
+        # TODO More fetcher tests
         #
         el5.getElementsByTagName("p")
         el5.getElementsByClassName("myClass")
-        self.n.doc.getElementsByTagNameNS("p", "html")
+        #self.n.doc.getElementsByTagNameNS("p", "html")
 
-        el5.insertAdjacentHTML('<p id="html_9">foo</p>')
+        el5.insertAdjacentXML(RelPosition.beforebegin,
+            xml='<p id="html_9">foo</p>')
 
         #el5.matches()
         #el5.querySelector()
@@ -1341,7 +1337,7 @@ class testGenerator2(unittest.TestCase):
             tlen = len(se)
             seType = se[0]
             eventCounts[seType] += 1
-            if seType == SaxEvent.INIT: self.assertEqual(tlen, 1)
+            if seType == SaxEvent.DOC: self.assertEqual(tlen, 1)
             elif seType == SaxEvent.START:
                 if attrTx == "EVENTS":
                     self.assertTrue(tlen == 2)
@@ -1364,13 +1360,13 @@ class testGenerator2(unittest.TestCase):
             elif seType == SaxEvent.PROC: self.assertEqual(tlen, 3)
             elif seType == SaxEvent.ATTRIBUTE:
                 self.assertEqual(tlen, 3)
-            elif seType == SaxEvent.FINAL: self.assertEqual(tlen, 1)
+            elif seType == SaxEvent.DOCEND: self.assertEqual(tlen, 1)
             else:
                 raise ValueError("Unknown SaxEvent {seType}.")
 
         #DBG.msg("Events:\n    %s" % (repr(eventCounts)))
         # Check the actual counts
-        self.assertEqual(eventCounts[SaxEvent.INIT], 1)
+        self.assertEqual(eventCounts[SaxEvent.DOC], 1)
         self.assertEqual(eventCounts[SaxEvent.START], 156)
         self.assertEqual(eventCounts[SaxEvent.END], 156)
         self.assertEqual(eventCounts[SaxEvent.CDATA], 0)
@@ -1378,7 +1374,7 @@ class testGenerator2(unittest.TestCase):
         self.assertEqual(eventCounts[SaxEvent.CDATAEND], 0)
         self.assertEqual(eventCounts[SaxEvent.COMMENT], 0)
         self.assertEqual(eventCounts[SaxEvent.PROC], 0)
-        self.assertEqual(eventCounts[SaxEvent.FINAL], 1)
+        self.assertEqual(eventCounts[SaxEvent.DOCEND], 1)
 
         if attrTx == "EVENTS":
             self.assertEqual(eventCounts[SaxEvent.ATTRIBUTE], 155)

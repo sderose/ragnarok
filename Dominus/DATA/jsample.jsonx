@@ -1,5 +1,5 @@
-[ { "#name":"#document", "#format":"JSONX",
-    "#version":"1.0", "#encoding":"utf-8", "#standalone":"yes",
+[ { "#name":"JSONX", "#jsonxversion":"0.9",
+    "#xmlversion":"1.0", "#encoding":"utf-8", "#standalone":"yes",
     "#doctype":"html", "#systemId":"http://w3.org/html" },
   [ { "#name": "html", "xmlns:html":"http://www.w3.org/1999/xhtml" },
     [ { "#name": "head" },

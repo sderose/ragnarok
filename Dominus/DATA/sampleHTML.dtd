@@ -9,9 +9,11 @@
    <!ELEMENT ul         (li*)>
    <!ELEMENT ol         (li*)>
    <!ELEMENT li         (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
+   <!ATTLIST p          id      ID      #IMPLIED>
 
    <!ELEMENT dl         (dt, dd)* >
 
+    <!--
    <!ATTLIST p
        lang      CDATA    'en'
        class     NMTOKENS #IMPLIED
@@ -27,6 +29,7 @@
 
        monty     CDATA    #FIXED "python&#65;&lt;"
        >
+    -->
    <!NOTATION png   SYSTEM "pblort">
    <!NOTATION jpg   PUBLIC "-//jblort" "jblort">
 

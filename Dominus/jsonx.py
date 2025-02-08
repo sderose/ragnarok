@@ -8,12 +8,16 @@ import re
 from typing import Any, List, IO, Union
 from types import SimpleNamespace
 import json
+import logging
 
 from xmlstrings import XmlStrings as XStr
 #from dombuilder import DomBuilder
 #from domenums import RWord #, NodeType
 
 # DOMImplementation
+
+lg = logging.getLogger("jsonx")
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 descr = """
 ==Description==
@@ -22,8 +26,8 @@ Load some JsonX to make a DOM, or save a DOM to JsonX.
 JSonX is a JSON structure that can round-trip with XML.
 An example:
 
-[ { "#name":"#document", "#format":"JSONX",
-    "#version":"1.1", "#encoding":"utf-8", "#standalone":"yes",
+[ { "#name":"JSONX", "#jsonxversion":"0.9",
+    "#xmlversion":"1.1", "#encoding":"utf-8", "#standalone":"yes",
     "#doctype":"html", "#systemId":"http://w3.org/html" },
   [ { "#name":"html", "xmlns:html":"http://www.w3.org/1999/xhtml" },
     [ { "#name":"html:head" },
@@ -48,6 +52,8 @@ An example:
 
 ==Doctype?==
 
+Something like:
+
 [ { "#name":"DOCTYPE", "root":"html", "systemId":"...",
     "elementFold":true, "entityFold":false },
 
@@ -60,7 +66,7 @@ An example:
   [ { "#name":"ENTITY", "type":"parameter", "name":"chap1", "systemId":"..." } ],
   [ { "#name":"ENTITY", "name":"em", "data":" -- " } ],
   [ { "#name":"ATTLIST", "for":"p" },
-    [ { "#name":"ATT", "name":"id", "type":"ID", "use":"#IMPLIED" } ],
+    [ { "#name":"ATT", "name":"id", "type":"ID", "dft":"#IMPLIED" } ],
     [ { "#name":"ATT", "name":"class", "type":"NMTOKENS", "use":"#FIXED",
         "default":"normal" } ]
     [ { "#name":"ATT", "name":"just",
@@ -68,14 +74,6 @@ An example:
   ]
   [ { "#name":"NOTATION", name:"png", "publicId":"..." } ]
 ]
-
-
-==To Do==
-
-* Maybe shorten "#name" to "#" or "." or something?
-* Specify doctype mapping
-* Enable link() to bump strings/ints/floats/bools to jnodes???
-* Move jsonx support from basedom to here
 """
 
 
@@ -90,9 +88,8 @@ JKeys = SimpleNamespace(**{
 
     # Reserved JsonX pseudo-attribute *names* for ROOT node
     #
-    "J_FORMAT_KEY"     : "#format",     # Const value "JSONX"
-    "J_JSONX_VER_KEY"  : "#jver",
-    "J_XML_VER_KEY"    : "#xver",
+    "J_JSONX_VER_KEY"  : "#jsonxversion",
+    "J_XML_VER_KEY"    : "#xmlversion",
     "J_ENCODING_KEY"   : "#encoding",
     "J_STANDALONE_KEY" : "#standalone",
     "J_DOCTYPE_KEY"    : "#doctype",    # DOCTYPE name, e.g. "html"
@@ -100,11 +97,13 @@ JKeys = SimpleNamespace(**{
     "J_SYSTEMID_KEY"   : "#systemId",
 
     # Root node property values
-    "J_FORMAT"         : "JSONX",
     "J_JSONX_VER"      : "0.9",
-
+    "J_XML_VER"        : "1.1",
+    "J_ENCODING"       : "utf-8",
+    "J_STANDALONE"     : "yes",
 
     # Reserved node-name ("J_NAME_KEY") *values* (cf DOM nodeNames)
+    "J_NN_TOP"         : "JSONX",
     "J_NN_TEXT"        : "#text",
     "J_NN_CDATA"       : "#cdata",
     "J_NN_PI"          : "#pi",
@@ -151,17 +150,17 @@ class Loader:
         elif isinstance(jdata, list):
             self.jroot = jdata
         else:
-            raise SyntaxError(f"Bad type '{type(jdata)}' for constructor.")
+            raise SyntaxError(f"Bad type '{type(jdata)}' for JSONX constructor.")
         self.check_jsonx(self.jroot)
         self.domDoc = self.JDomBuilder(self.jroot)
 
     def check_jsonx_root(self, jroot:List):
         nn = getNodeName(jroot)
         if nn != JKeys.J_NN_DOCUMENT:
-            raise SyntaxError(f"Not a JsonX root node, name is not '{nn}'.")
+            raise SyntaxError(f"Not a JSONX root node, name is not '{nn}'.")
         props = jroot[0]
-        if props[JKeys.J_FORMAT_KEY] != JKeys.J_FORMAT: raise SyntaxError(
-            f"Not JsonX, {JKeys.J_FORMAT_KEY} is '{nn}', not '{JKeys.J_FORMAT}'.")
+        if props[JKeys.J_NAME_KEY] != JKeys.NN_TOP: raise SyntaxError(
+            f"Not JSONX, {JKeys.J_NAME_KEY} is '{nn}', not '{JKeys.NN_TOP}'.")
         assert len(self.jroot) == 2
 
     def check_jsonx(self, jnode:Any) -> None:
@@ -172,15 +171,16 @@ class Loader:
         if isinstance(jnode, (str, int, float, bool)):
             return
         elif not isinstance(jnode, list): raise SyntaxError(
-            f"Node must be list or atom, not {type(jnode)}.")
+            f"JSONX Node must be list or atom, not {type(jnode)}.")
         elif len(jnode) < 1 or not isinstance(jnode[0], dict):
-            raise SyntaxError(f"No dict in first item of JsonX node: {jnode}")
+            raise SyntaxError(f"No dict in first item of JSONX node: {jnode}")
         elif JKeys.J_NAME_KEY not in jnode[0]:
-            raise SyntaxError(f"No '{JKeys.J_NAME_KEY}' item in properties.")
+            raise SyntaxError(f"No '{JKeys.J_NAME_KEY}' item in JSONX properties. "
+                "Found %s." % (jnode[0]))
         else:
             nn = getNodeName(jnode)
-            if not XStr.isXmlName(nn) and nn not in J_NODENAMES:
-                raise SyntaxError(f"Unrecognized name '{nn}' for node.")
+            if not XStr.isXmlName(nn) and nn not in J_NODENAMES: raise SyntaxError(
+                f"JSONX node name '{nn}' is not reserved or QName.")
             if len(jnode) > 1:
                 for ch in jnode[1:]: self.check_jsonx(ch)
 
@@ -191,15 +191,20 @@ class Loader:
         assert isinstance(jDocEl, list)
         self.domDoc = self.domImpl.createDocument(None, None, None)
 
-        self.domDoc.version = jroot[0][JKeys.J_XML_VER_KEY]
-        self.domDoc.encoding = jroot[0][JKeys.J_ENCODING_KEY]
-        self.domDoc.standalone = jroot[0][JKeys.J_STANDALONE_KEY]
-        self.domDoc.doctype = jroot[0][JKeys.J_DOCTYPE_KEY]
+        lg.info("jroot[0]: %s", jroot[0])
         try:
-            self.domDoc.doctype = jroot[0][JKeys.J_PUBLICID_KEY]
-        except KeyError:
-            pass
-        self.domDoc.systemId = jroot[0][JKeys.J_SYSTEMID_KEY]
+            self.domDoc.version = jroot[0][JKeys.J_XML_VER_KEY]
+            self.domDoc.encoding = jroot[0][JKeys.J_ENCODING_KEY]
+            self.domDoc.standalone = jroot[0][JKeys.J_STANDALONE_KEY]
+            self.domDoc.doctype = jroot[0][JKeys.J_DOCTYPE_KEY]
+        except KeyError as e:
+            raise KeyError(
+            "JSONX missing XML ver, encoding, standalone, or doctype.") from e
+
+        self.domDoc.publicId = (jroot[0][JKeys.J_PUBLICID_KEY] if
+            JKeys.J_PUBLICID_KEY in jroot[0] else None)
+        self.domDoc.systemId = (jroot[0][JKeys.J_SYSTEMID_KEY] if
+            JKeys.J_SYSTEMID_KEY in jroot[0] else None)
 
         self.jsonSax_R(
             od=self.domDoc, par=self.domDoc.documentElement, jnode=jroot[1])
@@ -239,8 +244,8 @@ class Loader:
                 if par is not None: par.appendChild(node)
                 for cNum in range(1, len(jnode)):
                     self.jsonSax_R(od=od, par=node, jnode=jnode[cNum])
-            else:
-                raise SyntaxError(f"Unrecognized {JKeys.J_NAME_KEY}='{nodeName}'.")
+            else: raise SyntaxError(
+                f"Unrecognized JSONX item{JKeys.J_NAME_KEY}='{nodeName}'.")
         else: # Scalars
             node = self.domDoc.createTextNode(ownerDocument=od, data=str(jnode))
             par.appendChild(node)
@@ -264,7 +269,6 @@ def escapeJsonStr(s:str) -> str:
 class Saver:
     """Convert a subtree to isomorphic JSON.
     Intended to be idempotently round-trippable.
-    Defined in each subclass.
     """
     def __init__(self, domDoc:'Document', encoding:str="utf-8", indent:str="  "):
         self.domDoc = domDoc
@@ -308,18 +312,62 @@ class Saver:
         except AttributeError:
             sys = ""
 
-        buf = (
-            """[{ "%s":"%s", "%s":"%s", "%s":"%s", "%s":"%s",""" + indent +
-            """ "%s":"%s", "%s":"%s", "%s":"%s", "%s":"%s" },\n""") % (
-            JKeys.J_FORMAT_KEY,     JKeys.J_FORMAT,
-            JKeys.J_JSONX_VER_KEY,  JKeys.J_JSONX_VER,
-            JKeys.J_XML_VER_KEY,    "1.1",
-            JKeys.J_ENCODING_KEY,   "utf-8",
-            JKeys.J_STANDALONE_KEY, "yes",
-            JKeys.J_DOCTYPE_KEY,    domDoc.nodeName,
-            JKeys.J_PUBLICID_KEY,   pub,
-            JKeys.J_SYSTEMID_KEY,   sys)
+        docInfo = [
+            (JKeys.J_NAME_KEY,       JKeys.J_NN_TOP),
+            (JKeys.J_JSONX_VER_KEY,  JKeys.J_JSONX_VER),
+            (JKeys.J_XML_VER_KEY,    JKeys.J_XML_VER),
+            (JKeys.J_ENCODING_KEY,   JKeys.J_ENCODING),
+            (JKeys.J_STANDALONE_KEY, JKeys.J_STANDALONE),
+            (JKeys.J_DOCTYPE_KEY,    domDoc.nodeName),
+            (JKeys.J_PUBLICID_KEY,   escapeJsonStr(pub)),
+            (JKeys.J_SYSTEMID_KEY,   escapeJsonStr(sys)),
+        ]
+        buf = "[{ %s },\n" % (
+            ", ".join(('"%s":"%s"' % (k, v)) for k, v in docInfo))
         buf += self.NodeToJsonX(domDoc.documentElement, depth=depth+1) + "]\n"
+        return buf
+
+    def DoctypeToJsonX(self) -> str:
+        """Convert the Document type (if present) to JSONX.
+        """
+        dt = self.domDoc.doctype
+        if not dt: return None
+        buf = ""
+        for dcl in self.domDoc.doctype.pentityDefs:
+            buf += '[ { "#dcl":"PENTITY", "#name":"%s", ' % (dcl.name)
+            if dcl.literal is not None:
+                buf += '"#literal":"%s" }],\n' % (dcl.literal)
+            else:
+                buf += '"#publicId":"%s", "#systemId":"%s" }],\n' % (
+                    dcl.publicId, dcl.systemId)
+
+        for dcl in dt.entityDefs:
+            buf += '[ { "#dcl":"ENTITY", "#name":"%s", ' % (dcl.name)
+            if dcl.literal is not None:
+                buf += '"#literal":"%s" }],\n' % (dcl.literal)
+            else:
+                buf += '"#publicId":"%s",  "#systemId":"%s" }],\n' % (
+                    dcl.publicId, dcl.systemId)
+
+        for dcl in dt.notationDefs:
+            buf += '[ { "#dcl":"NOTATION", "#name":"%s", ' % (dcl.name)
+            if dcl.literal is not None:
+                buf += '"#literal":"%s" }],\n' % (dcl.literal)
+            else:
+                buf += '"#publicId":"%s",  "#systemId":"%s" }],\n' % (
+                    dcl.publicId, dcl.systemId)
+
+        # TODO What about attrs for undeclared elements?, optional global attrs?
+        for dcl in dt.elementDefs:
+            buf += '[ { "#dcl":"ELEMENT", "#name":"%s", ' % (dcl.name)
+            buf += '"#model":"%s" }],\n' % (dcl.model.tostring())
+            if dcl.attributes:
+                buf += '[ { "#dcl":"ATTLIST", "#name":"%s" },\n' % (dcl.name)
+                for adcl in dcl.attributes: buf += (""
+                    '[ { "#dcl":"ATT", "#name":"%s", "#type":"%s", "#default":"%s" }],\n'
+                    % (adcl.name, adcl.type, adcl.default))
+                buf += "],\n"
+
         return buf
 
     def ElementToJsonX(self, node:'Node', depth:int=0) -> str:

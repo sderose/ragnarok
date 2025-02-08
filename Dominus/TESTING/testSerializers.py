@@ -11,7 +11,7 @@ from typing import Mapping
 
 import html
 #from xml.dom import minidom
-#from xml.parsers import expat
+from xml.parsers import expat
 
 import basedom
 import dombuilder
@@ -66,8 +66,8 @@ class TestSerializers(unittest.TestCase):
         self.maxDiff = 9999
         with codecs.open("../DATA/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
-        impl = basedom.getDOMImplementation()
-        self.db = dombuilder.DomBuilder(domImpl=impl)
+        di = basedom.getDOMImplementation()
+        self.db = dombuilder.DomBuilder(parserClass=expat, domImpl=di)
         self.doc = self.db.parse_string(self.xmlText)
         self.docEl = self.doc.documentElement
 
@@ -142,8 +142,8 @@ class TestFO(unittest.TestCase):
         self.maxDiff = 9999
         with codecs.open("../DATA/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
-        impl = basedom.getDOMImplementation()
-        self.db = dombuilder.DomBuilder(domImpl=impl)
+        di = basedom.getDOMImplementation()
+        self.db = dombuilder.DomBuilder(parserClass=expat, domImpl=di)
         self.doc = self.db.parse_string(self.xmlText)
         self.docEl = self.doc.documentElement
 

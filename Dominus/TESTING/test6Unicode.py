@@ -8,7 +8,7 @@ import unicodedata
 #from basedomtypes import HReqE, ICharE, NSuppE  # NotFoundError
 from xmlstrings import XmlStrings as XStr
 from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler, Normalizer
-
+from prettyxml import FormatOptions, FormatXml
 #import basedom
 #from basedom import DOMImplementation, PlainNode, Node
 #from basedom import FormatOptions, Document, Element, Attr
@@ -217,61 +217,6 @@ class testByMethod(unittest.TestCase):
         self.assertFalse(XStr.isXmlNumber("a999"))
         self.assertFalse(XStr.isXmlNumber("{45}"))
 
-    def testXStrEscapers(self):
-        self.assertEqual(XStr.escapeAttribute(
-            'Alfred <"E"> Neuman.', quoteChar='"', addQuotes=False),
-            'Alfred &lt;&quot;E&quot;> Neuman.')
-
-        self.assertEqual(XStr.escapeText(
-            'abc<tag> AT&T xyz'),
-            'abc&lt;tag> AT&amp;T xyz')
-        self.assertEqual(XStr.escapeText(
-            'abc \u2022y AT&T zz', escapeAllPast=0x2000),
-            'abc &#x2022;y AT&amp;T zz')
-        self.assertEqual(XStr.escapeText(
-            'abc ]]> zz'),
-            'abc ]]&gt; zz')
-        self.assertEqual(XStr.escapeText(
-            'abc >>> zz'),
-            'abc >>> zz')
-        self.assertEqual(XStr.escapeText(
-            'abc >>> zz', escapeAllGT=True),
-            'abc &gt;&gt;&gt; zz')
-
-        self.assertEqual(XStr.escapeCDATA(
-            "1234<[!CDATA[m<n> AT&T]]>, right?"),
-            "1234<[!CDATA[m<n> AT&T]]&gt;, right?")
-        self.assertEqual(XStr.escapeCDATA(
-            "1234<[!CDATA[m<n> AT&T]]>, right?", replaceWith="]]&gt;"),
-            "1234<[!CDATA[m<n> AT&T]]&gt;, right?")
-        self.assertEqual(XStr.escapeCDATA(
-            "1234<[!CDATA[m<n> AT&T]]>, right?", replaceWith="\u2022"),
-            "1234<[!CDATA[m<n> AT&T\u2022, right?")
-
-        self.assertEqual(XStr.escapeComment(
-            "some <p>s fr-om AT&T are -- well?> -- ok."),
-            "some <p>s fr-om AT&T are -&#x2d; well?> -&#x2d; ok.")
-        self.assertEqual(XStr.escapeComment(
-            "some <p>s fr-om AT&T are -- well?> -- ok.", replaceWith="- -"),
-            "some <p>s fr-om AT&T are - - well?> - - ok.")
-
-        self.assertEqual(XStr.escapePI(
-            "Pis should?> not have this?>", replaceWith="?&gt;"),
-            "Pis should?&gt; not have this?&gt;")
-        self.assertEqual(XStr.escapePI(
-            "Pis should?> not have this?>", replaceWith=""),
-            "Pis should not have this")
-
-        self.assertEqual(XStr.escapeASCII(
-            "abc\u2022xyz.\u278e.", width=6, base=16, htmlNames=True),
-            "abc&bull;xyz.&#x00278e;.")
-        self.assertEqual(XStr.escapeASCII(
-            "abc\u2022xyz.\u278e.", width=2, base=10, htmlNames=False),
-            "abc&#8226;xyz.&#10126;.")
-        self.assertEqual(XStr.escapeASCII(
-            "abc\u2022xyz.\u278e.", width=2, base=10, htmlNames=False),
-            "abc&#8226;xyz.&#10126;.")
-
     def testXStrOther(self):
         allNS = XStr.allNameStartChars()
         allNCA = XStr.allNameCharAddls()
@@ -306,21 +251,21 @@ class testByMethod(unittest.TestCase):
             "a   b\t\u2002\n\u2003\u2004\u2005 c\rd")
 
         # TODO Make these handle attribute re-ordering.
-        self.assertEqual(XStr.makeStartTag(
+        self.assertEqual(FormatXml.makeStartTag(
             "spline", attrs="", empty=False, sort=False), "<spline>")
-        self.assertEqual(XStr.makeStartTag(
+        self.assertEqual(FormatXml.makeStartTag(
             "spline", attrs={"id":"A1", "class":"foo"}, empty=True, sort=False),
             '<spline id="A1" class="foo"/>')
-        self.assertEqual(XStr.makeStartTag(
+        self.assertEqual(FormatXml.makeStartTag(
             "spline", attrs={"id":"A1", "class":"foo&bar"}, empty=True, sort=True),
             '<spline class="foo&amp;bar" id="A1"/>')
-        self.assertEqual(XStr.makeStartTag(
+        self.assertEqual(FormatXml.makeStartTag(
             "spline", attrs='id="A1" class="foo and bar"', empty=True, sort=True),
             '<spline id="A1" class="foo and bar"/>')
-        self.assertEqual(XStr.dictToAttrs(
+        self.assertEqual(FormatXml.dictToAttrs(
             { "id":"foo", "border":"border<1 " }, sort=True, normValues=False),
             ' border="border&lt;1 " id="foo"')
-        self.assertEqual(XStr.makeEndTag("DiV"), "</DiV>")
+        self.assertEqual(FormatXml.makeEndTag("DiV"), "</DiV>")
 
         self.assertEqual(XStr.getLocalPart("foo:bar"), "bar")
         self.assertEqual(XStr.getPrefixPart("foo:bar"), "foo")
@@ -331,7 +276,8 @@ class testByMethod(unittest.TestCase):
                 failed.append("U+%04x" % (ord(c)))
         if (failed):
             self.assertFalse(
-                print("Chars should be namestart but aren't: [ %s ]" % (" ".join(failed))))
+                print("Chars should be namestart but aren't: [ %s ]"
+                    % (" ".join(failed))))
 
         failed = []
         for c in allNCA:
@@ -339,11 +285,74 @@ class testByMethod(unittest.TestCase):
                 failed.append("U+%04x" % (ord(c)))
         if (failed):
             self.assertFalse(
-                print("Chars should not be namestart but are: [ %s ]" % (" ".join(failed))))
+                print("Chars should not be namestart but are: [ %s ]"
+                    % (" ".join(failed))))
 
         self.assertTrue(XStr.isXmlName(allNS*2))
 
         self.assertTrue(XStr.isXmlName("A"+allNC))
+
+    def testEscapers(self):
+        self.assertEqual(FormatXml.escapeAttribute(
+            'Alfred <"E"> Neuman.', addQuotes=False),
+            'Alfred &lt;&quot;E&quot;> Neuman.')
+
+        self.assertEqual(FormatXml.escapeText(
+            'abc<tag> AT&T xyz'),
+            'abc&lt;tag> AT&amp;T xyz')
+        self.assertEqual(FormatXml.escapeText(
+            'abc \u2022y AT&T zz', fo=FormatOptions(ASCII=True, htmlChars=True)),
+            'abc &bull;y AT&amp;T zz')
+        self.assertEqual(FormatXml.escapeText(
+            'abc ]]> zz'),
+            'abc ]]&gt; zz')
+        self.assertEqual(FormatXml.escapeText(
+            'abc >>> zz'),
+            'abc >>> zz')
+        self.assertEqual(FormatXml.escapeText(
+            'abc >>> zz', fo=FormatOptions(escapeGT=True)),
+            'abc &gt;&gt;&gt; zz')
+
+        self.assertEqual(FormatXml.escapeCDATA(
+            "1234<[!CDATA[m<n> AT&T]]>, right?"),
+            "1234<[!CDATA[m<n> AT&T]]&gt;, right?")
+        self.assertEqual(FormatXml.escapeCDATA(
+            "1234<[!CDATA[m<n> AT&T]]>, right?", fo=FormatOptions(forMSC="]]&gt;")),
+            "1234<[!CDATA[m<n> AT&T]]&gt;, right?")
+        self.assertEqual(FormatXml.escapeCDATA(
+            "1234<[!CDATA[m<n> AT&T]]>, right?", fo=FormatOptions(forMSC="\u2022")),
+            "1234<[!CDATA[m<n> AT&T\u2022, right?")
+
+        self.assertEqual(FormatXml.escapeComment(
+            "some <p>s fr-om AT&T are -- well?> -- ok."),
+            "some <p>s fr-om AT&T are -&#x2d; well?> -&#x2d; ok.")
+        self.assertEqual(FormatXml.escapeComment(
+            "some <p>s fr-om AT&T are -- well?> -- ok.", fo=FormatOptions(forCOM="- -")),
+            "some <p>s fr-om AT&T are - - well?> - - ok.")
+
+        self.assertEqual(FormatXml.escapePI(
+            "Pis should?> not have this?>", fo=FormatOptions(forPI="?&gt;")),
+            "Pis should?&gt; not have this?&gt;")
+        self.assertEqual(FormatXml.escapePI(
+            "Pis should?> not have this?>", fo=FormatOptions(forPI="")),
+            "Pis should not have this")
+
+        self.assertEqual(FormatXml.escapeASCII(
+            "abc\u2022xyz.\u278e.",
+            fo=FormatOptions(charPad=6, charBase=16, htmlChars=True)),
+            "abc&bull;xyz.&#X00278E;.")
+        self.assertEqual(FormatXml.escapeASCII(
+            "abc\u2022xyz.\u278e.",
+            fo=FormatOptions(charPad=6, charBase=16, htmlChars=False)),
+            "abc&#X002022;xyz.&#X00278E;.")
+        self.assertEqual(FormatXml.escapeASCII(
+            "abc\u2022xyz.\u278e.",
+            fo=FormatOptions(charBase=16, htmlChars=False, hexUpperCase=False)),
+            "abc&#x2022;xyz.&#x278e;.")
+        self.assertEqual(FormatXml.escapeASCII(
+            "abc\u2022xyz.\u278e.",
+            fo=FormatOptions(charPad=6, charBase=10, htmlChars=False)),
+            "abc&#008226;xyz.&#010126;.")
 
 
 if __name__ == '__main__':

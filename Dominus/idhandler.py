@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-from typing import Callable, Dict, List, Any
+from typing import Callable, Dict, List, Any, Union
 import re
 
 from basedomtypes import NMTOKEN_t, dtr
 from basedomtypes import HReqE, NSE
 from domenums import RWord
-from xmlstrings import XmlStrings as XStr, CaseHandler
+from xmlstrings import XmlStrings as XStr, CaseHandler, Normalizer
 #from basedom import Node, Document, Element, Attr
 
 NS_ANY = RWord.NS_ANY
@@ -24,7 +24,7 @@ class AttrChoice:
     """
     def __init__(self, ens:str=NS_ANY, ename:str=EL_ANY,
         ans:str=NS_ANY, aname:str=None,
-        valgen:Callable=None, caseH:CaseHandler=None):
+        valgen:Callable=None, caseH:Union[CaseHandler, Normalizer]=None):
 
         if not XStr.isXmlName(aname): raise KeyError(
             f"Bad/no attribute name specified ('{aname}').")
@@ -64,7 +64,8 @@ class IdHandler:
     TODO Add id-space, stacked id, co-id support
     TODO Hook up to DocumentType for stuff it knows are IDs
     """
-    def __init__(self, ownerDocument:'Document', caseHandler:CaseHandler=None,
+    def __init__(self, ownerDocument:'Document',
+        caseHandler:Union[CaseHandler, Normalizer]=None,
         valgen:Callable=None):
         """Set up the ID handler.
         Specify a CaseHandler if you want case-ignoring of some kind.

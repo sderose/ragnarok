@@ -9,14 +9,16 @@
 #
 #pylint: disable=W0613, W0212, E1101
 #
-import codecs
+#import codecs
 from collections import OrderedDict
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Union, Iterable, Tuple, Mapping, IO
+from typing import Any, Callable, Dict, List, Union, Iterable, Tuple, IO
 import functools
 import unicodedata
 import re
 from textwrap import wrap
+from xml.parsers import expat
+#from types import NoneType  # ???
 
 from basedomtypes import DOMException, HReqE, ICharE, NSuppE, FlexibleEnum
 from basedomtypes import NamespaceError, NotFoundError, OperationError
@@ -25,9 +27,10 @@ from basedomtypes import DOMImplementation_P, NMTOKEN_t, QName_t, NodeType, dtr
 from saxplayer import SaxEvent
 from domenums import RWord
 from dombuilder import DomBuilder
-from xmlstrings import XmlStrings as XStr, CaseHandler
+from xmlstrings import XmlStrings as XStr, CaseHandler, Normalizer
 from xsdtypes import XSDDatatypes
 from idhandler import IdHandler
+from prettyxml import FormatOptions, FormatXml
 
 __metadata__ = {
     "title"        : "BaseDOM",
@@ -129,175 +132,15 @@ class DOMImplementation(DOMImplementation_P):
     def parse(self, f:Union[str, IO], parser=None, bufsize:int=None
         ) -> 'Document':
         #domImpl = getDOMImplementation()
-        dbuilder = DomBuilder(domImpl=self)
+        dbuilder = DomBuilder(parserClass=parser, domImpl=self)
         theDom = dbuilder.parse(f)
         return theDom
 
     def parse_string(self, s:str, parser=None) -> 'Document':
         domImpl = getDOMImplementation()
-        dbuilder = DomBuilder(domImpl=domImpl)
+        dbuilder = DomBuilder(parserClass=parser, domImpl=domImpl)
         theDom = dbuilder.parse_string(s)
         return theDom
-
-
-###############################################################################
-#
-class FormatOptions:  # HERE
-    """Options for toprettyxml. Callers can pass like-named
-    keywords args, or construct and pass an object.
-    Warning: 'depth' gets modified during traversals, so is not thread-safe.
-
-    See XSParser for options applicable to DTD and document syntax.
-    """
-    def __init__(self, **kwargs):
-        self.depth = 0                  # (changes during traversals)
-
-        # Whitespace insertion
-        self.newl:str = "\n"            # String for line-breaks
-        self.indent:str = "  "          # String to repeat for indent
-        self.addindent:str = None       # Make minidom happy
-        self.wrapTextAt:int = 0         # Wrap text near this interval
-        self.dropWS:bool = False        # Drop existing whitespace-only text nodes
-        self.breakBB:bool = True        # Newline before start tags
-        self.breakAB:bool = False       # Newline after start tags
-        self.breakAttrs:bool = False    # Newline before each attribute
-        self.breakBText:bool = False    #
-        self.breakBE:bool = False       # Newline before end tags
-        self.breakAE:bool = False       # Newline after end tags
-
-        self.tagInfos = {}              # Dict mapping nodeNames to CSS display type
-
-        # Syntax alternatives
-        self.canonical:bool = False     # Use canonical XML syntax?         TODO
-        self.encoding:str = "utf-8"     # utf-8. Just utf-8.
-        self.includeXmlDcl = True
-        self.standalone = None          # 'cuz toprettyxml wants it
-        self.includeDoctype = True
-        self.useEmpty:bool = True       # Use XML empty-element syntax
-        self.emptySpace:bool = True     # Include a space before the /
-        self.quoteChar:str = '"'        # Char to quote attributes
-        self.sortAttrs:bool = False     # Alphabetical order (cf readOrder)
-        self.normAttrs = False          # Normalize whitespace in attributes
-
-        # Escaping  TODO Switch to use EscapeHandler
-        self.escapeGT:bool = False      # Escape > in content               TODO
-        self.ASCII = False              # Escape all non-ASCII              TODO
-        self.charBase:int = 16          # Char refs in decimal or hex?      TODO
-        self.charPad:int = 4            # Min width for numeric char refs   TODO
-        self.htmlChars:bool = True      # Use HTML named special characters TODO
-        self.translateTable:Mapping = {} # Let caller control escaping
-
-        for k, v in kwargs.items():
-            self.setOption(k, v)
-
-    def setOption(self, k:str, v:Any) -> None:
-        if k == "tagInfos":
-            self.setTagInfos(v)
-        elif k not in self.__dict__:
-            raise KeyError(f"FormatOptions: Unknown kw arg '{k}'.")
-        elif self.__dict__[k] is not None and not isinstance(v, type(self.__dict__[k])):
-            if isinstance(v, FormatOptions): raise TypeError(
-                f"FormatOptions: got an FO instance for option {v}."
-                " Perhaps you forgot 'fo=' in the call?")
-            raise TypeError(f"FormatOptions: kw arg '{k}' expected type "
-                f"{type(self.__dict__[k])}, not {type(v)}.")
-        else:
-            self.__dict__[k] = v
-
-    def setInlines(self, v:Union[str, Iterable]=None) -> Dict:
-        """Shorthand to add the passed names to tagInfos as 'inline'.
-        If v is a str, it can be a space-separated list of element types.
-        """
-        if v is None: return self.tagInfos
-        if isinstance(v, str):
-            v = v.split()
-        for tag in v:
-            if not XStr.isXmlNMTOKEN(tag): raise ICharE(
-                f"Bad name '{tag}' for setInlines().")
-            self.tagInfos[tag] = "inline"
-        return self.tagInfos
-
-    def setTagInfos(self, source:Union[Dict, str, IO]) -> int:
-        """Add a bunch of tagname:displayType pairs to tagInfos.
-        Accepts either a dict, a str path, or an open file handle.
-        Returns the numbers of tags in the resulting list.
-
-        The file format has one tagname, value pair per line, and
-        lines beginning with (space and) "#" are ignored as comments.
-        The values are expected to be as for the CSS "display" property.
-        The important ones here are:
-            inline: makes the element type exempt from breakXX settings
-            pre: Not a "display" value, but prevents re-wrapping.
-        """
-        if isinstance(source, dict):
-            for tag, disp in source.items():
-                if not XStr.isXmlNMTOKEN(tag): raise ICharE(
-                    f"Bad name '{tag}' for setInlines().")
-                self.tagInfos[tag] = disp
-            return self.tagInfos
-        elif isinstance(source, str):
-            ifh = codecs.open(source, "rb", encoding="utf-8")
-        else:
-            ifh = source
-
-        for i, rec in enumerate(ifh.readlines()):
-            rec = rec.strip()
-            if rec.startswith("#") or rec == "": continue
-            tag, _com, disp = rec.partition(",")
-            if not disp: raise SyntaxError(
-                f"line {i}: taginfo file record lacks comma: {rec}.")
-            tag = tag.strip()
-            disp = disp.strip()
-            if not XStr.isXmlNMTOKEN(tag): raise ICharE(
-                f"Bad name '{tag}' for setInlines().")
-            self.tagInfos[tag] = disp
-
-        if isinstance(source, str): ifh.close()
-        return self.tagInfos
-
-    @property
-    def ws(self) -> str:
-        return self.newl + self.indent * self.depth
-
-    # Global FormatOptions objects for default and for canonical XML output.
-    # TODO: fix attr order to do namespace dcl before other attrs
-    #
-    @staticmethod
-    def getCanonicalFO():
-        return FormatOptions(
-            canonical = True,
-            sortAttrs = True, normAttrs = True,
-            newl = "\n", quoteChar = '"', htmlChars = False,
-            includeDoctype = False, useEmpty = False,
-            indent = "", wrapTextAt = 0,
-            breakBB = False, breakAB = False, breakAttrs = False,
-            breakBE = False, breakAE = False)
-
-    @staticmethod
-    def getDefaultFO(**kwargs):
-        fo = FormatOptions(
-            sortAttrs = True, normAttrs = True,
-            newl = "\n", quoteChar = '"', htmlChars = False,
-            includeDoctype = False, useEmpty = False,
-            indent = "  ", wrapTextAt = 0,
-            breakBB = True, breakAB = False, breakAttrs = False,
-            breakBE = False, breakAE = False)
-        for k, v in kwargs.items():
-            fo.setOption(k, v)
-        return fo
-
-    def tostring(self):
-        buf = "FormatOptions:\n"
-        for k in sorted(list(dir(self))):
-            if k.startswith("_"): continue
-            v = getattr(self, k)
-            if callable(v): continue
-            if isinstance(v, str): v = f"'{v}'"
-            pv = re.sub(r"[\x00-\x1F]",
-                lambda x: "\\x%02x" % ord(x.group()), str(v))
-
-            buf += "    %-16s %s\n" % (k, pv)
-        return buf
 
 
 ###############################################################################
@@ -335,7 +178,11 @@ class NodeList(list):
         fo = FormatOptions.getDefaultFO(indent=indent, addindent=addindent, newl=newl)
         writer.write(self.toprettyxml(fo=fo))
 
-    def toprettyxml(self, fo:FormatOptions=None, wrapper:NMTOKEN_t=None) -> str:  # NodeList
+
+    def toprettyxml(self, fo:FormatOptions=None, wrapper:NMTOKEN_t=None) -> str:
+        return FormatXml.toprettyxml(node=self, fo=fo)
+
+    def toprettyxmlOBS(self, fo:FormatOptions=None, wrapper:NMTOKEN_t=None) -> str:  # NodeList
         """TODO Should this offer XML dcl, Doctype, ns dcls?
         What if there are Attr nodes in the list?
         """
@@ -412,7 +259,7 @@ class PlainNode(list):
         self.ownerDocument = ownerDocument
         self.parentNode = None  # minidom Attr lacks....
         self.nodeType = Node.ABSTRACT_NODE
-        if nodeName and nodeName[0]!="#" and not XStr.isXmlQName(nodeName):
+        if nodeName and nodeName[0] != "#" and not XStr.isXmlQName(nodeName):
             raise ICharE(f"nodeName '{nodeName}' isn't.")
         self.nodeName = nodeName
         self.inheritedNS = {}
@@ -715,7 +562,7 @@ class PlainNode(list):
         When disconnecting a node keep relevant namespaces with it.
         """
         if (self.ownerDocument and self.ownerDocument.options.ElementCase):
-            if self.ownerDocument.options.ElementCase.strcasecmp(
+            if self.ownerDocument.options.ElementCase.strnormcmp(
                 self.localName, other.localName): return False
         else:
             if self.localName != other.localName: return False
@@ -725,7 +572,7 @@ class PlainNode(list):
             or other.namespaceURI == RWord.NS_ANY): return True
 
         if (self.ownerDocument and self.ownerDocument.options.NSURICase):
-            if self.ownerDocument.options.NSURICase.strcasecmp(
+            if self.ownerDocument.options.NSURICase.strnormcmp(
                 self.namespaceURI, other.namespaceURI): return False
         else:
             if self.namespaceURI != other.namespaceURI: return False
@@ -932,7 +779,7 @@ class PlainNode(list):
         indent:str="", addindent:str="", newl:str="",
         encoding:str=None, standalone:bool=None) -> None:  # Node
         fo=FormatOptions(indent=addindent, newl=newl)
-        writer.write(self.toprettyxml(fo=fo))
+        writer.write(self.toprettyxml(fo=fo) or "")
 
     ### Python list operations (PlainNode)
 
@@ -1086,7 +933,7 @@ class PlainNode(list):
     def __iadd__(self, other) -> 'NodeList':
         """This is an inplace add.
         """
-        raise NSuppE("Can't iadd elements, they're already connected.")
+        # TODO raise NSuppE("Can't iadd elements, they're already connected.")
         for ch in other:
             if ch.parentNode: ch = ch.cloneNode(deep=True)  # TODO???
             self.appendChild(ch)
@@ -1280,7 +1127,7 @@ class Node(PlainNode):
         in two different places (like, say, electrons). Therefore, for
         equality it's enough to test identity instead of position.
 
-        XPointers are good for this, except that getChildIndex() is O(fanout).
+        XPointers are good for this except that getChildIndex() can be O(fanout).
 
         Does not apply to Attribute nodes (overridden).
         """
@@ -1511,11 +1358,15 @@ class Node(PlainNode):
 
     def toxml(self, indent:str="", newl:str="", encoding:str="",
         fo:FormatOptions=None) -> str:  # Node
-        if not fo: fo = FormatOptions.getDefaultFO(
-            indent= indent, newl=newl, encoding=encoding)
-        return self.toprettyxml(fo=fo)
+        #import pudb; pudb.set_trace()
+        return self.toprettyxml(indent=indent, newl=newl, encoding=encoding, fo=fo)
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxml(self, indent:str='\t', newl:str='\n', encoding:str="utf-8",
+        standalone=None, fo:FormatOptions=None) -> str:
+        return FormatXml.toprettyxml(node=self, indent=indent,
+            newl=newl, encoding=encoding, standalone=standalone, fo=fo)
+
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # minidom Node
         raise NSuppE(f"No toprettyxml on abstract Node (from {self.nodeType}).")
 
@@ -1524,7 +1375,7 @@ class Node(PlainNode):
 
 
     #######################################################################
-    # Paths, pointers, etc. (Node)
+    # Paths, pointers, etc. (Node)  TODO: Move to ranges
     #
     def getNodePath(self, useId:str=None, attrOk:bool=False, wsn:bool=True) -> str:  # XPTR
         steps = self.getNodeSteps(useId=useId, attrOk=attrOk, wsn=wsn)
@@ -1707,11 +1558,11 @@ class Node(PlainNode):
         if isinstance(excludeNames, str):
             excludeNames = excludeNames.split()
 
-        yield (SaxEvent.INIT, )
+        yield (SaxEvent.DOC, )
         for se in self.eachSaxEvent_R(attrTx=attrTx, excludeNames=excludeNames):
             #dtr.msg("SE: %s", repr(se))
             yield se
-        yield (SaxEvent.FINAL, )
+        yield (SaxEvent.DOCEND, )
         return
 
     def eachSaxEvent_R(self:'Node',
@@ -1902,37 +1753,50 @@ class Document(Node):
     # TODO What values should be accepted in the XML dcl for bools?
     def initOptions(self) -> SimpleNamespace:  # HERE
         return SimpleNamespace(**{
-            "parser":           "lxml",  # Default parser to use
+            "parser":         "lxml", # Default parser to use
 
-            "EntityCase":       None,    # (to xsparser?)                   # TODO
-            "ElementCase":      None,    # None or a CaseHandler
-            "AttributeCase":    None,    #                                  # TODO
-            "IdCase":           None,    # (pass to idhandler calls)        # TODO
-            "NSURICase":        None,    #                                  # TODO
+            "ElementCase":    None,  # None, CaseHandler, Normalizer
+            "AttributeCase":  None,  #                                # TODO
+            "IdCase":         None,  # (pass to idhandler calls)      # TODO
+            "EntityCase":     None,  # (to xsparser?)                 # TODO
+            "NSURICase":      None,  #                                # TODO
 
-            "UNorm":            None,    # None or a UNormHandler enum      # TODO
-            "wsDef":            None,    # None or a WSHandler enum         # TODO
-            "NameTest":         None,    # None or a NameTest enum          # TODO
+            "NameTest":       None,  # None or a NameTest enum        # TODO
 
-            "attributeTypes":   False,   # Attribute datatype check/cast    # TODO
-            "xsdTypes":         True,    # impl option                      # TODO
+            "attributeTypes": False, # Attribute datatype check/cast  # TODO
+            "xsdTypes":       True,  # impl option                    # TODO
 
             # API extensions
-            "nodeType_p":       True,    # Allow node.isElement, etc.
-            "getItem":          True,    # Overload [] for child selection
-            "CSSSelectors":     False,   # Support CSS selectors            # TODO
-            "XPathSelectors":   False,   # Support XPath selectors          # TODO
-            "whatwgStuff":      True,    # Support whatwg calls             # TODO
-            "BSStuff":          False,   # Support bsoup/etree calls        # TODO
+            "getItem":        True,  # Overload [] for child selection
+            "CSSSelectors":   False, # Support CSS selectors          # TODO
+            "XPathSelectors": False, # Support XPath selectors        # TODO
+            "whatwgStuff":    True,  # Support whatwg calls           # TODO
+            "BSStuff":        False, # Support bsoup/etree calls      # TODO
 
             # Namespace options
-            "IdNameSpaces":     False,   # Allow ns prefixes on ID values   # TODO
-            "ns_global":        False,   # Limit ns dcls to doc element     # TODO
-            "ns_redef":         True,    # Allow redefining a ns prefix?    # TODO
-            "ns_never":         False,   # No namespaces please             # TODO
+            "IdNameSpaces":   False, # Allow ns prefixes on ID values # TODO
+            "ns_global":      False, # Limit ns dcls to doc element   # TODO
+            "ns_redef":       True,  # Allow redefining a ns prefix?  # TODO
+            "ns_never":       False, # No namespaces please           # TODO
 
             # Syntax extensions -- see xsparser
         })
+
+    def setOption(self, k:str, v:Any):  # Document
+        try:
+            getattr(self.options, k)
+        except AttributeError as e:
+            raise KeyError(f"Document: unknown option '{k}'.") from e
+        if (k.endswith("Case") and v is not None
+            and not isinstance(v, ( CaseHandler, Normalizer ))):
+            raise TypeError(f"Document: Bad value type {type(v)} for option '{k}'.")
+        setattr(self.options, k, v)
+
+    def getOption(self, k:str):
+        try:
+            return getattr(self.options, k)
+        except AttributeError as e:
+            raise KeyError(f"Document: unknown option '{k}'.") from e
 
     def registerFilterScheme(self, name:NMTOKEN_t, handler:Callable) -> None:
         """Add a named scheme to be supported within []. The handler
@@ -2069,7 +1933,7 @@ class Document(Node):
         if self.doctype: return self.doctype.outerXml
         return f"<!DOCTYPE {self.documentElement.nodeName} []>"
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # Document
         if not fo:
             fo = FormatOptions.getDefaultFO(
@@ -2601,14 +2465,14 @@ class Element(Node):
         and then parse. Used for inner/outerXML setters
         and for insertAdjacentXML.
         """
-        db = DomBuilder(parserCreator=None, domImpl=DOMImplementation())
+        db = DomBuilder(parserClass=expat, domImpl=DOMImplementation())
         newDoc = db.parse_string(f"<wrapper>{xml}</wrapper>")
         if newDoc is None:
             raise ValueError("parse_string failed.")
         assert newDoc.documentElement.nodeName == "wrapper"
         return newDoc
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # Element
         if not fo: fo = FormatOptions.getDefaultFO(
             indent=indent, newl=newl, encoding=encoding, standalone=standalone)
@@ -2640,29 +2504,27 @@ class Element(Node):
 
     def _startTag(self, empty:bool=False, includeNS:bool=False,
         fo:FormatOptions=None) -> str:  # HERE
-        """Gets a correct start-tag for the element. If 'includeNS' is set,
-        declare all in-scope namespaces even if inherited.
+        """Gets a correct start-tag for the element.
+        If 'includeNS' is set, declare all in-scope namespaces even if inherited.
         """
         if not fo: fo = FormatOptions.getDefaultFO()  # TODO Faster to use const
         if self.nodeType != Node.ELEMENT_NODE:
             raise HReqE(f"_startTag request for non-Element {self.nodeType}.")
-        print(f"nn: {self.nodeName}")
+        #print(f"nn: {self.nodeName}")
         buf = f"<{self.nodeName}"
         if self.attributes:
             ws = fo.ws + fo.indent if (fo.breakAttrs) else " "
             names = self.attributes.keys()
-            if fo.sortAttrs or fo.canonical:
-                names = sorted(names)
+            if fo.sortAttrs:
+                names = sorted(names, key=lambda x: ' '+x if x.startswith("xmlns:") else x)
             for k in names:
                 v = self.attributes[k].nodeValue
                 if fo.normAttrs: v = str(v).strip()  # TODO Extend
-                vEsc = XStr.escapeAttribute(
-                    v, quoteChar=fo.quoteChar, addQuotes=True)
+                vEsc = FormatXml.escapeAttribute(v, addQuotes=True, fo=fo)
                 buf += f'{ws}{k}={vEsc}'
         if includeNS:  # TODO Interleave if sorted
             for k, v in self.inheritedNS.items:
-                vEsc = XStr.escapeAttribute(
-                    v, quoteChar=fo.quoteChar, addQuotes=True)
+                vEsc = FormatXml.escapeAttribute(v, addQuotes=True, fo=fo)
                 buf += f'{ws}{RWord.NS_PREFIX}:{k}={vEsc}'
         return buf + ((fo.spaceEmpty + "/") if empty else "") + ">"
 
@@ -2691,6 +2553,8 @@ class Element(Node):
             for aname, anode in self.attributes.items():
                 assert isinstance(anode, Attr)
                 assert aname == anode.nodeName
+                assert not aname.startswith("xmlns:")  # Should be elsewhere
+                #nsp = anode.prefix is defined
                 anode.checkNode()
 
         if self.childNodes is not None:
@@ -2860,10 +2724,11 @@ class CharacterData(Node):
 ###############################################################################
 #
 class Text(CharacterData):
-    def __init__(self, ownerDocument=None, data:str=""):
+    def __init__(self, ownerDocument=None, data:str="", inCDATA:bool=False):
         super().__init__(ownerDocument=ownerDocument, nodeName=RWord.NN_TEXT)
         self.nodeType = Node.TEXT_NODE
         self.data = data
+        self.inCDATA = inCDATA  # Allow for round-tripping
 
     def cloneNode(self, deep:bool=False) -> 'Text':
         newNode = Text(ownerDocument=self.ownerDocument, data=self.data)
@@ -2895,7 +2760,7 @@ class Text(CharacterData):
         self.data = buf
         return buf
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # Text
         """TODO indent? Remove newlines before wrap? Preformatted elements?
         """
@@ -2903,7 +2768,7 @@ class Text(CharacterData):
             indent=indent, newl=newl, encoding=encoding, standalone=standalone)
         if fo.dropWS and self.data.strip() == "": return ""
         ws = fo.ws if fo.breakBText else ""
-        buf = ws + XStr.escapeText(self.data)
+        buf = ws + FormatXml.escapeText(self.data)
         if fo.translateTable:
             buf = buf.translate(fo.translateTable)
         if fo.wrapTextAt > 0:
@@ -2918,16 +2783,21 @@ class Text(CharacterData):
 ###############################################################################
 #
 class CDATASection(CharacterData):
+    """These aren't normally used. For example, DomBuilder catches the SAX
+    events for them, but just sets 'inCDATA' on the text nodes inside.
+    That way text nodes are always just text nodes, but we can still export
+    them as marked sections if desired.
+    """
     def __init__(self, ownerDocument, data:str):
         super().__init__(ownerDocument=ownerDocument, nodeName="#cdata-section")
         self.nodeType = Node.CDATA_SECTION_NODE
         self.data = data
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # CDATASection
         if not fo: fo = FormatOptions.getDefaultFO(
             indent=indent, newl=newl, encoding=encoding, standalone=standalone)
-        return f"<![CDATA[{XStr.escapeCDATA(self.data)}]]>"
+        return f"<![CDATA[{FormatXml.escapeCDATA(self.data)}]]>"
 
     def tostring(self) -> str:  # CDATASection
         return self.data
@@ -2960,11 +2830,11 @@ class ProcessingInstruction(CharacterData):
             return False
         return True
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # PI
         if not fo: fo = FormatOptions.getDefaultFO(
             indent=indent, newl=newl, encoding=encoding, standalone=standalone)
-        return f"<?{XStr.escapePI(self.target)} {XStr.escapePI(self.data)}?>"
+        return f"<?{FormatXml.escapePI(self.target)} {FormatXml.escapePI(self.data)}?>"
 
     def tostring(self) -> str:  # PI
         return self.data
@@ -2985,11 +2855,11 @@ class Comment(CharacterData):
         if self.userData: newNode.userData = self.userData
         return newNode
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # Comment
         if not fo: fo = FormatOptions.getDefaultFO(
             indent=indent, newl=newl, encoding=encoding, standalone=standalone)
-        return fo.ws + f"<!--{XStr.escapeComment(self.data)}-->"
+        return fo.ws + f"<!--{FormatXml.escapeComment(self.data)}-->"
 
     def tostring(self) -> str:  # Comment
         return self.data
@@ -3012,7 +2882,7 @@ class EntityReference(CharacterData):  # OBS DOM
         self.nodeType = Node.ENTITY_REFERENCE_NODE
         self.data = data
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # EntityReference
         if not fo: fo = FormatOptions.getDefaultFO(
             indent=indent, newl=newl, encoding=encoding, standalone=standalone)
@@ -3028,17 +2898,17 @@ EntRef = EntityReference
 #
 class Attr(Node):
     """Attrs are different:
-        * They cannot be inserted into the tree; only set on an element.
-        * They are unordered, accessed by name not position. IF pressed re.
+        * They cannot be inserted into the tree, only set on an element.
+        * They are unordered, accessed by name not position. If pressed re.
           document order, they can be treated as colocated with their element.
         * They have a discrete scalar (or maybe list of scalars) value.
         * They have a parentNode, but are not children or siblings.
         * They inherit namespace prefix definitions, but not the default ns.
         * They (may?) track whether they were explicit or defaulted.
         * They have methods to retrieve either the value, or the Attr object.
-    (which is a Dict, not a Node), which then owns the Attr objects.
+          (which is a Dict, not a Node), which then owns the Attr objects.
     TODO namespace support
-    TODO way to tunnel defaulting info from xsparser. subclass Atttr?
+    TODO way to tunnel defaulting info from xsparser.
     TODO Possibly do casefolding (when requested) only on the key for
     Element.attributes, not on Attr.node/name?
     TODO If options.attributeTypes is set, just when should casting happen?
@@ -3184,12 +3054,11 @@ class Attr(Node):
 
     ### Serializers (Attr)
     #
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:  # Attr
         if not fo: fo = FormatOptions.getDefaultFO(
             indent=indent, newl=newl, encoding=encoding, standalone=standalone)
-        escVal = XStr.escapeAttribute(
-            self.nodeValue, quoteChar=fo.quoteChar, addQuotes=True)
+        escVal = FormatXml.escapeAttribute(self.nodeValue, addQuotes=True, fo=fo)
         return f"{self.nodeName}={escVal}"
 
     def tostring(self) -> str:  # Attr
@@ -3371,7 +3240,7 @@ class NamedNodeMap(OrderedDict):
         encoding:str=None, standalone:bool=None) -> None: # MINIDOM
         writer.write(self.tostring())
 
-    def toprettyxml(self, indent='\t', newl='\n', encoding="utf-8",
+    def toprettyxmlOBS(self, indent='\t', newl='\n', encoding="utf-8",
         standalone=None, fo:FormatOptions=None) -> str:
         """Produce the complete attribute list as would go in a start tag.
         """
@@ -3382,8 +3251,8 @@ class NamedNodeMap(OrderedDict):
             ks = sorted(ks)
         buf = ""
         for k in ks:
-            escVal = XStr.escapeAttribute(
-                self[k].nodeValue, quoteChar=fo.quoteChar, addQuotes=True)
+            escVal = FormatXml.escapeAttribute(
+                self[k].nodeValue, addQuotes=True, fo=fo)
             buf += f" {k}={escVal}"
         return buf
 
@@ -3395,7 +3264,7 @@ class NamedNodeMap(OrderedDict):
             ks = sorted(ks)
         buf = ""
         for k in ks:
-            buf += f" {k}={XStr.escapeAttribute(self[k].nodeValue)}"
+            buf += f" {k}={FormatXml.escapeAttribute(self[k].nodeValue)}"
         return buf
 
 

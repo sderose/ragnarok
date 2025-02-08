@@ -107,6 +107,7 @@ to avoid confusion the author recommends you use the synonymous
 * Should lack of attrs/ns/etc be empty or None?
 * Should removeAttribute___ unlink from ownerDoc/ownerEl?
 * removeNode vs. removeSelf vs. del
+* child counts in the face of non-normalized text nodes!
 
     # A Node is its own context manager, to ensure that an unlink() call occurs.
     # This is similar to how a file object works.
@@ -123,6 +124,7 @@ to avoid confusion the author recommends you use the synonymous
 * Should there be a little gadget for giving you the open element stack
 disaggregated by namespace? sort of like XCONCUR?
 
+* Add testing specified in Canonical XML 2.0 [https://www.w3.org/TR/xml-c14n2/]
 
 ==ID extensions==
 
@@ -215,24 +217,26 @@ Semantics for isEqualNode? Separate methods/options for cast vs. str values?
 
 * abbreviated attr names? meh
 
-* JsonX mapping for DTDs?
+* JsonX mapping for DTDs
 
 * Something like "+ANY(namespace, namespace)" -- useful enough to bother?
 
 * Compact way to declare special-char entities:
-    ** HTML ones en masse
+    ** HTML ones en masse (from option in XML decl)
     ** Unicode-name-derived ones (stock abbrs, or min unique tokens?)
-    ** <!SDATA [ name int, ... ]>  Maybe allow multiple ints, and/or 'c'?
+    ** <!SDATA [ name1 int1, ... ]>  Maybe allow multiple ints, and/or 'c'?
 
+
+==Parsing==
+
+Which XML++ options should also be available in prettyXml?
+
+Treatment/dcl of HTML named entities
+
+unicode name entities? Cf Test/unicodeAbbrs.py, showing that abbreviating
+each token but the last to the first 4 characters, only leads to
 
 ==Other==
-
-* Could a transclusion node be introduced, to allow DAGs or even graphs?
-    Traversal would have to prevent circularities; affected methods?
-    childInex works if you can only transclude one subtree per
-    nodeSteps, parentNode, depth
-    searches
-    ?subclass of characterData so it doesn't "have" children
 
 * Should getitem work for virtual XPath axes? Not just childNodes, but
 maybe: Ancestors, PSibs, FSibs, Prec, Foll, Desc, Attrs (and |self)
@@ -244,3 +248,35 @@ smart constructor. Add the {} parsing to xsparser.
 because it's also the qname sep. maybe "::" or "?"
 
 * XML allows stuff outside the document element, why shouldn't DOM?
+
+
+==Options rationale
+
+* Are they sorted right between parsing, formatting, and data structure?
+
+    ** suspend/resume daisychaining
+    ** annotation structure (to and from)
+    ** DAG/graph not just tree
+    ** stuff outside document element
+    ** maintain entity structure
+
+==Non-hierarchy==
+
+* Integrate OLIST, TagML, Clix into Dominµs.
+
+* Support full-fledge XPointer ranges as a separate co-ordinated data structure.
+
+* Support export of annotations, inline or out.
+
+* Could a transclusion node be introduced, to allow DAGs or even graphs?
+    Traversal would have to prevent circularities; affected methods?
+    childInex works if you can only transclude one subtree per
+    nodeSteps, parentNode, depth
+    searches
+    ?subclass of characterData so it doesn't "have" children
+
+* Simultaneity? attrs?
+
+* basedom (?) methods to turn olist or suspend/resume into an annotation, or
+into a join of part. So if you get an open, create an element, then later get
+a suspend or olist close....

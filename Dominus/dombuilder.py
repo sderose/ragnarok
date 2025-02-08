@@ -9,13 +9,15 @@
 import os
 import re
 import codecs
-from typing import Any, Union, IO, Callable  # Dict,
+from typing import Union, IO
 import logging
+#from xml.parsers import expat
+#from xml.dom import minidom
 
-from basedomtypes import (NMTOKEN_t, NCName_t, XMLParser_P, NodeType,
-    DOMImplementation_P, DOMException)
+from basedomtypes import NMTOKEN_t, NCName_t, XMLParser_P, NodeType, DOMException
 from domenums import RWord
 from xmlstrings import XmlStrings as XStr
+#import xsparser
 
 lg = logging.getLogger("dombuilder")
 #logging.basicConfig(level=logging.INFO)
@@ -96,9 +98,8 @@ Or you can be even more explicit:
     from xml.parsers import expat
     from basedom import getDOMImplementation
     from dombuilder import DomBuilder
-    theDocument = DomBuilder(
-        domImpl=getDOMImplementation(), parserCreator=expat.ParserCreate)
-    theDocument.parse(xmlPath)
+    theDocument = DomBuilder(parser=expat, domImpl=minidom)
+    theDom = theDocument.ParseFile(xmlPath)
 
 Or you can override the built-in expat event handlers to do other stuff.
 
@@ -135,15 +136,13 @@ and structures.
 
 =Related Commands=
 
-Uses `xml.parsers.expat`, but not quite the usual SAX interface.
+Uses `xml.parsers.expat` or my `xsparser`, which is largely API-compatible.
 '''Note''': See [https://docs.python.org/3/library/pyexpat.html],
 [https://svn.apache.org/repos/asf/apr/apr-util/vendor/expat/1.95.7/doc/reference.html],
 and L<https://libexpat.github.io> for details about this parser.
 
 
 =Known bugs and limitations=
-
-So far, it only talks to `expat` for parsing.
 
 
 =History=
@@ -196,54 +195,48 @@ class DomBuilder():
 
     def __init__(
         self,
-        parserCreator:Callable=None,
-        domImpl:DOMImplementation_P=None,
+        parserClass:type,   # Typically expat or xsparser
+        domImpl:type,       # Typically from x.getDOMImplementation()
         wsn:bool=False,
-        verbose:int=1,
-        nsSep:str=":"
+        verbose:int=1
         ):
         """Set up an XML parser and a DOM implementation, and provide
         methods to parse XML and return DOM documents.
-
-        Defaults to:
-            parserCreator: expat.ParserCreate()
-                Whatever you pass needs to have a ParserCreate method.
-           domImpl:  minidom.getD
-
-        I'd prefer a friendlier approach....
 
         @param parserCreator: A callable that returns an XML parser.
         @param domImpl: a DOM implementation instance to use.
         @param wsn: Discard whitespace-only text nodes.
         @param verbose: Trace some stuff.
-        @param nsSep: Change the namespace prefix separator.
 
         # TODO Switch to take getDOMImplementation instead of module?
         """
-        if not parserCreator:
+        if not parserClass:
             from xml.parsers import expat
-            self.parserCreator = expat.ParserCreate
-        else:
-            self.parserCreator = parserCreator
-        assert callable(self.parserCreator)
-
+            parserClass = expat
         if not domImpl:
             from xml.dom import minidom
-            self.domImpl = minidom.getDOMImplementation()
+            domImpl = minidom.getDOMImplementation()
+        self.parserClass = parserClass
+        if hasattr(parserClass, "ParserCreate"):
+            self.parser = parserClass.ParserCreate(
+                encoding="utf-8", namespace_separator=None)
         else:
-            self.domImpl = domImpl
-        assert callable(self.domImpl.createDocument)
+            raise AttributeError(
+                f"parserClass passed ({parserClass}) has no ParserCreate().")
+
+        self.domImpl = domImpl
+        if not hasattr(domImpl, "createDocument"):
+            raise AttributeError(
+                "domImpl passed ({domImpl}) has no createDocument().")
 
         self.wsn = wsn          # Include whitespace-only nodes?
         self.verbose = verbose
-        self.nsSep = nsSep
-
-        self.parser = None
-        self.domDoc = None
-        self.domDocumentType = None
-
         self.nodeStack = []     # Open Nodes, incl. Document
         self.IdIndex = {}       # Keep index to validate ID attributes  # TODO Drop?
+        self.inCDATA = False    # To get parser CDATA state onto text nodes.
+
+        self.domDoc = None
+        self.domDocumentType = None
 
     def parse(self, path_or_fh:Union[IO, str]) -> 'Document':
         """Actually run the parser.
@@ -284,37 +277,42 @@ class DomBuilder():
     def parser_setup(self, encoding:str="utf-8", dcls:bool=True) -> XMLParser_P:
         """Construct a parser instance and hook up SAX event handlers.
         """
-        p = self.parser = self.parserCreator(
-            encoding=encoding, namespace_separator=self.nsSep)
+        p = self.parser
 
         # Element Handlers
         p.StartElementHandler = self.StartElementHandler
         p.EndElementHandler = self.EndElementHandler
-        p.StartNamespaceDeclHandler = None  #self.StartNSDeclHandler  # TODO
-        p.EndNamespaceDeclHandler = None  #self.EndNSDeclHandler  # TODO
 
         # Leaf node Handlers
         p.CharacterDataHandler = self.CharacterDataHandler
-        #p.CdataSectionHandler = self.CdataSectionHandler  # No such in expat?
         p.ProcessingInstructionHandler = self.ProcessingInstructionHandler
         p.CommentHandler = self.CommentHandler
+
+        p.StartCdataSectionHandler = self.StartCdataSectionHandler
+        p.EndCdataSectionHandler = self.EndCdataSectionHandler
+        #p.StartNamespaceDeclHandler = self.StartNamespaceDeclHandler
+        #p.EndNamespaceDeclHandler = self.EndNamespaceDeclHandler
+
+        p.StartDoctypeDeclHandler = self.StartDoctypeDeclHandler
+        p.EndDoctypeDeclHandler = self.EndDoctypeDeclHandler
+        #p.StartNamespaceDeclHandler = None  #self.StartNSDeclHandler  # TODO
+        #p.EndNamespaceDeclHandler = None  #self.EndNSDeclHandler  # TODO
 
         # Special Cases
         p.DefaultHandler = None  # self.DefaultHandler
         p.DefaultHandlerExpand = None  #self.DefaultHandlerExpand
 
-        # DTD Handlers
-        p.StartDoctypeDeclHandler = self.StartDoctypeDeclHandler
-        p.EndDoctypeDeclHandler = self.EndDoctypeDeclHandler
-        #p.ExternalEntityRefHandler = self.EntityDeclHandler
-        p.EntityDeclHandler = self.EntityDeclHandler
-        p.UnparsedEntityDeclHandler = self.UnparsedEntityDeclHandler
-        p.NotationDeclHandler = self.NotationDeclHandler
-        p.ElementDeclHandler = self.ElementDeclHandler
-        p.AttlistDeclHandler = self.AttlistDeclHandler
-
         p.NotStandaloneHandler = None  #self.NotStandaloneHandler
         p.SkippedEntityHandler = None  #self.SkippedEntityHandler
+
+        # DTD Handlers
+        if (dcls):
+            #p.ExternalEntityRefHandler = self.EntityDeclHandler
+            p.EntityDeclHandler = self.EntityDeclHandler
+            p.UnparsedEntityDeclHandler = self.UnparsedEntityDeclHandler
+            p.NotationDeclHandler = self.NotationDeclHandler
+            p.ElementDeclHandler = self.ElementDeclHandler
+            p.AttlistDeclHandler = self.AttlistDeclHandler
 
         return p
 
@@ -341,13 +339,6 @@ class DomBuilder():
         return("    " * len(self.nodeStack))
 
     ### Handlers ##############################################################
-    # Different parsers use different event names, and slightly different
-    # event definitions -- for example, CDATA may result in:
-    #     * one CDATA event with the text
-    #     * one Text event with the text
-    #     * CDATA-start, zero or more text, CDATA-end
-    # TODO Find a good way to abstract away from those diffs. Or at least
-    # Provide glue layers for the common parsers.
     #
     def StartElementHandler(self, name:NMTOKEN_t, *args) -> None:
         """Create a new element and append to the currently-open element.
@@ -361,6 +352,8 @@ class DomBuilder():
         lg.info("StartElement for '%s' (depth %d).", name, len(self.nodeStack))
         #el.startLoc = self.parser.CurrentByteIndex
 
+        if not XStr.isXmlQName(name): raise SyntaxError(
+            f"Parser returned non-QName element name '{name}'.")
         el = self.domDoc.createElement(name)
 
         if len(args) > 0:  # Deal with attributes
@@ -389,7 +382,7 @@ class DomBuilder():
             self.domDoc.appendChild(el)
         else:
             if not self.nodeStack: raise DOMException(
-                f"Document element is {self.domDoc.documentElement} but no stack.")
+                f"Document element is '{self.domDoc.documentElement}', but no stack.")
             self.nodeStack[-1].appendChild(el)
         self.nodeStack.append(el)
 
@@ -408,27 +401,21 @@ class DomBuilder():
     def EndElementHandler(self, name:NMTOKEN_t) -> None:
         lg.info("EndElement '%s'.", name)
         if not self.nodeStack: raise IndexError(
-            f"EndElement '{name}' but no elements open.")
+            f"Endtag for element '{name}' but no elements open.")
         if self.nodeStack[-1].nodeName != name:  # TODO use nodeNameMatches
+            # TODO Report where the current element started
             raise ValueError(
-                "EndElement '%s' but open element is '%s'" %
+                "Endtag for element '%s' but open element is '%s'" %
                 (name, self.nodeStack[-1].nodeName))
 
         self.nodeStack.pop()
         return
 
-    def EmptyElementHandler(self, name:NMTOKEN_t, attributes) -> None:
-        """Sax generally uses a start/end pair for this instead.
-        """
-        lg.info("EmptyElement '%s'", name)
-        self.StartElementHandler(name, attributes)
-        self.EndElementHandler(name)
-        return
-
     def CharacterDataHandler(self, data:str) -> None:
         """Not to be confused with the minidom class which is a superclass
         of several nodeTypes.
-        expat seems to hand back newlines and spaces separately, so we coalesce.
+        expat seems to hand back newlines, char-refs, etc separately,
+        so we coalesce.
         """
         lg.info("CharacterData '%s'", showInvisibles(data))
         if not re.match(r"\S", data):  # whitespace-only
@@ -442,8 +429,16 @@ class DomBuilder():
             curNode.childNodes[-1].data += data
         else:
             tn = self.domDoc.createTextNode(data)
+            if self.inCDATA: tn.inCDATA = True
             curNode.appendChild(tn)
         return
+
+    # CDATA status is recorded on text nodes, rather than making actual DOM
+    # CDATA nodes (no one expects the CDatish imposition!).
+    def StartCdataSectionHandler(self, *args) -> None:
+        self.inCDATA = True
+    def EndCdataSectionHandler(self, *args) -> None:
+        self.inCDATA = False
 
     def CommentHandler(self, data:str) -> None:
         lg.info("Comment '%s'", data)
@@ -461,25 +456,8 @@ class DomBuilder():
         self.nodeStack[-1].appendChild(newPI)
         return
 
-    def UnknownDeclHandler(self, data:Any) -> None:
-        lg.warning("Unknown_decl: got '%s'", data)
-        # raise ValueError("Unknown markup declaration: '%s'" % (data))
-        newDcl = self.domDoc.createComment(data)
-        if not self.nodeStack: raise SyntaxError(
-            "Unknown dcl found with no root element open.")
-        self.nodeStack[-1].appendChild(newDcl)
-        return
-
     ### Markup declaration handlers
     #
-    def DeclHandler(self, data:str) -> None:
-        """This shouldn't happen (see specific dcls following).
-        """
-        lg.info("Decl '%s'", data)
-        #newDcl = self.domDoc.create(data)
-        #self.nodeStack[-1].appendChild(newDcl)
-        return
-
     def XmlDeclHandler(self,
         version:str="", encoding:str="", standalone:str="") -> None:
         if version in [ "1.0", "1.1" ]:
