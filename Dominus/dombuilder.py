@@ -198,12 +198,13 @@ class DomBuilder():
         parserClass:type,   # Typically expat or xsparser
         domImpl:type,       # Typically from x.getDOMImplementation()
         wsn:bool=False,
-        verbose:int=1
+        verbose:int=1,
         ):
         """Set up an XML parser and a DOM implementation, and provide
         methods to parse XML and return DOM documents.
 
-        @param parserCreator: A callable that returns an XML parser.
+        @param parserClass:
+            Can specify something with a ParserCreate(), or the result of that.
         @param domImpl: a DOM implementation instance to use.
         @param wsn: Discard whitespace-only text nodes.
         @param verbose: Trace some stuff.
@@ -213,16 +214,19 @@ class DomBuilder():
         if not parserClass:
             from xml.parsers import expat
             parserClass = expat
+        if hasattr(parserClass, "ParserCreate"):
+            self.parser = parserClass.ParserCreate(
+                encoding="utf-8", namespace_separator=None)
+        elif hasattr(parserClass, "Parse") or hasattr(parserClass, "ParseFile"):
+            self.parser = parserClass
+        else:
+            raise AttributeError(
+                f"parserClass passed ({parserClass}) has no ParserCreate() or Parse().")
+
         if not domImpl:
             from xml.dom import minidom
             domImpl = minidom.getDOMImplementation()
         self.parserClass = parserClass
-        if hasattr(parserClass, "ParserCreate"):
-            self.parser = parserClass.ParserCreate(
-                encoding="utf-8", namespace_separator=None)
-        else:
-            raise AttributeError(
-                f"parserClass passed ({parserClass}) has no ParserCreate().")
 
         self.domImpl = domImpl
         if not hasattr(domImpl, "createDocument"):
@@ -239,7 +243,7 @@ class DomBuilder():
         self.domDocumentType = None
 
     def parse(self, path_or_fh:Union[IO, str]) -> 'Document':
-        """Actually run the parser.
+        """Run the parser on a FILE.
 
         @param path_or_fh: Path or file handle to XML file to parse.
         Iff it is a path, it is both opened and closed here.
@@ -264,6 +268,8 @@ class DomBuilder():
         if isinstance(path_or_fh, str): fh.close()
         return self.domDoc
 
+    ParseFile = parse
+
     def parse_string(self, s:str) -> 'Document':
         assert isinstance(s, str)
         self.parser_setup(encoding="utf-8", dcls=True)
@@ -273,6 +279,8 @@ class DomBuilder():
         self.nodeStack = [ ]
         self.parser.Parse(s)
         return self.domDoc
+
+    Parse = parse_string
 
     def parser_setup(self, encoding:str="utf-8", dcls:bool=True) -> XMLParser_P:
         """Construct a parser instance and hook up SAX event handlers.

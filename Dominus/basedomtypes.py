@@ -7,7 +7,7 @@
 #     Protocols
 #
 from typing import NewType, Union, TextIO, IO, Protocol, Any
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, StrEnum
 import re
 from datetime import datetime, date, time, timedelta
 
@@ -172,6 +172,7 @@ class OpenEnum(Enum):
            For example, perhaps r"^x-\\w+$"
     For those extension cases, what's returned is not actually an
     instance of OpenEnum or its subclass; just whatever it was.
+    TODO Would StrEnum suffice?
     """
     pattern_ = None
 
@@ -229,6 +230,80 @@ class NodeType(IntEnum):
             return NodeType(int(value))
         except ValueError:
             return "[UNKNOWN_NODETYPE]"
+
+
+###############################################################################
+#
+class SepChar(StrEnum):
+    """A few Unicode characters I like for standing out in mid-text,
+    for example to mark where the parser stopped.
+    """
+    POUND   = "#"
+    SECT    = "\U000000a7"    # SECTION SIGN
+    IBANG   = "\U00002049"    # EXCLAMATION QUESTION MARK
+    EPROOF  = "\U0000220e"    # END OF PROOF
+    STOP    = "\U000023f9"    # BLACK SQUARE FOR STOP
+    FEYE    = "\U000025c9"    # FISHEYE
+    BPOINT  = "\U0000261b"    # BLACK RIGHT POINTING INDEX
+    WPOINT  = "\U0000261e"    # WHITE RIGHT POINTING INDEX
+    FIRE    = "\U00002632"    # TRIGRAM FOR FIRE
+    FROWN   = "\U00002639"    # WHITE FROWNING FACE
+    AESCL   = "\U00002695"    # STAFF OF AESCULAPIUS
+    WARNING = "\U000026a0"    # WARNING SIGN
+    NEGX    = "\U0000274e"    # NEGATIVE SQUARED CROSS MARK
+    RARR    = "\U000027a1"    # BLACK RIGHTWARDS ARROW
+    CBULL   = "\U000029bf"    # CIRCLED BULLET
+    BDIAM   = "\U000029f1"    # ERROR-BARRED BLACK DIAMOND
+    CTIMES  = "\U00002a02"    # N-ARY CIRCLED TIMES OPERATOR
+    SMASH   = "\U00002a33"    # SMASH PRODUCT
+    GGGT    = "\U00002af8"    # TRIPLE NESTED GREATER-THAN
+    CIRCLE  = "\U00002b55"    # HEAVY LARGE CIRCLE
+    #
+    NG      = "\U0001f196"    # SQUARED NG (=NO GOOD)
+    KOKO    = "\U0001f201"    # SQUARED KATAKANA KOKO (=HERE)
+    PROHIB  = "\U0001f232"    # SQUARED CJK UNIFIED IDEOGRAPH-7981 (=PROHIBITED)
+    BALL8   = "\U0001f3b1"    # BILLIARDS
+    ALIEN   = "\U0001f47e"    # ALIEN MONSTER
+    RCIRC   = "\U0001f534"    # LARGE RED CIRCLE
+    CRYING  = "\U0001f622"    # CRYING FACE
+    SCREAM  = "\U0001f631"    # FACE SCREAMING IN FEAR
+    FLUSHED = "\U0001f633"    # FLUSHED FACE
+    LITTER  = "\U0001f6af"    # DO NOT LITTER SYMBOL
+    OCTAGON = "\U0001f6d1"    # OCTAGONAL SIGN
+    SICK    = "\U0001f922"    # NAUSEATED FACE
+    HURL    = "\U0001f92e"    # FACE WITH OPEN MOUTH VOMITING
+    MARX    = "\U0001f978"    # DISGUISED FACE
+
+    ### Bracketing
+    LSQBUC   = "\U000023a1"    #   ⎡  LEFT SQUARE BRACKET UPPER CORNER
+    RSQBUC   = "\U000023a4"    #   ⎤  RIGHT SQUARE BRACKET UPPER CORNER
+    HLABO    = "\U00002770"    #   ❰  HEAVY LEFT-POINTING ANGLE BRACKET ORNAMENT
+    HRABO    = "\U00002771"    #   ❱  HEAVY RIGHT-POINTING ANGLE BRACKET ORNAMENT
+    MLDAB    = "\U000027ea"    #   ⟪  MATHEMATICAL LEFT DOUBLE ANGLE BRACKET
+    MRDAB    = "\U000027eb"    #   ⟫  MATHEMATICAL RIGHT DOUBLE ANGLE BRACKET
+    MLWTSB   = "\U000027ec"    #   ⟬  MATHEMATICAL LEFT WHITE TORTOISE SHELL BRACKET
+    MRWTSB   = "\U000027ed"    #   ⟭  MATHEMATICAL RIGHT WHITE TORTOISE SHELL BRACKET
+    LARCLT   = "\U00002993"    #   ⦓  LEFT ARC LESS-THAN BRACKET
+    RARCLT   = "\U00002994"    #   ⦔  RIGHT ARC GREATER-THAN BRACKET
+
+    # Choose from the above by changing costs below
+    #
+    _left = MLWTSB
+    _mid = ALIEN
+    _right = MRWTSB
+
+    @staticmethod
+    def cat(s1:str, s2:str) -> str:
+        # TODO n-ary?
+        return s1 + SepChar._mid + s2
+
+    @staticmethod
+    def quote(s:str) -> str:
+        return SepChar._left + s + SepChar._right
+
+    @staticmethod
+    def qcat(s1:str, s2:str) -> str:
+        return SepChar._left + s1 + SepChar._mid + s2 + SepChar._right
 
 
 ###############################################################################

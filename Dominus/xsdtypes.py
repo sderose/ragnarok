@@ -923,9 +923,11 @@ sgmlAttrTypes.update({
     # plus enumerations
 })
 
+anyAttrKeyword = "#ANY"  # (extension)
+fixedKeyword = "#FIXED"
 
 sgmlAttrDefaults = {
-    "#IMPLIED":1, "#REQUIRED":1, "#FIXED":1, "#CURRENT":1, "#CONREF":1,
+    "#IMPLIED":1, "#REQUIRED":1, fixedKeyword:1, "#CURRENT":1, "#CONREF":1,
 }
 
 xmlAttrDefaults = {

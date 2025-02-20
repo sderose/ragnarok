@@ -347,6 +347,10 @@ class ModelGroup:
                 raise NSuppE(f"Unexpected type '{type(childItem)}' in ModelGroup.")
         return names
 
+    def __str__(self) -> str:
+        lg.info('Casting a {type(self)}')
+        return self.tostring()
+
     def tostring(self, indent:str=None) -> str:
         """TODO Maybe re-introduce PEs or complex types?
         """
@@ -360,15 +364,16 @@ class ModelGroup:
 
 class Model(ModelGroup):
     """The whole/top model, which can be a declared content keyword OR
-     a model group (passed here as a List of string tokens.
-     Tokens are converted to an AST of ModelGroups and ModelItems.
+    a model group (passed here as a List of string tokens.
+    Tokens are converted to an AST of ModelGroups and ModelItems.
 
-    childItems comes in as List[str], for example:
+    Comes in as List[str], for example:
         [ "(", "i", "|", "b", "*", "|", "tt", ")", "+" ]
     """
     def __init__(self, tokens:List[str]=None, seq:SeqType=None, rep:RepType=None,
         contentType:ContentType=None):
         super(). __init__(None, None, None)
+        lg.info("Model(): tokens %s", tokens)
         if contentType is None:
             self.contentType = ContentType.X_MODEL
         else:
@@ -431,6 +436,7 @@ class Model(ModelGroup):
             i += 1
         if len(MGStack) != 1:
             raise SyntaxError("Unclosed () group in model: %s." % (tokens))
+        lg.info("Model string: %s", self.tostring())
 
     def tostring(self, indent:str=None) -> str:
         if self.contentType != ContentType.X_MODEL:
@@ -697,6 +703,9 @@ class DocumentType(Node):
             edef = self.elementDefs[attributeDef.ename]
             if attributeDef.aname not in edef.attributeDefs:
                 edef.attributeDefs[attributeDef.aname] = attributeDef
+
+    def applyDefaults(self, elDcl:ElementDef, attrs:Dict) -> Dict:
+        raise NotImplementedError("TODO attr defaults")
 
     @property
     def nodeValue(self) -> str:

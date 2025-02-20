@@ -339,59 +339,59 @@ class XmlStrings:
     ###########################################################################
     # XML string predicates
     #
-    isXmlChars_re = re.compile(r"[%s]" % (_nonXml_rangespec))
+    isXmlChars_cre = re.compile(r"[%s]" % (_nonXml_rangespec))
 
     # One typically tests whether an ENTIRE string is of the specified type,
     # so use re.fullmatch. But xsparser has at least one exception.
     #
-    isXmlName_re = re.compile(NCName_re)
-    isXmlQName_re = re.compile(QName_re)
-    isXmlQQName_re = re.compile(QQName_re)
-    isXmlPName_re = re.compile(PName_re)
-    isXmlNMTOKEN_re = re.compile(NMTOKEN_re)
-    isXmlNumber_re = re.compile(r"^\d+", flags=re.ASCII)
+    isXmlName_cre = re.compile(NCName_re)
+    isXmlQName_cre = re.compile(QName_re)
+    isXmlQQName_cre = re.compile(QQName_re)
+    isXmlPName_cre = re.compile(PName_re)
+    isXmlNMTOKEN_cre = re.compile(NMTOKEN_re)
+    isXmlNumber_cre = re.compile(r"^\d+", flags=re.ASCII)
 
     @staticmethod
     def isXmlChars(s:str) -> bool:
         """At least one char, and all the individual chars are allowed.
         """
-        return s and not re.search(XmlStrings.isXmlChars_re, s)
+        return s and not re.search(XmlStrings.isXmlChars_cre, s)
 
     @staticmethod
     def isXmlName(s:str) -> bool:
         """Return True for a NON-namespace-prefixed (aka) local name.
         """
-        return bool(re.fullmatch(XmlStrings.isXmlName_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlName_cre, s))
     isXmlNCName = isXmlName
 
     @staticmethod
     def isXmlQName(s:str) -> bool:
         """Return True for a namespace-prefixed OR unprefixed name.
         """
-        return bool(re.fullmatch(XmlStrings.isXmlQName_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlQName_cre, s))
 
     @staticmethod
     def isXmlQQName(s:str) -> bool:
         """Return True even for multiple prefixes.
         """
-        return bool(re.fullmatch(XmlStrings.isXmlQQName_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlQQName_cre, s))
 
     @staticmethod
     def isXmlPName(s:str) -> bool:
         """Return True only for a namespace-prefixed name.
         """
-        return bool(re.fullmatch(XmlStrings.isXmlPName_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlPName_cre, s))
 
     @staticmethod
     def isXmlNMTOKEN(s:str) -> bool:
-        return bool(re.fullmatch(XmlStrings.isXmlNMTOKEN_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlNMTOKEN_cre, s))
 
     @staticmethod
     def isXmlNumber(s:str) -> bool:
         """Check whether the token is a number. This turns off re.Unicode,
         lest we get all the non-Arabic digits (category [Nd]).
         """
-        return bool(re.fullmatch(XmlStrings.isXmlNumber_re, s))
+        return bool(re.fullmatch(XmlStrings.isXmlNumber_cre, s))
 
 
     ###########################################################################

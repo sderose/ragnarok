@@ -66,7 +66,7 @@ class FormatOptions:
         # Canonicalization (see Canoncal XML, esp. 1.4.3 and 2.2)
         self.canonical:bool = False     # Use Canonical XML syntax?         TODO
         self.IgnoreComments = False
-        self.TrimTextNodes = False      #                                   TODO
+        self.TrimTextNodes = False      #   same as stripTextNodes?         TODO
         self.PrefixRewrite = False
         self.QNameAware = None
 
@@ -76,11 +76,11 @@ class FormatOptions:
         self.standalone = None          # 'cuz toprettyxml wants it
         self.includeDoctype = True
         self.useEmpty:bool = True       # Use XML empty-element syntax
-        self.useCDATA:bool = True       # Use CDATA when textNode.isCDATA
         self.emptySpace:bool = True     # Include a space before the /
         self.quoteChar:str = '"'        # Char to quote attributes
         self.sortAttrs:bool = False     # Alphabetical order (cf readOrder)
         self.normAttrs = False          # Normalize whitespace in attributes
+        self.useCDATA:bool = True       # Use CDATA when textNode.isCDATA
 
         # Escaping
         self.escapeGT:bool = False      # Escape > in content
@@ -242,7 +242,7 @@ class FormatXml:
         if not fo:
             fo = FormatOptions.getDefaultFO(
                 indent=indent, newl=newl, encoding=encoding, standalone=standalone)
-            lg.info(fo.tostring())
+            #lg.info(fo.tostring())
 
         try:
             ntype = node.nodeType

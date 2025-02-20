@@ -1,42 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html [
-   <!ELEMENT html   (head, body)>
-   <!ELEMENT head   (title)>
-   <!ELEMENT body   (div|p)*>
+    <!ELEMENT html   (head, body)>
+    <!ELEMENT head   (title)>
+    <!ELEMENT body   (div|p)*>
 
-   <!ELEMENT div        (#PCDATA | p | ul | ol | dl | h1 | h2 | h3 | h4 | h5)*>
-   <!ELEMENT p          (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
-   <!ELEMENT ul         (li*)>
-   <!ELEMENT ol         (li*)>
-   <!ELEMENT li         (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
-   <!ATTLIST p          id      ID      #IMPLIED>
+    <!ELEMENT div        (#PCDATA | p | ul | ol | dl | h1 | h2 | h3 | h4 | h5)*>
+    <!ELEMENT p          (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
+    <!ELEMENT ul         (li*)>
+    <!ELEMENT ol         (li*)>
+    <!ELEMENT li         (#PCDATA | i | b | tt | u | sup | sub | abbr)*>
+    <!ATTLIST p          id      ID      #IMPLIED>
 
-   <!ELEMENT dl         (dt, dd)* >
+    <!ELEMENT dl         (dt, dd)* >
+
+    <!ATTLIST p
+        lang      CDATA    'en'
+        class     NMTOKENS #IMPLIED
+     >
+
+
+     <!--
+        id        ID       #IMPLIED
+        alt       CDATA    #IMPLIED
+        greens    IDREFS   #IMPLIED
+        ent       ENTITY   #IMPLIED
+        ents      ENTITIES #IMPLIED
+        nt        NMTOKEN  #IMPLIED
+
+        egg       (foo)         "foo"
+        eggs      (ban|bar|baz) "bar"
+
+        monty     CDATA    #FIXED "python&#65;&lt;"
+        >
+     -->
+
+    <!NOTATION png   SYSTEM "pblort">
 
     <!--
-   <!ATTLIST p
-       lang      CDATA    'en'
-       class     NMTOKENS #IMPLIED
-       id        ID       #IMPLIED
-       alt       CDATA    #IMPLIED
-       greens    IDREFS   #IMPLIED
-       ent       ENTITY   #IMPLIED
-       ents      ENTITIES #IMPLIED
-       nt        NMTOKEN  #IMPLIED
-
-       egg       (foo)         "foo"
-       eggs      (ban|bar|baz) "bar"
-
-       monty     CDATA    #FIXED "python&#65;&lt;"
-       >
+    <!NOTATION jpg   PUBLIC "-//jblort" "jblort">
     -->
-   <!NOTATION png   SYSTEM "pblort">
-   <!NOTATION jpg   PUBLIC "-//jblort" "jblort">
 
-   <!-- And a few random things. -->
-   <?someTarget just a pi="nil"?>
-   <!ENTITY spam      "eggs">
-   <!ENTITY scene24   SYSTEM "zork.xml">
-   <!ENTITY scene25   SYSTEM "zork.png" NDATA png>
+    <!-- And a few random things. -->
+    <?someTarget just a pi="nil"?>
+    <!ENTITY spam      "eggs">
+    <!ENTITY scene24   SYSTEM "zork.xml">
+    <!ENTITY scene25   SYSTEM "zork.png" NDATA png>
 
 ]>

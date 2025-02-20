@@ -501,7 +501,7 @@ class testEntityDef(unittest.TestCase):
         sys2 = "/home/jsmith/docs/foo.xml"
 
         # Some kinds of identifiers
-        ds1 = EntityDef("ds1", entSpace=EntitySpace.GENERAL, literal=lit1)
+        ds1 = EntityDef("ds1", entSpace=EntitySpace.GENERAL, data=lit1)
         self.assertEqual(ds1.tostring(), "")
         ds2 = EntityDef("ds2", entSpace=EntitySpace.GENERAL, systemId=sys1)
         self.assertEqual(ds2.tostring(), "")

@@ -1,7 +1,8 @@
 ==TO DO==
 
 * make NewType via traversing XSDDatatypes (?)
-* more testing for xsparser, documenttype, jsonx
+* datatypes vs. units (like wikipedia macro
+* more testing for xsparser, documenttype, JBook
 
 
 ==Construction and setup API==
@@ -208,7 +209,7 @@ raise HierarchyRequestError, TypeError, or NotSupportedError?
 
 * Option to make plural attrs be list/dicts/sets? cf xsd
 
-* finish global attribute support
+* finish global attribute support and ##anyAttribute
 
 * Vector attrs (maybe just float{n} xsd list type with bounded length?)
 
@@ -217,7 +218,7 @@ Semantics for isEqualNode? Separate methods/options for cast vs. str values?
 
 * abbreviated attr names? meh
 
-* JsonX mapping for DTDs
+* JBook mapping for DTDs
 
 * Something like "+ANY(namespace, namespace)" -- useful enough to bother?
 
@@ -225,6 +226,17 @@ Semantics for isEqualNode? Separate methods/options for cast vs. str values?
     ** HTML ones en masse (from option in XML decl)
     ** Unicode-name-derived ones (stock abbrs, or min unique tokens?)
     ** <!SDATA [ name1 int1, ... ]>  Maybe allow multiple ints, and/or 'c'?
+
+Let the property-list dict be empty (or even ommitted?)
+if it (a) would only have "~", and with the same value as it's immediate
+prior sibling (this is a pretty common case in documents, and is very
+like the "<|>" extension).
+
+        [{ "~":"body" },
+          [{ "~":"p" }, "This is a short paragraph." ]
+          [{}, "And so is this." ]
+          [{}, "And this." ]
+        ]
 
 
 ==Parsing==
@@ -235,6 +247,9 @@ Treatment/dcl of HTML named entities
 
 unicode name entities? Cf Test/unicodeAbbrs.py, showing that abbreviating
 each token but the last to the first 4 characters, only leads to
+
+options to set boolean attribute value? or just base on XSD?
+
 
 ==Other==
 
@@ -280,3 +295,27 @@ because it's also the qname sep. maybe "::" or "?"
 * basedom (?) methods to turn olist or suspend/resume into an annotation, or
 into a join of part. So if you get an open, create an element, then later get
 a suspend or olist close....
+
+
+==Serializers==
+
+For FormatOptions, how best to control line-breaking? Most just have a single
+'indent' setting. I so far have:
+    * choice of newline and indent-string
+    * breaking for before and after begin and end-tags
+    * breaking before text nodes (TODO: Check for adjacent text n, CDATA,...)
+    * breaking before attributes
+    * excluding node from boundary breaking (say, for inlines)
+    * text wrapping
+    * text node stripping and whitespace node discarding
+
+That leaves:
+    * preserve-space (pre, etc.)
+    * no break between adjacent end-tags (or start-tags)
+    * breaking around PI, comment, CDATA, etc.
+    * breaking by what things are *meeting*
+    [ +/- element, attr, text, pi, comment, ms, dcl ] crossed w/ same set.
+But that would be 14**2 = 196 cases.
+=========
+
+See also note "Changes I've heard suggested for XML"
