@@ -12,7 +12,7 @@ from textwrap import wrap
 from html.entities import codepoint2name
 
 from basedomtypes import DOMException, NSuppE, ICharE, NodeType
-from xmlstrings import XmlStrings as XStr #, CaseHandler
+from xmlstrings import XmlStrings as Rune #, CaseHandler
 
 #from basedom import Node, NamedNodeMap, NodeList
 
@@ -139,7 +139,7 @@ class FormatOptions:
         if isinstance(v, str):
             v = v.split()
         for tag in v:
-            if not XStr.isXmlNMTOKEN(tag): raise ICharE(
+            if not Rune.isXmlNMTOKEN(tag): raise ICharE(
                 f"Bad name '{tag}' for setInlines().")
             self.tagInfos[tag] = "inline"
         return self.tagInfos
@@ -158,7 +158,7 @@ class FormatOptions:
         """
         if isinstance(source, dict):
             for tag, disp in source.items():
-                if not XStr.isXmlNMTOKEN(tag): raise ICharE(
+                if not Rune.isXmlNMTOKEN(tag): raise ICharE(
                     f"Bad name '{tag}' for setInlines().")
                 self.tagInfos[tag] = disp
             return self.tagInfos
@@ -175,7 +175,7 @@ class FormatOptions:
                 f"line {i}: taginfo file record lacks comma: {rec}.")
             tag = tag.strip()
             disp = disp.strip()
-            if not XStr.isXmlNMTOKEN(tag): raise ICharE(
+            if not Rune.isXmlNMTOKEN(tag): raise ICharE(
                 f"Bad name '{tag}' for setInlines().")
             self.tagInfos[tag] = disp
 
@@ -190,7 +190,7 @@ class FormatOptions:
     # TODO: fix attr order to do namespace dcl before other attrs, by ns URI
     # TODO: Only make one of these....
     @staticmethod
-    def getCanonicalFO():
+    def getCanonicalFO() -> 'FormatOptions':
         return FormatOptions(
             canonical = True,
             stripTextNodes = True,
@@ -205,7 +205,7 @@ class FormatOptions:
             useCDATA = False)
 
     @staticmethod
-    def getDefaultFO(**kwargs):
+    def getDefaultFO(**kwargs) -> 'FormatOptions':
         fo = FormatOptions(
             sortAttrs = True, normAttrs = True,
             newl = "\n", quoteChar = '"', htmlChars = False,
@@ -217,7 +217,7 @@ class FormatOptions:
             fo.setOption(k, v)
         return fo
 
-    def tostring(self):
+    def tostring(self) -> str:
         buf = "FormatOptions:\n"
         for k in sorted(list(dir(self))):
             if k.startswith("_"): continue
@@ -363,7 +363,7 @@ class FormatXml:
         return fo.ws + f"<!--{FormatXml.escapeComment(node.data) or ''}-->"
 
     @staticmethod
-    def _prettyCdataSection(node:'Node', fo:FormatOptions=None):
+    def _prettyCdataSection(node:'Node', fo:FormatOptions=None) -> str:
         return f"<![CDATA[{FormatXml.escapeCDATA(node.data)}]]>"
 
     @staticmethod
@@ -411,7 +411,7 @@ class FormatXml:
         If 'addQuotes' is set, also add the quotes.
         """
         if not fo: fo = fo = FormatOptions.getDefaultFO()
-        s = XStr.dropNonXmlChars(s)
+        s = Rune.dropNonXmlChars(s)
         s = s.replace('&', "&amp;")
         s = s.replace('<', "&lt;")
         # TODO Impl fo.escapeGT
@@ -431,7 +431,7 @@ class FormatXml:
         This always uses the predefined XML named special character references.
         """
         if not fo: fo = fo = FormatOptions.getDefaultFO()
-        s = XStr.dropNonXmlChars(s)
+        s = Rune.dropNonXmlChars(s)
         s = s.replace('&',   "&amp;")
         s = s.replace('<',   "&lt;")
         s = s.replace(']]>', fo.forMSC)
@@ -446,7 +446,7 @@ class FormatXml:
         although that's not recognized within CDATA.
         """
         if not fo: fo = fo = FormatOptions.getDefaultFO()
-        s = XStr.dropNonXmlChars(s)
+        s = Rune.dropNonXmlChars(s)
         s = s.replace(']]>', fo.forMSC)
         if fo.ASCII: s = FormatXml.escapeASCII(s, fo=fo)
         return s
@@ -457,7 +457,7 @@ class FormatXml:
         although that's not recognized within CDATA.
         """
         if not fo: fo = fo = FormatOptions.getDefaultFO()
-        s = XStr.dropNonXmlChars(s)
+        s = Rune.dropNonXmlChars(s)
         s = s.replace('--', fo.forCOM)
         if fo.ASCII: s = FormatXml.escapeASCII(s, fo=fo)
         return s
@@ -467,7 +467,7 @@ class FormatXml:
         """XML Defines no particular escaping for this..
         """
         if not fo: fo = fo = FormatOptions.getDefaultFO()
-        s = XStr.dropNonXmlChars(s)
+        s = Rune.dropNonXmlChars(s)
         s = s.replace('?>', fo.forPI)
         if fo.ASCII: s = FormatXml.escapeASCII(s, fo=fo)
         return s
@@ -485,7 +485,7 @@ class FormatXml:
             nonlocal fo
             return FormatXml.escapeOneChar(mat.group(1), fo=fo)
 
-        s = XStr.dropNonXmlChars(s)
+        s = Rune.dropNonXmlChars(s)
         s = re.sub(r'([^\x00-\x7E])', escASCIIFunction, s)
         #s = FormatXml.escapeText(s)
         return s

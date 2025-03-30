@@ -3,10 +3,7 @@
 #pylint: disable=W0201, C2801, W0401, W0614, W0212
 #
 import sys
-import os
 import unittest
-#import math
-#import random
 from collections import defaultdict
 from typing import List, Tuple, Callable
 
@@ -18,7 +15,8 @@ from basedom import DOMImplementation, getDOMImplementation
 from basedom import PlainNode, Node, Document, Element
 from basedom import Attr, NamedNodeMap, NodeList, RelPosition
 
-from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
+from makeTestDoc import (makeTestDoc0, makeTestDoc2, makeTestDocEachMethod,
+    DAT, DAT_K, DBG)
 
 descr = """
 To Do:
@@ -28,72 +26,13 @@ To Do:
 
 
 ###############################################################################
-# Constants for document generator
-#
-dataDir = os.environ["sjdUtilsDir"] + "/Data"
-
-class K(DAT):
-    doc_path = "file://%s/TextFormatSamples/sample.xml" % (dataDir)
-
-    root_name = 'article'
-    p_name = "para"
-    inline_name = "q"
-
-    ns_prefix = "docbook"
-    ns_uri = "http://docbook.org/ns/docbook"
-
-    pi_target = "someTarget"
-    pi_data = """someData='foo' bar="baz" 12.1?"""
-    com_data = "Comments are cool. Lots of potassium."
-    cdata_data = "For example, in XML you say <p>foo</p> [[sometimes]]."
-    base_attr_name = "anAttrName"
-    new_name = "newb"
-    attr1_name = "class"
-    attr1_value = "important"
-    text1 = "aardvark"
-    udk1_name = "myUDKey"
-    udk1_value = "999"
-
-    outer = """<para id="foo">From xml string</para>"""
-
-
-###############################################################################
-#
-class makeTestDocEachMethod(makeTestDoc0):
-    """Make a common starting doc. Superclass makes just root element.
-    Add 10 children, same type, @n numbered, and one more attr plus text.
-    TODO: Move to makeTestDoc.
-    """
-    def __init__(self, dc:type=DAT, show:bool=False):
-        super().__init__(dc=dc)
-        assert isinstance(self.n.impl, DOMImplementation)
-        assert isinstance(self.n.doc, Document)
-        assert isinstance(self.n.docEl, Element)
-
-        for i in range(10):
-            p = self.n.doc.createElement(self.dc.p_name)
-            p.setAttribute(self.dc.attr1_name, self.dc.attr1_value)
-            p.setAttribute("n", i)
-            t = self.n.doc.createTextNode(self.dc.text1)
-            p.appendChild(t)
-            self.n.docEl.appendChild(p)
-
-        #DBG.dumpNode(self.n.docEl)
-        #y = self.makeSampleDoc()
-        #x = self.makeSampleDoc()
-
-        if show: sys.stderr.write(
-            "makeTestDocEachMethod produced: " + self.n.doc.outerXML)
-
-
-###############################################################################
 #
 class TestExceptions(unittest.TestCase):
     """This only tests that all the whatwg-defined ones exist,
     not whether there are extras, and not the legacy DOM ones.
     """
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
         self.n = madeDocObj.n
 
     def isEx(self, theClass:type):
@@ -138,7 +77,7 @@ class TestExceptions(unittest.TestCase):
 #
 class testNodeType(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
         self.n = madeDocObj.n
 
     def tests(self):
@@ -200,7 +139,7 @@ class TestDOMImplementation(unittest.TestCase):
 #
 class testNodeList(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
         self.n = madeDocObj.n
 
         madeDocObj.addChildren(self.n.docEl, n=20)
@@ -223,16 +162,16 @@ class testNodeList(unittest.TestCase):
         for n in range(len(nl)):
             self.assertEqual(nl.item(n), docEl.childNodes[origLen-n-1])
 
-        #self.assertRaises(NotSupportedError, nl.__mul__, 2)
-        #self.assertRaises(NotSupportedError, nl.__rmul__, 2)
+        #with self.assertRaises(NotSupportedError): nl.__mul__(2)
+        #with self.assertRaises(NotSupportedError): nl.__rmul__(2)
 
 
 ###############################################################################
 #
 class testPlainNode(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -243,8 +182,8 @@ class testPlainNode(unittest.TestCase):
         with self.assertRaises(AttributeError):
             pnode.__contains__(12)
 
-        #self.assertRaises(IndexError, docEl.childNodes[200])  # TODO
-        #self.assertRaises(IndexError, docEl.childNodes[-200])
+        #with self.assertRaises(IndexError): docEl.childNodes[200])  # TODO
+        #with self.assertRaises(IndexError): docEl.childNodes[-200])
 
         if (0):
             self.assertIsNone(pnode.prefix)
@@ -304,7 +243,7 @@ class testPlainNode(unittest.TestCase):
         nch = len(pnode)
         x = self.dc.p_name
         self.assertEqual(pnode.count(x), 0)
-        #self.assertRaises(ValueError, pnode.index, x, 1, 2)
+        #with self.assertRaises(ValueError): pnode.index, x, 1, 2)
         newChild = self.n.doc.createElement(self.dc.new_name)
         pnode.append(newChild)
         self.assertEqual(len(pnode), nch+1)
@@ -329,8 +268,8 @@ class testPlainNode(unittest.TestCase):
 #
 class testNode(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def testsNode(self):
@@ -338,8 +277,8 @@ class testNode(unittest.TestCase):
         el8 = docEl.childNodes[8]
         node = Node(ownerDocument=None, nodeName="notAnElement")
 
-        #self.assertRaises(IndexError, docEl.childNodes[200])
-        #self.assertRaises(IndexError, docEl.childNodes[-200])
+        #with self.assertRaises(IndexError): docEl.childNodes[200]
+        #with self.assertRaises(IndexError): docEl.childNodes[-200]
 
         self.assertIsNone(node.prefix)
         self.assertIsNone(node.localName)
@@ -423,13 +362,13 @@ class testNode(unittest.TestCase):
         node.checkNode()
         self.assertEqual(node.getUserData(self.dc.udk1_name), self.dc.udk1_value)
 
-        self.assertRaises(HierarchyRequestError, node.removeNode)
+        with self.assertRaises(HierarchyRequestError): node.removeNode()
 
         nch = len(node)
         self.assertEqual(nch, 0)
         x = self.dc.p_name
         self.assertEqual(node.count(x), 0)
-        #self.assertRaises(ValueError, node.index, x, 1, 2)
+        #with self.assertRaises(ValueError): node.index(x, 1, 2)
 
     def testsNode3(self):
         #docEl = self.n.docEl
@@ -456,10 +395,10 @@ class testNode(unittest.TestCase):
 
 class testNodeType_Predicates(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
-        madeDocObj.addAllTypes(self.n.docEl, dc=K, n=1, specials=True)
+        madeDocObj.addAllTypes(self.n.docEl, dc=DAT_K, n=1, specials=True)
 
     def tests(self):
         docEl = self.n.docEl
@@ -510,8 +449,8 @@ class testNodeType_Predicates(unittest.TestCase):
 #
 class testDocument(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -560,8 +499,8 @@ class testDocument(unittest.TestCase):
 #
 class testElement(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -856,7 +795,7 @@ class testElement(unittest.TestCase):
 
         self.assertFalse(docEl.isEqualNode(None))
 
-    def test_getitem(self):
+    def test_getitem2(self):
         doc = self.n.doc
         docEl = self.n.docEl
         self.assertEqual(len(docEl), 10)
@@ -981,8 +920,8 @@ class testElement(unittest.TestCase):
 #
 class testText(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -1020,8 +959,8 @@ class testText(unittest.TestCase):
 #
 class testCDATASection(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -1052,8 +991,8 @@ class testCDATASection(unittest.TestCase):
 #
 class testProcessingInstruction(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -1096,8 +1035,8 @@ class testProcessingInstruction(unittest.TestCase):
 #
 class testComment(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -1132,8 +1071,8 @@ class testEntityReference(unittest.TestCase):
     """TODO What else to support for test_EntityReference, if anything?
     """
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -1149,8 +1088,8 @@ class testEntityReference(unittest.TestCase):
 #
 class testAttr(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     attrExpr = r'\w+="[^"]*"$'
@@ -1213,8 +1152,8 @@ class testAttr(unittest.TestCase):
 #
 class testNamedNodeMap(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -1239,8 +1178,8 @@ class testNamedNodeMap(unittest.TestCase):
 #
 class testGenerator1(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=DAT_K)
+        self.dc = DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
@@ -1276,7 +1215,7 @@ class testGenerator1(unittest.TestCase):
 #
 class testGenerator2(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDoc0(dc=K)
+        madeDocObj = makeTestDoc0(dc=DAT_K)
         self.n = madeDocObj.n
         self.n.fan = 5
         madeDocObj.addFullTree(self.n.docEl, n=self.n.fan, depth=2,

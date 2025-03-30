@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 #from basedomtypes import FlexibleEnum
 from types import SimpleNamespace
@@ -56,5 +56,5 @@ RWord = SimpleNamespace(**{
     #"NN_DOCUMENT"    : "#document",
     #"NN_FRAGMENT"    : "#document-fragment",
 
-    "NN_PI_JSONX"    : "#pi",
+    "NN_PI_JBOOK"    : "#pi",
 })

@@ -7,7 +7,7 @@
 #     Protocols
 #
 from typing import NewType, Union, TextIO, IO, Protocol, Any
-from enum import Enum, IntEnum, StrEnum
+from enum import Enum, IntEnum  #, StrEnum
 import re
 from datetime import datetime, date, time, timedelta
 
@@ -234,7 +234,7 @@ class NodeType(IntEnum):
 
 ###############################################################################
 #
-class SepChar(StrEnum):
+class SepChar:  #(StrEnum):  # TODO ?
     """A few Unicode characters I like for standing out in mid-text,
     for example to mark where the parser stopped.
     """

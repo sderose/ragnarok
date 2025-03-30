@@ -7,7 +7,7 @@ import re
 from basedomtypes import NMTOKEN_t, dtr
 from basedomtypes import HReqE, NSE
 from domenums import RWord
-from xmlstrings import XmlStrings as XStr, CaseHandler, Normalizer
+from xmlstrings import XmlStrings as Rune, CaseHandler, Normalizer
 #from basedom import Node, Document, Element, Attr
 
 NS_ANY = RWord.NS_ANY
@@ -26,7 +26,7 @@ class AttrChoice:
         ans:str=NS_ANY, aname:str=None,
         valgen:Callable=None, caseH:Union[CaseHandler, Normalizer]=None):
 
-        if not XStr.isXmlName(aname): raise KeyError(
+        if not Rune.isXmlName(aname): raise KeyError(
             f"Bad/no attribute name specified ('{aname}').")
         if valgen is not None and not callable(valgen): raise KeyError(
             f"valgen is {type(valgen)}, not a Callable or None")

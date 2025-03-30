@@ -10,7 +10,7 @@ import base64
 
 from basedomtypes import FlexibleEnum, DOMException
 #from domenums import RWord
-from xmlstrings import XmlStrings as XStr, WSHandler
+from xmlstrings import XmlStrings as Rune, WSHandler
 #from basedom import Node
 
 
@@ -145,7 +145,7 @@ class DateTimeFrag:
 
         if timestring: self.set_any(timestring)
 
-    def copy(self):
+    def copy(self) -> 'DateTimeFrag':
         newDTF = DateTimeFrag()
         newDTF._year      = self._year
         newDTF._month     = self._month
@@ -196,7 +196,7 @@ class DateTimeFrag:
     def year(self) -> int:
         return self._year
     @year.setter
-    def year(self, y:int):
+    def year(self, y:int) -> None:
         y = int(y)
         if y < 0 or y > 9999: raise ValueError(f"Bad year {y}.")
         self._year = y
@@ -205,7 +205,7 @@ class DateTimeFrag:
     def month(self) -> int:
         return self._month
     @month.setter
-    def month(self, m:int):
+    def month(self, m:int) -> None:
         m = int(m)
         if m < 1 or m > 12: raise ValueError(f"Bad month {m}.")
         self._month = m
@@ -214,7 +214,7 @@ class DateTimeFrag:
     def day(self) -> int:
         return self._day
     @day.setter
-    def day(self, d:int):
+    def day(self, d:int) -> None:
         d = int(d)
         if d < 1 or d > 31: raise ValueError(f"Bad day {d}.")
         if d == 31 and self.month in (2, 4, 6, 9, 11): return False
@@ -228,7 +228,7 @@ class DateTimeFrag:
     def hour(self) -> int:
         return self._hour
     @hour.setter
-    def hour(self, h:int):
+    def hour(self, h:int) -> None:
         h = int(h)
         if h < 0 or h > 24: raise ValueError(f"Bad hour {h}.")
         self._hour = h
@@ -237,7 +237,7 @@ class DateTimeFrag:
     def minute(self) -> int:
         return self._minute
     @minute.setter
-    def minute(self, m:int):
+    def minute(self, m:int) -> None:
         m = int(m)
         if m < 0 or m > 59: raise ValueError(f"Bad minute {m}.")
         self._minute = m
@@ -246,7 +246,7 @@ class DateTimeFrag:
     def second(self) -> float:
         return self._second
     @second.setter
-    def second(self, s:float):
+    def second(self, s:float) -> None:
         """Don't forget leap seconds.
         """
         s = float(s)
@@ -257,7 +257,7 @@ class DateTimeFrag:
     def zone(self) -> str:
         return self._zone
     @zone.setter
-    def zone(self, z:int):
+    def zone(self, z:int) -> None:
         # zone offset is stored as number of minutes.
         z = int(z)
         if z < -(12*60) or z > (12*60): raise ValueError(f"Bad time zone {z}.")
@@ -542,6 +542,7 @@ class base64Binary(bytes):
 class XsdFacet(Enum):
     """Cf https://www.w3.org/TR/xmlschema11-1/
     """
+    name = 0
     minExclusive = 1
     minInclusive = 2
     maxExclusive = 3
@@ -562,6 +563,9 @@ class XsdFacet(Enum):
     pybase = 101        # Python cover type if any
     base = 102          # XSD supertype
     variety = 103       # "atomic", "list", or "union"
+
+    # This is custom, just to permit case-ignoring for reserved values (true, etc)
+    caseIgnore = 200
 
 # (ENTITY ones are defined later)
 
@@ -607,60 +611,60 @@ XSDDatatypes = {
     "NMTOKEN": XsdType({
         "pybase": str,
         "base": "token",
-        "pattern": XStr.NMTOKEN_re,
+        "pattern": Rune.NMTOKEN_re,
     }),
     "NMTOKENS": XsdType({
         "pybase": str,
         "base": "NMTOKEN",
-        "pattern": r"%s(\s+%s)*" % (XStr.NMTOKEN_re, XStr.NMTOKEN_re),
+        "pattern": r"%s(\s+%s)*" % (Rune.NMTOKEN_re, Rune.NMTOKEN_re),
         "variety": "list",
     }),
     "Name": XsdType({
         "pybase": str,
         "base": "token",
-        "pattern": XStr.QQName_re,
+        "pattern": Rune.QQName_re,
     }),
     "NCName": XsdType({
         "pybase": str,
         "base": "Name",
-        "pattern": XStr.NCName_re,
+        "pattern": Rune.NCName_re,
     }),
     "ID": XsdType({
         "pybase": str,
         "base": "NCName",
-        "pattern": XStr.NCName_re,
+        "pattern": Rune.NCName_re,
     }),
     "IDREF": XsdType({
         "pybase": str,
         "base": "NCName",
-        "pattern": XStr.NCName_re,
+        "pattern": Rune.NCName_re,
     }),
     "IDREFS": XsdType({
         "pybase": str,
         "base": "IDREF",
-        "pattern": r"%s(\s+%s)*" % (XStr.QName_re, XStr.QName_re),
+        "pattern": r"%s(\s+%s)*" % (Rune.QName_re, Rune.QName_re),
         "variety": "list",
     }),
     "ENTITY": XsdType({
         "pybase": str,
         "base": "NCName",
-        "pattern": XStr.NCName_re,
+        "pattern": Rune.NCName_re,
     }),
     "ENTITIES": XsdType({
         "pybase": str,
         "base": "ENTITY",
-        "pattern": r"%s(\s+%s)*" % (XStr.NCName_re, XStr.NCName_re),
+        "pattern": r"%s(\s+%s)*" % (Rune.NCName_re, Rune.NCName_re),
         "variety": "list",
     }),
     "QName": XsdType({
         "pybase": str,
         "base": "string",
-        "pattern": XStr.QName_re,
+        "pattern": Rune.QName_re,
     }),
     "NOTATION": XsdType({
         "pybase": str,
         "base": "string",
-        "pattern": XStr.QName_re,
+        "pattern": Rune.QName_re,
     }),
 
     ###########################################################################
@@ -668,9 +672,12 @@ XSDDatatypes = {
         "pybase": bool,
         "base": None,
         "pattern": r"true|false|1|0",
+        "caseIgnore": False,  # Custom
     }),
 
     ###########################################################################
+    #
+    # Where to handled Inf, Nan, etc (incl. caseIgnore)
     "decimal": XsdType({
         "pybase": float,
         "base": None,
@@ -681,11 +688,13 @@ XSDDatatypes = {
         "pybase": float,
         "base": "decimal",
         "pattern": r"(\+|-)?(\d+(\.\d*)?|\.\d+)" + EXPNAN_re,
+        "caseIgnore": False,  # Custom
     }),
     "double": XsdType({
         "pybase": float,
         "base": "decimal",
         "pattern": r"(\+|-)?(\d+(\.\d*)?|\.\d+)" + EXPNAN_re,
+        "caseIgnore": False,  # Custom
     }),
 
     ###########################################################################
@@ -941,6 +950,7 @@ for typ0, facet in XSDDatatypes.items():
     if not isinstance(facet, XsdType): raise DOMException(
         f"XSD type '{typ0}' has {type(facet)}, not XsdType.")
     # Required facets
+    facet["name"] = typ0
     if "pybase" not in facet: raise DOMException(
         f"Missing required facet 'pybase' for XSD type '{typ0}'.")
     elif not isinstance(facet["pybase"], type): raise DOMException(
@@ -963,31 +973,30 @@ for typ0, facet in XSDDatatypes.items():
     if "variety" not in facet: facet["variety"] = "atom"
     if "whiteSpace" not in facet: facet["whiteSpace"] = "collapse"
     for prop in facet.keys():
-        if prop not in XsdFacet.__members__: raise DOMException(
-            f"Unrecognized facet '{prop}' for XSD type '{typ0}'.")
+        if prop not in XsdFacet.__members__:
+            raise DOMException(
+                f"Facet '{prop}' for XSD type '{typ0} not in facet enum'.")
 
 def facetCheck(val:str, typ:Union[str, XsdType]) -> XsdFacet:
     """Return the first XsdFacet that the value violates (if any),
     or None if all its facet constraints are satisfied.
-    TODO: Issues:
+    TODO: facetCheck issues:
         Do a recursive check for the chain of base types (except string).
         Should this return all violated facets? Positions in lists?
         *be* of the type, or just castable?
             Almost anything can cast to bool or string; float casts to int.
             Should int 31 (vs. "31") count as GDay (etc.)?
-        Should there be a configurable bool normalizer?
-            (yes/no, 1/0, T/F, True/False, true/false, on/off,...)
+        Should bool be configurable?
         Must the value *directly* cast to its pybase?
         Does normalizedstring mean it is normalizable, or already normed?
         What about case and unorm?
         What about None and ""?
     """
-    if not isinstance(typ, XsdType):
-        try:
-            typ = XSDDatatypes[typ]
-        except KeyError as e:
-            raise TypeError(
-                f"Unrecognized XSD type name '{typ}' for value '{val}'.") from e
+    try:
+        typ = XSDDatatypes[typ]
+    except KeyError as e:
+        raise TypeError(
+            f"Unrecognized XSD type name '{typ}' for value '{val}'.") from e
 
     if not isinstance(val, str): raise TypeError(
         "Value to check against XSD datatype '%s' is a Python '%s', not str."
@@ -1018,7 +1027,9 @@ def facetCheck(val:str, typ:Union[str, XsdType]) -> XsdFacet:
         elif typeSpec["whiteSpace"] == "replace":
             sval = WSHandler.xreplaceSpace(sval)
     if "pattern" in typeSpec:
-        if not re.fullmatch(typeSpec["pattern"], sval):
+        caseFlag = re.I if ("caseIgnore" in typeSpec["name"] and
+            typeSpec["name"]["caseIgnore"]) else 0
+        if not re.fullmatch(typeSpec["pattern"], sval, flags=caseFlag):
             #if typ["pybase"] == DateTimeFrag: print(
             #    f"""\nPattern fail: '{sval}' vs. r'{typeSpec["pattern"]}'.""")
             return XsdFacet.pattern

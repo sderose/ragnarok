@@ -8,7 +8,7 @@ import codecs
 import logging
 import re
 
-from xmlstrings import XmlStrings as XStr
+from xmlstrings import XmlStrings as Rune
 
 lg = logging.getLogger("addCharacterEntities.py")
 
@@ -143,7 +143,7 @@ class CharacterEntities:
 
     def add(self, name:str, cp:int, force:bool=False) -> bool:
         assert isinstance(name, str) and isinstance(cp, int)
-        if not XStr.isXmlName(name):
+        if not Rune.isXmlName(name):
             raise KeyError("Char name is not an XML NAME: '%s'." % (name))
         if cp < 1 or cp > sys.maxunicode:
             raise ValueError("Code point for '%s' is out of range: %06x." % (name, cp))
@@ -165,7 +165,7 @@ class CharacterEntities:
                 % (name, self.name2codepoint[name], cp))
         return True
 
-    def delete(self, name:str, cp:int):
+    def delete(self, name:str, cp:int) -> None:
         """Remember there can be multiple names for the same code point.
         So if we delete one of them, codepoint2name may need to change to another.
         """
@@ -179,7 +179,7 @@ class CharacterEntities:
                     return
             del self.codepoint2name[cp]
 
-    def addHTML(self):
+    def addHTML(self) -> None:
         from html.entities import codepoint2name as HTMLc2n
         for cp, name in HTMLc2n.items():
             self.add(name, cp)
@@ -221,7 +221,7 @@ class CharacterEntities:
                 raise ValueError("Cannot parse ENTITY dcl at record %d: %s" % (recnum, rec))
             cpString = mat.group(2)[1:-1].strip()
             if cpString[0] == "&":
-                cpString = XStr.unescapeXml(cpString)
+                cpString = Rune.unescapeXml(cpString)
             if len(cpString) != 1:
                 raise ValueError("Couldn't resolve to char in ENTITY dcl "
                     "at record %d: %s" % (recnum, rec))

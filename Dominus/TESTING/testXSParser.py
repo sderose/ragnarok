@@ -13,7 +13,8 @@ from xml.parsers import expat
 
 from documenttype import EntityDef, EntitySpace, EntityParsing
 import xsparser
-from xsparser import StackReader, EntityFrame, XSParser
+from xsparser import XSParser
+from stackreader import InputFrame, StackReader
 from xmlstrings import CaseHandler
 from saxplayer import SaxEvent
 #from makeTestDoc import makeTestDoc0, DAT_DocBook  #, DBG
@@ -45,7 +46,7 @@ tdoc = """<html>
 </html>
 """
 
-depth = 0
+myStack = []
 eventCounts = defaultdict(int)
 
 
@@ -54,20 +55,18 @@ eventCounts = defaultdict(int)
 #
 def pr(s:str, *args):
     if args: s += " ".join(args)
-    print("  " * depth, "Event: ", s)
+    print("  " * len(myStack), "Event: ", s)
 
 def common(typ:SaxEvent, name:str="") -> None:
     eventCounts[typ] += 1
     pr("%s:  %s", typ.name, name)
 
 def StartElement(name:str, attrs:Dict=None) -> None:
-    global depth
     common(SaxEvent.START)
-    depth += 1
+    myStack.append(name)
 def EndElement(name:str) -> None:
-    global depth
     common(SaxEvent.END)
-    depth -= 1
+    myStack.pop()
 def CharacterData(data:str="") -> None:
     common(SaxEvent.CHAR)
 def StartCdataSection() -> None:
@@ -132,11 +131,10 @@ def setHandlers(parser):
     #parser.SkippedEntityHandler(entityName, is_parameter_entity)
 
 def runParser(pc:ModuleType, path:str=None, string:str=None, encoding:str="utf-8"):
-    global depth
     assert isinstance(expat, ModuleType)
     parser = pc.ParserCreate()
     setHandlers(parser)
-    depth = 0
+    myStack.clear()
     eventCounts.clear()
     if (path):
         print(f"Parsing file {path} with {pc.__name__}.")
@@ -168,8 +166,9 @@ class TestXSP(unittest.TestCase):
             entSpace=EntitySpace.GENERAL,
             entParsing=EntityParsing.PCDATA,
             systemId=sampleEnt)
-        eframe = EntityFrame(eDef=ch1)
-        thePath = eframe.findLocalPath(eDef=ch1)
+        frame = InputFrame()
+        frame.addEntity(ch1)
+        thePath = frame.findLocalPath(eDef=ch1)
         self.assertTrue(os.path.isfile(thePath))
 
         #data="<chap><ti>Hello</ti></chap>"
@@ -180,37 +179,32 @@ class TestXSP(unittest.TestCase):
             data="i | b | tt | mono")
 
         with self.assertRaises(OSError):
-            _ch2 = EntityDef(
+            ch2 = EntityDef(
                 entName="chap2",
                 entSpace=EntitySpace.GENERAL,
                 entParsing=EntityParsing.PCDATA,
                 systemId=sampleEnt)
 
-        ef = xsparser.EntityFrame(ch1)
-        while (c := ef.consume()):
+        frame = InputFrame()
+        frame.addEntity(ch2)
+        while (c := frame.consume()):
             assert len(c) == 1
-            ef.skipSpaces()
+            frame.skipSpaces()
 
-        self.assertFalse(ef.readConst(
+        self.assertFalse(frame.readConst(
             "PUBLIC", thenSp=True, folder=CaseHandler.UPPER))
-        self.assertFalse(ef.readBaseInt())
-        self.assertFalse(ef.readInt())
-        self.assertFalse(ef.readFloat())
-        self.assertFalse(ef.readName())
-        self.assertFalse(ef.readEnumName(names=[ "PUBLIC", "SYSTEM" ]))
-        self.assertFalse(ef.readRegex(r'"\w+"'))
-        self.assertFalse(ef.readToString(ender=">"))
-        self.assertFalse(ef.readToAnyOf(enders=[ "\n", "$" ]))
+        self.assertFalse(frame.readBaseInt())
+        self.assertFalse(frame.readInt())
+        self.assertFalse(frame.readFloat())
+        self.assertFalse(frame.readName())
+        self.assertFalse(frame.readEnumName(names=[ "PUBLIC", "SYSTEM" ]))
+        self.assertFalse(frame.readRegex(r'"\w+"'))
+        self.assertFalse(frame.readToString(ender=">"))
 
     def test_basicDTD(self):
-        sr = StackReader(rootPath=sampleDTD,
-            options={ "emptyEnd": False, "elementFold": False, "xsdType": False })
-        print(repr(sr))
-        sr.isOpen(space=EntitySpace.GENERAL, name="chap1")
-
-    def xxxtest_doc(self):
-        StackReader(rootPath=sampleDTD,
-            options={ "emptyEnd": True, "elementFold": True, "xsdType": True })
+        options = { "emptyEnd": False, "elementFold": False, "xsdType": False }
+        xsp = XSParser(options=options)
+        xsp.ParseFile(sampleDTD)
 
 
 ###############################################################################
@@ -268,8 +262,8 @@ class TestXSPExtensions(unittest.TestCase):
         """Parse and find syntax error; then set option and it should pass.
         """
         with self.assertRaises(SyntaxError):
-            import pudb; pudb.set_trace()
             xsp = XSParser()
+            #import pudb; pudb.set_trace()
             xsp.Parse(xml)
 
         xsp = XSParser(options={optName:optValue})
@@ -285,7 +279,7 @@ class TestXSPExtensions(unittest.TestCase):
     def XtryOption(self, *args):
         return
 
-    @unittest.skip
+    #@unittest.skip
     def testXLimits(self):
         ### Limits
         #
@@ -302,7 +296,7 @@ class TestXSPExtensions(unittest.TestCase):
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
             "entityDirs", [])  # Permitted dirs to get ents from
 
-    @unittest.skip
+    #@unittest.skip
     def testXCase(self):
         ### Case and Unicode
         #
@@ -314,16 +308,19 @@ class TestXSPExtensions(unittest.TestCase):
             "entityFold", CaseHandler.UPPER)
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
             "keywordFold", CaseHandler.UPPER)
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "uNormHandler", CaseHandler.UPPER)  #                       TODO
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "wsDef", None)  # (XML default)                             TODO
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "radix", ".")  # Decimal point choice                       TODO
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "noC1", False)  # No C1 controls                            TODO
+        self.XtryOption("""<doc><p id="foo">Ok.&#260;</p></doc>""",
+            "noC1", False)  # No C1 controls
 
-    @unittest.skip
+    #@unittest.skip
+    def testXCase2(self):  # TODO Add cases
+        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
+            "uNormHandler", CaseHandler.UPPER)
+        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
+            "wsDef", None)
+        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
+            "radix", ".")
+
+    #@unittest.skip
     def testXSchema(self):
         ### Schemas
         #
@@ -331,39 +328,42 @@ class TestXSPExtensions(unittest.TestCase):
             "schemaType", "DTD")  # <!DOCTYPE foo SYSTEM "" NDATA XSD>
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
             "fragComments", True)  # In-dcl like SGML
-        self.XtryOption("""<!DOCTYPE foo [ <!ENTITY soup (i b tt mono)> ]>""",
-            "setDcls", True)  # <!ENTITY % x SET (i b tt)>              TODO
+        #self.XtryOption("""<!DOCTYPE foo [ <!ENTITY soup (i b tt mono)> ]>""",
+        #    "setDcls", True)  # <!ENTITY % x SET (i b tt)>
 
-    @unittest.skip
-    def testXElements(self):
+    #@unittest.skip
+    def testXElements(self):  # TODO Add cases
         ### Elements
         #
-        self.XtryOption("""<!DOCTYPE foo [ <!ELEMENT (x|y|z) #PCDATA> ]>""", # TODO
+        self.XtryOption("""<!DOCTYPE foo [ <!ELEMENT (x|y|z) #PCDATA> ]>""",
             "groupDcl", True)  #
-        self.XtryOption("""<!DOCTYPE foo [ <!ELEMENT p - - ANY> ]>""",  # TODO
+        self.XtryOption("""<!DOCTYPE foo [ <!ELEMENT p - - ANY> ]>""",
             "oflag", True)
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
+        self.XtryOption("""<!DOCTYPE foo [ <!ELEMENT p RCDATA> ]>""",
             "sgmlWord", True)  # CDATA RCDATA #CURRENT etc.
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "mixel", True)  # Dcl content ANYELEMENT                    TODO
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
+            "mixel", True)  # Dcl content ANYELEMENT
+        self.XtryOption("""<!DOCTYPE foo [ <!ELEMENT x ANY -(p|q) +(i)> ]>""",
             "mixins", True)  # cf incl exceptions
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "repBrace", True)  # {min max} for repetition
+        self.XtryOption("""<!DOCTYPE foo [ <!ELEMENT p (x|y{3,9)|z){1,}>""",
+            "repBrace", True)  # {min,max} for repetition
+        self.XtryOption("""<!DOCTYPE foo [ <!ELEMENT p (x|y{a!})|z)>""",
+            "repBrace", True)  # {min,max} for repetition
+
         self.tryOption("""<doc><p id="foo">Ok.</></doc>""",
             "emptyEnd", True)  # </>
-        self.tryOption("""<doc><p id="foo">Ok.<|>right<|>ok.</p></doc>""",  # TODO
+        self.tryOption("""<doc><p id="foo">Ok.<|>right<|>ok.</p></doc>""",
             "restart", True)
-        self.XtryOption("""<doc><p|q id="foo">Ok.</p|q></doc>""",  # TODO
+        self.XtryOption("""<doc><p|q id="foo">Ok.</p|q></doc>""",
             "simultaneous", True)
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "multiTag", True)  # <div/title>...</title/div>             TODO
+            "multiTag", True)  # <div/title>...</title/div>
         self.tryOption("""<doc><p id="foo">Ok.<-p>not there<+p> but there</p></doc>""",
             "suspend", True)   # TODO
         self.tryOption("""<doc><p id="foo">Ok, <i>dude, </p> there.</i></doc>""",
             "olist", True)
 
-    @unittest.skip
+    #@unittest.skip
     def testXAttributes(self):
         ### Attributes
         #
@@ -373,50 +373,116 @@ class TestXSPExtensions(unittest.TestCase):
         self.tryOption("""<!DOCTYPE X [
             <!ATTLIST foo #ANY CDATA #IMPLIED> ]>""",
             "anyAttr", True)
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "undeclaredAttrs", True)  #                                 TODO
         self.tryOption("""<!DOCTYPE X [
             <!ATTLIST foo x float #IMPLIED> ]>""",
             "xsdType", True)
         self.XtryOption("""<!DOCTYPE X [
             <!ATTLIST foo x floats #IMPLIED> ]>""",
-            "xsdPlural", True)                                        # TODO
+            "xsdPlural", True)
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
             "specialFloat", True)  # Nan Inf etc. (needed?)
         self.XtryOption("""<!DOCTYPE X [
             <!ATTLIST quo cid COID #IMPLIED> ]>""",
-            "coID", True)                                             # TODO
+            "coID", True)
         self.XtryOption("""<!DOCTYPE X [
-            <!ATTLIST quo id ID #IMPLIED qid QID #IMPLIED> ]>""",
-            "nsID", True)                                             # TODO
+            <!ATTLIST quo id ID #IMPLIED qid QID #IMPLIED> ]>
+            <X xmlns:ns1="http://example.com/ns"><quo id="ns1:myId">eh?</quo></X>""",
+            "nsID", True)
         self.XtryOption("""<!DOCTYPE X [
-            <!ATTLIST quo sid STACKID #IMPLIED> ]>""",
-            "stackID", True)                                          # TODO
+            <!ATTLIST quo sid STACKID #IMPLIED> ]>
+            <X><quo id="l1"><quo id="l2"><quo id="l3">eh?</quo></quo></quo></X>""",
+            "stackID", True)
         self.tryOption("""<doc><p id=foo>Ok.</p></doc>""",
             "unQuotedAttr", True)  # <p x=foo>
         self.tryOption("""<doc><p id=“foo”>Ok.</p></doc>""",
             "curlyQuote",True)
         self.tryOption("""<doc><p +border id="p1" -foo>Ok.</p></doc>""",
             "booleanAttr", True)
-        self.tryOption("""<doc><p id!="foo">Ok.</p></doc>""",
+        with self.assertRaises(SyntaxError):
+            self.tryOption("""<doc><p + id="p1">Ok.</p></doc>""",
+                "booleanAttr", True)
+            self.tryOption("""<doc><p id="p1" ->Ok.</p></doc>""",
+                "booleanAttr", True)
+        self.tryOption("""<doc><p id!="foo">Ok.</p><p>Got it?</p></doc>""",
             "bangAttr", True)  # != on first use to set dft
-        self.tryOption("""<doc><p id!int8="99">Ok.</p></doc>""",
-            "bangAttrType", True)  # !typ= to set datatype              TODO
+        self.tryOption("""<doc><p id!int8="99">Ok.</p><p>Got it?</p></doc>""",
+            "bangAttrType", True)
 
-    @unittest.skip
+    def testWF(self):
+        with self.assertRaises(SyntaxError):
+            # XML dcl
+            XSParser().Parse('<?xml version="1.1" encoding="utf-8" ?')
+            XSParser().Parse('<?xml version="1. ?>')
+            XSParser().Parse('<?xml version="2.0" ?>')
+            XSParser().Parse('<?xml encoding="utf-8" ?>')
+
+            # DOCTYPE
+            XSParser().Parse('<!DOCTYPE []>')
+            XSParser().Parse('<!DOCTYPE html ]>')
+            XSParser().Parse('<!DOCTYPE [ ] <book>')
+            XSParser().Parse('<!DOCTYPE [ Hello ]>')
+
+            # Dcls
+            XSParser().Parse('<!DOCTYPE [ <!ELEMENT> ]>')
+            XSParser().Parse('<!DOCTYPE [ <!ATTLIST> ]>')
+            XSParser().Parse('<!DOCTYPE [ <!ENTITY> ]>')
+            XSParser().Parse('<!DOCTYPE [ <!NOTATION> ]>')
+
+            # Start tags
+            XSParser().Parse('<book><p>Hello.</q></book>')
+            XSParser().Parse('<book><p>Hello.</q></book>')
+            XSParser().Parse('<book><p><q>Hello.</p></book>')
+            XSParser().Parse('<book><p/Hello.</q></book>')
+            XSParser().Parse('<book><p>Hello.')
+
+            # End tags
+            XSParser().Parse('<book><p>Hello.</</book>')
+            XSParser().Parse('<book><p>Hello.</p id="a1"></book>')
+            XSParser().Parse('<book><p>Hello.</p></book></book>')
+            XSParser().Parse('<book><p>Hello.</p></book>Junk')
+
+            # Attributes
+            XSParser().Parse('<book><p 12="a" >Hello.</p></book>')
+            XSParser().Parse('<book><p q:rs_12+a="a">Hello.</p></book>')
+            XSParser().Parse('<book><p id= >Hello.</p></book>')
+            XSParser().Parse('<book><p id=" >Hello.</p></book>')
+            XSParser().Parse('<book><p border>Hello.</p></book>')
+
+            # Marked sections
+            XSParser().Parse('<book><p>Hello.]]></book>')
+            XSParser().Parse('<book><![CD[ This is it.]]></book>')
+            XSParser().Parse('<book><![CDATA[ This is it.</book>')
+            XSParser().Parse('<book><![RCDATA[ This is it. ]]></book>')
+            XSParser().Parse('<book><![INCLUDE[ This is it. ]]></book>')
+            XSParser().Parse('<book><![IGNORE[ This is it. ]]></book>')
+            XSParser().Parse('<book><![TEMP[ This is it. ]]></book>')
+            XSParser().Parse('<book><![XYZZY[ This is it. ]]></book>')
+            XSParser().Parse('<book><![%foo;[ This is it. ]]></book>')
+
+            # PIs and comments
+            XSParser().Parse('<book><?tei rend=12?</book>')
+            XSParser().Parse('<book><!-- hello -></book>')
+
+            # Entity refs
+            XSParser().Parse('<book><p>&#;.</book>')
+            XSParser().Parse('<book><p>&#BEEF;.</book>')
+            XSParser().Parse('<book><p>&#xBEEF></book>')
+            XSParser().Parse('<book><p>&#x.</book>')
+
+    #@unittest.skip
     def testXVal(self):
         ### Validation (beyond WF!)
         #
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
             "valElementNames", True)  # Must be declared
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "valModels", True)     # Child sequences                    TODO
+        #self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
+        #    "valModels", True)
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
             "valAttrNames", True)  # Must be declared
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
             "valAttrTypes", True)  # Must match datatype
 
-    @unittest.skip
+    #@unittest.skip
     def testXEntities(self):
         ### Entities and special characters
         #
@@ -430,34 +496,54 @@ class TestXSPExtensions(unittest.TestCase):
             "multiPath", True)  # Multiple SYSTEM IDs
         self.XtryOption("""<!DOCTYPE X [
             <!SDATA nbsp 160 bull 0u2022> ]>""",
-            "multiSDATA", True) #                                       TODO
+            "multiSDATA", True)
         self.passOption("""<doc><p class="foo">Ok \u2022 \U00002022\t\\</p></doc>""",
             "backslash", True)
 
     def testXOther(self):
         ### Other
         #
+        print("******* In testXOther")
         self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
             "expatBreaks", True)  # Break at \n and entities like expat
         self.tryOption("""<doc><p id="foo">Ok.<!—emcomm—></p></doc>""",
-            "emComments", True)   # emdash as -- for comments           TODO
+            "emComments", True)
 
-        return
-
+    @unittest.skip
+    def testXOther2(self):
         self.tryOption("""<doc><p id="foo">Ok.<?foo left="12" bar="abc"</p></doc>""",
-            "piAttr", True)       # PI parsed like attributes.          TODO
-        self.passOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "piAttrDcl", True)    # <!ATTLIST ?target ...>              TODO
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "nsSep", ":")         #                                     TODO
-        self.XtryOption("""<doc><p id="foo">Ok.</p></doc>""",
-            "nsUsage", True)      # one/global/noredef/regular          TODO
+            "piAttr", True)
+        self.passOption("""<!DOCTYPE doc [
+            <!ATTLIST ?troff width NUTOKEN #IMPLIED>
+            ]><doc><p id="foo"><?troff width="12"?>Ok.</p></doc>""",
+            "piAttrDcl", True)
+        self.XtryOption("""<doc xmlns!ns1="http://example.com"><ns1!p id="foo">Ok.</p></doc>""",
+            "nsSep", "!")
+        self.XtryOption("""<doc xmlns:a="http://foo.com"><p id="foo">Ok.</p></doc>""",
+            "nsUsage", "global")      # one/global/noredef/regular
         self.tryOption("""<doc><p id="foo"><![IGNORE[Ok.]]></p></doc>""",
            "MSTypes", True)
         self.tryOption("""<doc><p id="foo"><![INCLUDE[Ok.]]></p></doc>""",
            "MSTypes", True)
         self.tryOption("""<doc><p id="foo"><![TEMP RCDATA[Ok.]]></p></doc>""",
            "MSTypes", True)
+
+    def testMisc(self):
+        sr = StackReader()
+
+        edef = EntityDef("ent1", entSpace=EntitySpace.GENERAL, data="ent1 value")
+        self.assertEqual(edef.entName, "ent1")
+
+        pedef = EntityDef("pent1", entSpace=EntitySpace.PARAMETER, data="xxx")
+        self.assertEqual(pedef.entName, "pent1")
+
+        #x = sr.expandPEntities("hello %pent1; there %pent1; world.")
+        #self.assertEqual(x, "hello xxx there xxx world.")
+
+        self.assertEqual(sr.depth, 0)
+        wl = sr.wholeLoc()
+        self.assertEqual(wl, "")
+        sr.closeAll()
 
 if __name__ == '__main__':
     unittest.main()

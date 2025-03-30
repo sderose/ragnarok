@@ -16,7 +16,7 @@ import logging
 
 from basedomtypes import NMTOKEN_t, NCName_t, XMLParser_P, NodeType, DOMException
 from domenums import RWord
-from xmlstrings import XmlStrings as XStr
+from xmlstrings import XmlStrings as Rune
 #import xsparser
 
 lg = logging.getLogger("dombuilder")
@@ -360,7 +360,7 @@ class DomBuilder():
         lg.info("StartElement for '%s' (depth %d).", name, len(self.nodeStack))
         #el.startLoc = self.parser.CurrentByteIndex
 
-        if not XStr.isXmlQName(name): raise SyntaxError(
+        if not Rune.isXmlQName(name): raise SyntaxError(
             f"Parser returned non-QName element name '{name}'.")
         el = self.domDoc.createElement(name)
 
@@ -381,7 +381,7 @@ class DomBuilder():
                     lName = n[len(nsp):]
                     el.declaredNS[lName] = v
                     continue
-                assert XStr.isXmlName(n)
+                assert Rune.isXmlName(n)
                 el.setAttribute(n, v)
 
         if self.domDoc.documentElement is None:

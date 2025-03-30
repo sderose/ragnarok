@@ -6,7 +6,7 @@
 #
 import re
 from typing import Match, List, Final
-
+import string
 import unicodedata
 from html.entities import name2codepoint
 
@@ -256,11 +256,19 @@ class XmlStrings:
     operations such as testing syntax forms, escaping strings, etc.
     """
     xmlSpaces_list = " \t\r\n"
-    xmlSpaces_re = r"[" + xmlSpaces_list + r"]+"
-    xmlSpaceOnly_re = re.compile("^[%s]*$" % (xmlSpaces_list))
+    punc_set = set("""-!"#$%&'()*+,./:;<=>?@[\\]^_`{|}~]""")
 
-    # This excludes colon (":"), since we want to distinguish QNames.
-    _nameStartChar_rangelist = [
+    xmlSpaces_re:Final = re.compile(r"[" + xmlSpaces_list + r"]+")
+    xmlSpaceOnly_re:Final = re.compile("^[%s]*$" % (xmlSpaces_list))
+    c0NonXml_re:Final = r"[\x00-\x08\x0b\x0c\x0e\x0f]"
+    c1_re:Final = r"[\x80-\x9F]"
+    privateUse_re:Final = r"[\uE000-\uF8FF\U000F0000-\U000FFFFF\U00100000-\U0010FFFF]"
+    punc_re:Final = '[' + re.escape(string.punctuation) + ']'
+
+    ### TODO Support switching between XML 10 and 1.1 sets
+
+    # This excludes colon (":") b/c we want to distinguish QNames.
+    _nameStartChar_rangelist:Final = [
         ( ord("_"), ord("_") ),
         ( ord("A"), ord("Z") ),
         ( ord("a"), ord("z") ),
@@ -279,7 +287,7 @@ class XmlStrings:
         # ( "0x00010000, 0x000EFFFF" ),
     ]
 
-    _nameCharAddl_rangelist = [
+    _nameCharAddl_rangelist:Final = [
         ( ord("-"), ord("-") ), # Watch out for regex
         ( ord("."), ord(".") ),
         ( ord("0"), ord("9") ),
@@ -288,28 +296,28 @@ class XmlStrings:
         ( 0x203F, 0x2040 ),     # Undertie and Char tie
     ]
 
-    _nonXml_rangelist = [
+    _nonXml_rangelist:Final = [
         ( 0x0000, 0x0008 ),
         ( 0x000B, 0x000B ),
         ( 0x000E, 0x001F ),
         ( 0xD800, 0xDFFF ),
     ]
 
-    _nameStartChar_rangespec = rangelist2rangespec(_nameStartChar_rangelist)
-    _addl_rangespec = rangelist2rangespec(_nameCharAddl_rangelist)
-    _nameChar_rangespec = _nameStartChar_rangespec + _addl_rangespec
-    _nonXml_rangespec = rangelist2rangespec(_nonXml_rangelist)
+    _nameStartChar_rangespec:Final = rangelist2rangespec(_nameStartChar_rangelist)
+    _addl_rangespec:Final = rangelist2rangespec(_nameCharAddl_rangelist)
+    _nameChar_rangespec:Final = _nameStartChar_rangespec + _addl_rangespec
+    _nonXml_rangespec:Final = rangelist2rangespec(_nonXml_rangelist)
 
     # These do not include ^...$, e.g. so can match against start of a buffer
     # regardless of what follows. Depending on the purpose, callers may have
     # to check -- for example, that a space follows a matching NCNAME.
     #
-    NMTOKEN_re = r"[%s]+" % (_nameChar_rangespec)
-    NCName_re  = r"[%s][%s]*" % (_nameStartChar_rangespec, _nameChar_rangespec)
+    NMTOKEN_re:Final = r"[%s]+" % (_nameChar_rangespec)
+    NCName_re:Final  = r"[%s][%s]*" % (_nameStartChar_rangespec, _nameChar_rangespec)
 
-    QName_re = r"%s(:%s)?" % (NCName_re, NCName_re)
-    QQName_re = r"%s(:%s)*" % (NCName_re, NCName_re)
-    PName_re = r"%s:%s" % (NCName_re, NCName_re)
+    QName_re:Final = r"%s(:%s)?" % (NCName_re, NCName_re)
+    QQName_re:Final = r"%s(:%s)*" % (NCName_re, NCName_re)
+    PName_re:Final = r"%s:%s" % (NCName_re, NCName_re)
 
     @staticmethod
     def allNameStartChars() -> str:
@@ -344,12 +352,12 @@ class XmlStrings:
     # One typically tests whether an ENTIRE string is of the specified type,
     # so use re.fullmatch. But xsparser has at least one exception.
     #
-    isXmlName_cre = re.compile(NCName_re)
-    isXmlQName_cre = re.compile(QName_re)
-    isXmlQQName_cre = re.compile(QQName_re)
-    isXmlPName_cre = re.compile(PName_re)
-    isXmlNMTOKEN_cre = re.compile(NMTOKEN_re)
-    isXmlNumber_cre = re.compile(r"^\d+", flags=re.ASCII)
+    isXmlName_cre:Final = re.compile(NCName_re)
+    isXmlQName_cre:Final = re.compile(QName_re)
+    isXmlQQName_cre:Final = re.compile(QQName_re)
+    isXmlPName_cre:Final = re.compile(PName_re)
+    isXmlNMTOKEN_cre:Final = re.compile(NMTOKEN_re)
+    isXmlNumber_cre:Final = re.compile(r"^\d+", flags=re.ASCII)
 
     @staticmethod
     def isXmlChars(s:str) -> bool:

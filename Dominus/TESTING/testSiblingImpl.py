@@ -10,7 +10,7 @@ import logging
 import basedom
 from basedom import getDOMImplementation, SiblingImpl
 
-#from makeTestDoc import makeTestDoc0, DAT_DocBook, DBG
+from makeTestDoc import makeTestDoc0  #, DAT_DocBook, DBG
 
 lg = logging.getLogger("testNode3")
 logging.basicConfig(level=logging.INFO)
@@ -84,6 +84,30 @@ class TestLINKS(unittest.TestCase):
             self.assertIs(ch.nextSibling, docEl.childNodes[i+1])
 
         docEl.checkNode(deep=True)
+
+class TestChaning(unittest.TestCase):
+    def setUp(self):
+        madeDocObj = makeTestDoc0()
+        self.n = madeDocObj.n
+        self.n.fan = 25
+        madeDocObj.addFullTree(self.n.docEl, n=self.n.fan, depth=3,
+            withText="", withAttr={})  # Using default text/attrs
+
+    def testChangingSiblingMethod(self):
+        doc = self.n.doc
+        doc.checkNode(deep=True)
+
+        doc._updateChildSiblingImpl(which=SiblingImpl.PARENT)
+        doc.checkNode(deep=True)
+        doc._updateChildSiblingImpl(which=SiblingImpl.CHNUM)
+        doc.checkNode(deep=True)
+        doc._updateChildSiblingImpl(which=SiblingImpl.LINKS)
+        doc.checkNode(deep=True)
+        doc._updateChildSiblingImpl(which=SiblingImpl.PARENT)
+        doc.checkNode(deep=True)
+
+    #def testRemove(self):
+    #    doc = self.n.doc
 
 if __name__ == '__main__':
     unittest.main()

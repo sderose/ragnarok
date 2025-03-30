@@ -1,21 +1,21 @@
-[ { "#name":"JSONX", "#jsonxversion":"0.9",
+[ { "~":"JSONX", "#jsonxversion":"0.9",
     "#xmlversion":"1.0", "#encoding":"utf-8", "#standalone":"yes",
     "#doctype":"html", "#systemId":"http://w3.org/html" },
-  [ { "#name": "html", "xmlns:html":"http://www.w3.org/1999/xhtml" },
-    [ { "#name": "head" },
-      [ { "#name": "title" },
+  [ { "~":"html", "xmlns:html":"http://www.w3.org/1999/xhtml" },
+    [ { "~":"head" },
+      [ { "~":"title" },
         "My document" ]
     ],
-    [ { "#name": "body" },
-      [ { "#name": "p", "id":"stuff", "class":"lead" },
+    [ { "~":"body" },
+      [ { "~":"p", "id":"stuff", "class":"lead" },
         "This is a ",
-        [ { "#name": "i" }, "very" ],
+        [ { "~":"i" }, "very" ],
         " short document."
       ],
-      [ { "#name": "#cdata" }, "This is some <real> & <legit/> cdata." ],
-      [ { "#name": "#pi", "#target": "troff" }, ".ss;.b" ],
-      [ { "#name": "#comment" }, "This is some <real> & <legit/> cdata." ]
+      [ { "~":"#cdata" }, "This is some <real> & <legit/> cdata." ],
+      [ { "~":"#pi", "#target": "troff" }, ".ss;.b" ],
+      [ { "~":"#comment" }, "This is some <real> & <legit/> cdata." ]
     ],
-    [ { "#name": "hr" } ]
+    [ { "~":"hr" } ]
   ]
 ]

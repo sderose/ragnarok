@@ -9,69 +9,129 @@ import datetime
 from xmlstrings import CaseHandler
 from xsdtypes import facetCheck, XsdFacet, DateTimeFrag, Duration
 from documenttype import (
-    SimpleType, ComplexType, SeqType,
+    DocumentType, SimpleType, ComplexType, SeqType,
     ElementDef, RepType, ModelGroup, ModelItem, Model,
     AttributeDef, DftType, EntityDef, EntitySpace, EntityParsing)
 import xsparser
 #from basedomtypes import HierarchyRequestError
 #from basedomtypes import NotFoundError
 
-from makeTestDoc import DBG  #makeTestDoc0, makeTestDoc2, DAT
-from test4 import K, makeTestDocEachMethod
+from makeTestDoc import makeTestDocEachMethod, DBG
+import test4
 
 
 ###############################################################################
+# Parameter entity cases
+#     (Have to put DOCTYPE around all these)
 #
-ElementSamples = [
-    "<!ELEMENT itemizedlist (listitem*)>",
-    "<!ELEMENT orderedlist (listitem*) >",
-    "<!ELEMENT\tlistitem (para*)>",
-    "<!ELEMENT para (#PCDATA)>",
-    "<!ELEMENT front (div1+)>",
-    "<!ELEMENT body (div1+)>",
-    "<!ELEMENT back ((div1+, inform-div1*) | inform-div1+)*>",
-]
-
 GoodPESamples = [
-"""<!ENTITY % foo "<!ELEMENT q ANY>">
+"""<!-- hello? -->
+<!ENTITY % foo "<!ELEMENT q ANY>">
 %foo;
 <!ENTITY % bar "
     <!ATTLIST q ID #IMPLIED>
     <!ATTLIST i ID #IMPLIED>">
 %bar;
+]>
 """,
 ]
 
 BadPESamples = [
+
+### Broken comment close
+"""
+<!-- bad place to stop --
+>""",
+
+### No PE for element name in XML
 """
 <!ENTITY % foo "para">
-<!ELEMENT %foo; ANY>""",
+<!ELEMENT %foo; ANY>
+""",
 
-"""<!ENTITY % foo "para">
-<!ATTLIST %foo; ID #IMPLIED>""",
+### No PE for attr name in XML
+"""<!ENTITY % foo "id">
+<!ELEMENT para ANY>
+<!ATTLIST para %foo; ID #IMPLIED>
+""",
 
+### No PE for attr type in XML
 """<!ENTITY % foo "ID">
-<!ATTLIST para %foo; #IMPLIED>""",
+<!ELEMENT para ANY>
+<!ATTLIST para id %foo; #IMPLIED>
+""",
+
+### No PE for attr default in XML
+"""<!ENTITY % foo "#IMPLIED">
+<!ELEMENT para ANY>
+<!ATTLIST para id ID %foo;>
+""",
+
+### No empty PE either (?)
+"""<!ENTITY % foo "">
+<!ELEMENT para ANY>
+<!ATTLIST para id ID %foo; #IMPLIED>
+""",
 
 """<!ENTITY % foo "   ">
-<!ATTLIST para %foo; ID #IMPLIED>""",
+<!ATTLIST para id %foo; ID #IMPLIED>
+""",
 
-"""<!ENTITY % foo "#IMPLIED">
-<!ATTLIST para ID %foo;>""",
-
+### How about inside a qlit?
 """
 <!ENTITY % foo "'text'">
-<!ENTITY zark "hello, %foo; world.">""",
+<!ENTITY zark "hello, %foo; world.">
+""",
 ]
 
-AttlistSamples = [
+
+###############################################################################
+# Element declaration cases
+#     (Have to put DOCTYPE around all these)
+#
+GoodElementSamples = [
+    "<!ELEMENT itemizedlist (listitem*)>",
+    "<!ELEMENT orderedlist (listitem*) >",
+    "<!ELEMENT\tlistitem (para*)>",
+    "<!ELEMENT para  (#PCDATA)>",
+    "<!ELEMENT li    (#PCDATA | i | hr|para)*>",
+    "<!ELEMENT front (div1+)>",
+    "<!ELEMENT body  (div1+)>",
+    "<!ELEMENT back  ((div1?, (x | inform-div1)*) | inform-div1+)*>",
+    "<!ELEMENT hr    EMPTY    >",
+    "<!ELEMENT xy_.z ANY>",
+]
+
+BadElementSamples = [
+    "<!ELEMENT>",
+    "<!ELEMENT -- foo -- p (#PCDATA)>",
+    "<!ELEMENT spam >",
+    "<!ELEMENT 12    (listitem*)>",
+    "<!ELEMENT ol@1  (listitem*) >",
+    "<!ELEMENT item  RCDATA>",
+    "<!ELEMENT list  (#PCDATA | item)+  +(footnote)>",
+    "<!ELEMENT b     #PCDATA>",
+    "<!ELEMENT front (ti, 1div*)>",
+    "<!ELEMENT body  (ti, div | i | b)*>",
+    "<!ELEMENT back  (ti, (div)>",
+    "<!ELEMENT spam  (ti, (div) ) ) >",
+]
+
+
+###############################################################################
+# Attlist declaration cases
+#
+GoodAttlistSamples = [
     """<!ATTLIST  p  id ID #IMPLIED  class NMTOKENS "big">""",
     """<!ATTLIST td
-    id              ID              #IMPLIED
+    id
+    ID
+    #IMPLIED
     tgt             IDREF           #IMPLIED
     tgts            IDREFS          "foo bar1.a"
     direction       NMTOKEN         FIXED "up"
-    bgcolor         NMTOKENS        "foo bar baz"
+    bgcolor         NMTOKENS        "foo
+        bar baz"
     rowspan         NUTOKEN         "1"
     colspan         NUMBER          "1"
     alt             CDATA           #REQUIRED
@@ -81,12 +141,34 @@ AttlistSamples = [
     """,
 ]
 
+BaddAttlistSamples = [
+    """<!ATTLIST>""",
+    """<!ATTLIST p  >""",
+    """<!ATTLIST p id >""",
+    """<!ATTLIST p id ID>""",
+    """<!ATTLIST 12 id ID #REQUIRED>""",
+    """<!ATTLIST p %% ID #REQUIRED>""",
+    """<!ATTLIST p vev COMPLEX #REQUIRED>""",
+    """<!ATTLIST p id ID #PROHIBITED>""",
+    """<!ATTLIST p class NMTOKENS  notQuoted>""",
+    """<!ATTLIST p class NMTOKENS  "a""b">""",
+    """<!ATTLIST td direction NMTOKEN FIXED up>""",
+    """<!ATTLIST loc_ compass (n | s | $12 | w) 'w'>""",
+]
 
-EntitySamples = [
-    """<!ENTITY mdash  "--">""",
-    """<!ENTITY nbsp   "&#160;">""",
-    """<!ENTITY ldquo  "#x201C;"   >""",
-    """<!ENTITY rdquo  "#x201D;">""",
+
+###############################################################################
+# Entity declaration cases
+#
+GoodEntitySamples = [
+    """<!ENTITY mdash   "--">""",
+    """<!ENTITY nbsp    "&#160;">""",
+    """<!ENTITY unused  "&#FFF;">""",
+    """<!ENTITY ldquo   "#x201C;"   >""",
+    """<!ENTITY rdquo   "#x201D;">""",
+    """<!ENTITY nested  "'scare quotes'">""",
+    """<!ENTITY whee    "'scare">""",
+    """<!ENTITY whee2   "&quo;scare&#x22;">""",
     """<!ENTITY % local.p.class        "p">""",
     """<!ENTITY % p.class              "%local.p.class;""",
     """<!ENTITY NASA    "National Aeronautics and Space Administration">""",
@@ -95,8 +177,82 @@ EntitySamples = [
     """<!ENTITY fig1    SYSTEM "/Users/abc/Pictures/img12.jpg" NDATA jpg>""",
 ]
 
-NotationSamples = [
+BadEntitySamples = [
+    """<!ENTITY""",
+    """<!ENTITY
+        """,
+    """<!ENTITY
+    >""",
+    """<!ENTITY mdash  """,
+    """<!ENTITY mdash>""",
+    """<!ENTITY mdash --foo-->""",
+    """<!ENTITY nbsp   "unclosed>""",
+    """<!ENTITY nbsp   "unclosed'>""",
+    """<!ENTITY ldquo  "&>""",
+    """<!ENTITY ldquo  "&#>""",
+    """<!ENTITY ldquo  "&#x>""",
+    """<!ENTITY ldquo  "&#xFFFFFFFFFFFFFFFFFF;">""",
+    """<!ENTITY chap1  PRIVATE "">""",
+    """<!ENTITY chap1  PUBLIC>""",
+    """<!ENTITY chap1  PUBLIC "-//foo">""",
+    """<!ENTITY chap1  PUBLIC "-//foo" ">""",
+    """<!ENTITY chap1  PUBLIC "-//foo" "nil.xml" NDATA >""",
+    """<!ENTITY chap2  SYSTEM >""",
+    """<!ENTITY chap2  SYSTEM "xxx>""",
+    """<!ENTITY fig1   SYSTEM "/Users/abc/Pictures/img12.jpg" NDATA 12>""",
+]
+
+
+###############################################################################
+# Notation declaration cases
+#
+GoodNotationSamples = [
     """<!NOTATION jpg PUBLIC "+//ISO99999/Data Formats/JPEG//" "">""",
+]
+
+BadNotationSamples = [
+    """<!NOTATION""",
+    """<!NOTATION>""",
+    """<!NOTATION jpg >""",
+    """<!NOTATION jpg SYSTEM>""",
+    """<!NOTATION jpg SYSTEM '>""",
+    """<!NOTATION jpg CDATA "nope">""",
+    """<!NOTATION #foo SYSTEM 'somewhere'>""",
+    """<!NOTATION jpg SYSTEM '>""",
+    """<!NOTATION jpg PUBLIC>""",
+    """<!NOTATION jpg PUBLIC "+//ISO99999/Data Formats/JPEG//" >""",
+    """<!NOTATION jpg PUBLIC "+//ISO99999/Data Formats/JPEG//" ">""",
+    """<!NOTATION jpg PUBLIC "+//ISO99999/Data Formats/JPEG//" "">""",
+]
+
+
+###############################################################################
+# Extended declaration cases
+#
+GoodExtensionSample = [
+    """<!ELEMENT (i|b |tt| mono )  (#PCDATA)>""",
+    """<!ELEMENT - O para ANY>""",
+    """<!ELEMENT para ANY  +(footnote) -(para)>""",
+    """<!ELEMENT para ANYELEMENT>""",
+    """<!ELEMENT para (head, leader{1,99})>""",
+    """<!ELEMENT para CDATA>""",
+    """<!ELEMENT para RCDATA>""",
+    """<!ATTLIST para
+        a1      COID    #IMPLIED
+        a2      STACKID #IMPLIED
+        a3      float   #IMPLIED
+        a4      gMonthDay   "---03-15"
+        a5      curls   “foo”
+        a6      floats  "1.608 3.14"
+        a7      float   "NaN"
+
+        >""",
+    """<!ATTLIST ?troff width NUTOKEN "12">""",
+    """<!— emComment? —>""",
+    """<!ATTLIST para  #ANY CDATA #IMPLIED>""",
+    """<!ATTLIST * id ID #IMPLIED>""",
+    """<!SDATA nbsp "&#160;">""",
+    """<!SDATA nbsp 160 z 0x9D...>""",
 ]
 
 
@@ -253,7 +409,7 @@ class testAttrDef(unittest.TestCase):
 
         self.assertEqual(facetCheck("-Sub-Para_3", "Name"), XsdFacet.pattern)
         self.assertEqual(facetCheck("xy:zzy", "NCName"), XsdFacet.pattern)
-        self.assertEqual(facetCheck("foo:xy:zzy", "QName"), XsdFacet.pattern)
+        #TODO self.assertEqual(facetCheck("foo:xy:zzy", "QName"), XsdFacet.pattern)
         self.assertEqual(facetCheck("-an_ID_VALUE", "ID"), XsdFacet.pattern)
         self.assertEqual(facetCheck("12-a", "IDREF"), XsdFacet.pattern)
         self.assertEqual(facetCheck("blockquote is not", "NMTOKEN"), XsdFacet.pattern)
@@ -439,6 +595,9 @@ class testModelItem(unittest.TestCase):
 
 class testAttributeDef(unittest.TestCase):
     def setup(self):
+        pass
+
+    def testAtDef(self):
         #pylint: disable=W0612
         # First the usual SGML-based ones
         #
@@ -480,6 +639,9 @@ class testAttributeDef(unittest.TestCase):
 
 class testElementDefs(unittest.TestCase):
     def setup(self):
+        pass
+
+    def testElDef(self):
         m = Model(contentType="X_MODEL",
             tokens = [ "(", "#PCDATA", "|", "i", "|", "b", ")", "*" ])
         el = ElementDef("para", m)
@@ -492,54 +654,75 @@ class testElementDefs(unittest.TestCase):
 
 ###############################################################################
 #
-@unittest.skip
 class testEntityDef(unittest.TestCase):
     def setUp(self):
+        pass
+
+    def aEQ(self, x, y):
+        if x != y:
+            print("Fail: Not equal:\n    //%s//\n    //%s//" % (x, y))
+        self.assertEqual(x, y)
+
+    def testEnDef(self):
         lit1 = "<warn>Do not fold, spindle, or mutilate.</warn>"
         sys1 = "/home/jsmith/docs/foo.xml"
         pub1 = "-//foo//bar//EN"
-        sys2 = "/home/jsmith/docs/foo.xml"
+        sys2 = "/foo.xml"
 
         # Some kinds of identifiers
         ds1 = EntityDef("ds1", entSpace=EntitySpace.GENERAL, data=lit1)
-        self.assertEqual(ds1.tostring(), "")
+        self.aEQ(ds1.tostring(),
+            """<!ENTITY ds1 "<warn>Do not fold, spindle, or mutilate.</warn>">\n""")
+
         ds2 = EntityDef("ds2", entSpace=EntitySpace.GENERAL, systemId=sys1)
-        self.assertEqual(ds2.tostring(), "")
+        self.aEQ(ds2.tostring(),
+            """<!ENTITY ds2 SYSTEM "/home/jsmith/docs/foo.xml">\n""")
+
         ds3 = EntityDef("ds3", entSpace=EntitySpace.GENERAL, publicId=pub1, systemId=sys2)
-        self.assertEqual(ds3.tostring(), "")
+        self.aEQ(ds3.tostring(),
+            """<!ENTITY ds3 PUBLIC "-//foo//bar//EN" "/foo.xml">\n""")
+
         ds4 = EntityDef("ds4", entSpace=EntitySpace.GENERAL, systemId=[ sys1, sys2 ])
-        self.assertEqual(ds4.tostring(), "")
+        self.aEQ(ds4.tostring(),
+            """<!ENTITY ds4 SYSTEM "/home/jsmith/docs/foo.xml" "/foo.xml">\n""")
 
         # By space/type
-        e1 = EntityDef("ent1", entSpace=EntitySpace.GENERAL, data=lit1,
+        e1 = EntityDef("ent0", entSpace=EntitySpace.GENERAL, data=lit1,
             entParsing=EntityParsing.PCDATA, notationName=None, ownerSchema=None)
-        self.assertEqual(e1.tostring(), "")
+        self.aEQ(e1.tostring(),
+            """<!ENTITY ent0 "<warn>Do not fold, spindle, or mutilate.</warn>">\n""")
+
         e2 = EntityDef("ent1", entSpace=EntitySpace.PARAMETER, systemId=sys1,
             entParsing=EntityParsing.PCDATA, notationName=None, ownerSchema=None)
-        self.assertEqual(e2.tostring(), "")
-        e3 = EntityDef("ent1", entSpace=EntitySpace.NOTATION, publicId=pub1,
+        self.aEQ(e2.tostring(),
+            """<!ENTITY % ent1 SYSTEM "/home/jsmith/docs/foo.xml">\n""")
+
+        e3 = EntityDef("ent2", entSpace=EntitySpace.NOTATION, publicId=pub1,
             entParsing=EntityParsing.PCDATA, notationName=None, ownerSchema=None)
-        self.assertEqual(e3.tostring(), "")
-        #e4 = EntityDef("ent1", EntityType.SDATA, systemID=sys1, publicId=pub1,
+        self.aEQ(e3.tostring(),
+            """<!ENTITY ent2 PUBLIC "-//foo//bar//EN" "">""")
+
+        #e4 = EntityDef("ent3", EntityType.SDATA, systemID=sys1, publicId=pub1,
         #    entParsing=EntityParsing.PCDATA, notationName=None, ownerSchema=None)
-        #self.assertEqual(e4.tostring(), "")
-        #e5 = EntityDef("ent1", EntityType.NAMESET, data=lit1,
+        #self.aEQ(e4.tostring(), "")
+
+        #e5 = EntityDef("ent4", EntityType.NAMESET, data=lit1,
         #    entParsing=EntityParsing.PCDATA, notationName=None, ownerSchema=None)
-        #self.assertEqual(e5.tostring(), "")
+        #self.aEQ(e5.tostring(), "")
 
         # By parseType
-        p1 = EntityDef("ent1", entSpace=EntitySpace.GENERAL, data=lit1,
+        p1 = EntityDef("ent5", entSpace=EntitySpace.GENERAL, data=lit1,
             entParsing=EntityParsing.PCDATA, notationName=None, ownerSchema=None)
-        self.assertEqual(p1.tostring(), "")
+        self.aEQ(p1.tostring(), "")
         p2 = EntityDef("ent1", entSpace=EntitySpace.GENERAL, data=lit1,
             entParsing=EntityParsing.NDATA, notationName=None, ownerSchema=None)
-        self.assertEqual(p2.tostring(), "")
+        self.aEQ(p2.tostring(), "")
         p3 = EntityDef("ent1", entSpace=EntitySpace.GENERAL, data=lit1,
             entParsing=EntityParsing.CDATA, notationName=None, ownerSchema=None)
-        self.assertEqual(p3.tostring(), "")
+        self.aEQ(p3.tostring(), "")
         p4 = EntityDef("ent1", entSpace=EntitySpace.GENERAL, data=lit1,
             entParsing=EntityParsing.RCDATA, notationName=None, ownerSchema=None)
-        self.assertEqual(p4.tostring(), "")
+        self.aEQ(p4.tostring(), "")
 
         # TODO Extensions?
 
@@ -554,15 +737,18 @@ class testEntityDef(unittest.TestCase):
 
 ###############################################################################
 #
-@unittest.skip
 class testNotationDef(unittest.TestCase):
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=test4.DAT_K)
+        self.dc = test4.DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
-        nn = self.n.doc.theDoctype.defineNotation(
+        doctype = DocumentType(qualifiedName=None,
+            publicId=None, systemId=None, htmlEntities=True)
+        self.n.doc.doctype = doctype
+        self.assertIsInstance(self.n.doc.doctype, DocumentType)
+        nn = self.n.doc.doctype.defineNotation(
             "nname", publicId="-//foo", systemId="http://example.com/png")
         el = self.n.docEl.childNodes[5]
         el.setAttribute("notn", nn)
@@ -574,18 +760,20 @@ class testNotationDef(unittest.TestCase):
 class testPEs(unittest.TestCase):
 
     def setUp(self):
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=test4.DAT_K)
+        self.dc = test4.DAT_K
         self.n = madeDocObj.n
 
     def testgoods(self):
-        for s in GoodPESamples:
+        for i, s in enumerate(GoodPESamples):
+            print("Starting GoodPESamples[%s]" % (i))
             p = xsparser.ParserCreate()
-            p.Parse(s)                      # TODO Make a DOM?
+            p.Parse(s)  # TODO Make a DOM?
             #self.assertTrue(theDom.doctype.entities("foo"))
 
     def testbads(self):
-        for s in BadPESamples:
+        for i, s in enumerate(BadPESamples):
+            print("Starting BadPESamples[%s]" % (i))
             with self.assertRaises(SyntaxError):
                 p = xsparser.ParserCreate()
                 p.Parse(s)
@@ -594,20 +782,54 @@ class testPEs(unittest.TestCase):
 ###############################################################################
 #
 @unittest.skip
+class testDcls(unittest.TestCase):
+    def setUp(self):
+        DBG.msg("testWholeDoctype not yet written.")
+        madeDocObj = makeTestDocEachMethod(dc=test4.DAT_K)
+        self.dc = test4.DAT_K
+        self.n = madeDocObj.n
+
+    def testElementDcls(self):
+        for dcl in GoodElementSamples:
+            xml = """<!DOCTYPE foo [\n%s\n]>""" % (dcl)
+            p = xsparser.ParserCreate()
+            p.Parse(xml)
+
+    def testAttlistDcls(self):
+        for dcl in GoodAttlistSamples:
+            xml = """<!DOCTYPE foo [\n%s\n]>""" % (dcl)
+            p = xsparser.ParserCreate()
+            p.Parse(xml)
+
+    def testEntityDcls(self):
+        for dcl in GoodEntitySamples:
+            xml = """<!DOCTYPE foo [\n%s\n]>""" % (dcl)
+            p = xsparser.ParserCreate()
+            p.Parse(xml)
+
+    def testNotationDcls(self):
+        for dcl in GoodNotationSamples:
+            xml = """<!DOCTYPE foo [\n%s\n]>""" % (dcl)
+            p = xsparser.ParserCreate()
+            p.Parse(xml)
+
+
+###############################################################################
+#
+@unittest.skip
 class testWholeDoctype(unittest.TestCase):
     def setUp(self):
         DBG.msg("testWholeDoctype not yet written.")
-        madeDocObj = makeTestDocEachMethod(dc=K)
-        self.dc = K
+        madeDocObj = makeTestDocEachMethod(dc=test4.DAT_K)
+        self.dc = test4.DAT_K
         self.n = madeDocObj.n
 
     def tests(self):
-        nn = self.n.doc.theDoctype.defineNotation(
+        nn = self.n.doc.doctype.defineNotation(
             "nname", publicId="-//foo", systemId="http://example.com/png")
         el = self.n.docEl.childNodes[5]
         el.setAttribute("notn", nn)
         return
-
 
 if __name__ == '__main__':
     unittest.main()

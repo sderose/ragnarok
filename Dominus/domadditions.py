@@ -12,7 +12,7 @@ from typing import List, Iterable, Union
 import logging
 
 from basedomtypes import InvalidCharacterError, NotSupportedError
-from xmlstrings import NameTest  #XmlStrings as XStr, UNormHandler, CaseHandler
+from xmlstrings import NameTest  #XmlStrings as Rune, UNormHandler, CaseHandler
 lg = logging.getLogger("BaseDOM")
 
 # Provide synonym types for type-hints these common args
@@ -94,18 +94,18 @@ class EtAdditions:
         return self.getAttribute(aname)
 
     @property
-    def getroot(self):
+    def getroot(self) -> 'Node':
         return self.ownerDocument.documentElement
 
     @property
-    def tag(self):
+    def tag(self) -> str:
         return self.nodeName  # localName?
 
-    def matches(self):
+    def matches(self) -> bool:
         raise NotSupportedError("Element.matches")
 
     @property
-    def tail(self):
+    def tail(self) -> str:
         """No. Just no.
         """
         if self.nextSibling and self.nextSibling.isText:
@@ -113,7 +113,7 @@ class EtAdditions:
         return None
 
     @property
-    def text(self):
+    def text(self) -> str:
         if self.childNodes and self.childNodes[0].isText:
             return self.childNodes[0].data
         return None
@@ -131,12 +131,12 @@ class whatwgAdditions:
     createElement() and createElementNS()
     template stuff
     """
-    def querySelector(self):
+    def querySelector(self) -> 'Node':
         """Find first match to CSS selector
         """
         raise NotSupportedError("Element.querySelector")
 
-    def querySelectorAll(self):
+    def querySelectorAll(self) -> 'NodeList':
         """Find all matches to CSS selector
         """
         raise NotSupportedError("Element.querySelectorAll")
@@ -146,7 +146,7 @@ class whatwgAdditions:
         """
         raise NotSupportedError("Element.matches")
 
-    def children(self:'Node') -> List:
+    def children(self:'Node') -> 'NodeList':
         """Returns only elements.
         """
         theChosen = []
@@ -200,20 +200,24 @@ class DOMTokenList(set):
             vals = re.split(r"[ \t\r\n]+", str(vals).strip)
         for val in vals: self.add(val)
 
-    def add(self, token:str):
+    def add(self, token:str) -> None:
         self.add(self.normalize(token))
 
-    def remove(self, token:str):  # DOMTokenList
+    def remove(self, token:str) -> None:  # DOMTokenList
         self.discard(self.normalize(token))
 
-    def replace(self, token:str, newToken:str):  # DOMTokenList
+    def replace(self, token:str, newToken:str) -> None:  # DOMTokenList
         assert False
 
-    def toggle(self, token:str):
-        if token in self: self.remove(token)
-        else: self.add(token)
+    def toggle(self, token:str) -> bool:
+        if token in self:
+            self.remove(token)
+            return False
+        else:
+            self.add(token)
+            return True
 
-    def normalizeKey(self, key:str):
+    def normalizeKey(self, key:str) -> str:
         if not isinstance(key, str): key = str(key)
         if key == "": raise SyntaxError("normalizeKey 'key' arg is empty.")
 
@@ -292,14 +296,14 @@ class OtherAdditions:
     ### TODO: Not element specifically, but support sel by type
 
     @property
-    def nextElementSibling(self):
+    def nextElementSibling(self) -> 'Element':
         cur = self.nextSibling
         while (cur is not None):
             if cur.isELement: return cur
             cur = self.nextSibling
         return None
     @property
-    def previousElementSibling(self):
+    def previousElementSibling(self) -> 'Element':
         cur = self.previousSibling
         while (cur is not None):
             if cur.isELement: return cur

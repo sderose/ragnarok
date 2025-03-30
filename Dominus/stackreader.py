@@ -6,24 +6,22 @@
 #pylint: disable=W1201
 #
 #import codecs
-import os
+import sys
+#import os
 import re
 import logging
-from typing import Union, List, Iterable, IO
+from typing import Union, List, Dict, Iterable, IO, Callable
+from types import SimpleNamespace
 import inspect
 
 #import html
 #from html.entities import name2codepoint  # codepoint2name
 
-from xmlstrings import XmlStrings as XStr, CaseHandler, Normalizer
-# UNormHandler, WSHandler,
+from xmlstrings import XmlStrings as Rune, CaseHandler, Normalizer  #, UNormHandler, WSHandler
 #from saxplayer import SaxEvent
-from basedomtypes import NSuppE  #, NMTOKEN_t, DOMException, SepChar
-from documenttype import EntityDef  # EntitySpace, EntityParsing
-#from documenttype import DocumentType, Model, RepType, ContentType  # ModelGroup
-#import xsdtypes
-#from xsdtypes import (sgmlAttrTypes, sgmlAttrDefaults, XSDDatatypes,
-#    fixedKeyword, anyAttrKeyword)
+from basedomtypes import NSuppE, ICharE , NMTOKEN_t, SepChar #, DOMException,
+from documenttype import EntityDef , EntitySpace  #, EntityParsing
+from documenttype import DocumentType  # , ContentType, ModelGroup, Model, RepType,
 #from basedom import Document
 
 lg = logging.getLogger("StackReader")
@@ -33,7 +31,7 @@ EOF = -1
 
 __metadata__ = {
     "title"        : "StackReader",
-    "description"  : "An input module that handles inclusions, such as via entities.",
+    "description"  : "An input module that handles includes, such as entities.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
@@ -151,55 +149,79 @@ def uname2codepoint(name:str) -> int:
 #
 class InputFrame:
     """A (stackable) input source, which has a read buffer with position info,
-    and the most basic read operations. This base class just takes a single
-    string; subclasses extend to handle entities and files.
+    and the most basic read operations. This only reads simple things like
+    n chars, a constant passed in (or one of a set passed in), etc.
 
-    This includes readers for basic items that are not allowed to break
-    across entity boundaries, or recognize entity references within them.
-    For example, name tokens, delimiter strings, numbers, qlits (which may
-    have entity references but they'd be expanded later), etc.
+    Nothing in here reads across frame boundaries (even readAll()).
+
+    Nothing in here really knows any syntax rules, either; except for
+    skipping whitespace.
+
+    Readers for token-ish things like ints, qnames, entity references, qlits,
+    etc. are handled higher up.
     """
-    def __init__(self, encoding:str="utf-8", bufSize:int=1024):
+    def __init__(self, encoding:str="utf-8", bufSize:int=1024,
+        options:SimpleNamespace=None):
         self.encoding = encoding
         self.bufSize = max(bufSize, 512)
-        self.buf = ""       # Data source
+        self.options = options or SimpleNamespace()
+
+        self.buf = ""       # Data buffer
         self.bufPos = 0     # Next char to read from buf
         self.offset = 0     # Source offset to start of buf (see dropUsedPart()0
-        self.lineNum = 0    # Numer of \n's we've read
+        self.lineNum = 1    # Number of \n's we've read
+        self.spaceDef = " \t\r\n"
+        self.eDef = None    # If source is an entity, the definition
+        self.path = None    # If a file, the path
+        self.ifh = None     # Open file handle if any
 
         self.noMoreToRead = False
 
-    def addData(self, literal:str=""):
+    def description(self) -> str:
+        """Make a string to describe/identify the frame, like in messages.
+        """
+        if self.eDef:
+            p = "parameter " if self.eDef.space == EntitySpace.PARAMETER else ""
+            return "%sentity %s" % (p, self.eDef.entName)
+        elif self.path:
+            return "file '%s'" % (self.path)
+        else:
+            return "string"
+
+    def addEntity(self, eDef:EntityDef) -> None:
+        self.eDef = eDef
+        if eDef.literal is not None:
+            if self.buf: self.buf += eDef.literal
+            else: self.buf = eDef.literal
+            return
+        # Find the system object and attach
+        path = self.eDef.source.findLocalPath(eDef=eDef)
+        self.addFile(path)
+
+    def addFile(self, theFile:Union[str, IO]) -> None:
+        if isinstance(theFile, str):
+            self.path = theFile
+            self.ifh = open(theFile, "rb" )
+        else:
+            self.ifh = theFile
+            try:
+                self.path = theFile.name
+            except AttributeError:
+                self.path = None
+        self.topOff(n=self.bufSize)
+
+    def addData(self, literal:str="") -> None:
         self.buf += literal
 
     def close(self) -> None:
         self.buf = None
+        if self.ifh:
+            self.ifh.close(); self.ifh = None
+        if self.eDef: self.eDef = None
 
     def clear(self) -> None:
-        self.buf.truncate(0)
-        # TODO Reset offset and lineNum?
-
-    def __str__(self):
-        return self.buf.getValue()
-
-    def __bool__(self):
-        return len(self.buf) > 0
-
-    def __getitem__(self, ind:Union[int, slice]):
-        if isinstance(ind, int):
-            start = ind
-            end = ind+1
-        else:
-            start = ind.start
-            end = ind.end
-            if ind.step: raise ValueError("step not supported.")
-
-        return self.buf[start:end]
-
-    def __setitem__(self, *args):
-        raise NSuppE("No __setitem__ for now.")
-
-    # def pushBack?
+        self.buf = ""
+        self.bufPos = 0
 
     @property
     def bufLeft(self) -> int:
@@ -220,49 +242,119 @@ class InputFrame:
         """
         return self.lineNum + self.buf[0:self.bufPos].count("\n")
 
-    def dropUsedPart(self) -> None:
-        """Discard some buffer, AND move the offset of the start.
-        (no-op for literal data source)
+    def __bool__(self) -> bool:
+        return self.bufLeft > 0
+
+    def __str__(self) -> str:
+        """This returns the the remaining part of the loaded buffer.
         """
-        return
+        return self.buf[self.bufPos:]
+
+    def __getitem__(self, ind:Union[int, slice]) -> str:
+        """With lists or strings, out-of-bounds requests:
+            raise IndexError for singletons like myString[999]
+            return an empty list for ranges like myString[999:1000]
+        We do the same.
+        """
+        if isinstance(ind, int):
+            start = ind
+            return self.buf[start]
+        elif isinstance(ind, slice):
+            start = ind.start
+            stop = ind.stop
+            if ind.step: raise IndexError("step not supported.")
+            return self.buf[start:stop]
+        else:
+            raise TypeError("Only use int or slice, not {type(ind)}.")
+
+    def __setitem__(self, *args) -> None:
+        raise NSuppE("No __setitem__ for now.")
 
     def topOff(self, n:int=0) -> int:
-        """For a literal as input source (the base class case), do nothing.
-        Return how much data is left in the buffer.
-        """
+        """Refill so at least n characters are available.
+        If this source is just a literal string, does nothing.
+        Return how much is then available.
+
+        Refills drops used part then loads bufSize chars; but only happen if
+        avail < n, with n defaulting to bufSize/4, so we don't do i/o so often.
+        TODO: not sure that really helps -- need to profile
+
+        If EOF happens first, buf ends up short.
+        If EOF happens and there's nothing in buf, that's really end.
+        Does NOT top off across entity boundaries.
+         """
+        if not self.ifh: return self.bufLeft
+
+        #lg.info("InputFrame.topOff, buf '%s'.", self.bufSample)
+        if not n: n = self.bufSize / 4
+        if self.bufLeft > n or self.noMoreToRead:
+            return self.bufLeft
+
+        self.dropUsedPart()  # TODO Combine with newChars assign?
+        newChars = self.ifh.read(self.bufSize)
+        if not newChars:  # EOF reached
+            self.noMoreToRead = True
+            if not self.buf:  # No more data at all
+                self.ifh.close()
+            return self.bufLeft
+        if isinstance(newChars, bytes):
+            newChars = newChars.decode(self.encoding)
+        if (self.encoding != "utf-8"):
+            raise NSuppE(f"Unsupported encoding '{self.encoding}' (for now).")
+        if self.options.noC0 and re.search(Rune.c0NonXml_re, newChars):
+            raise ICharE("C0 control characters are disabled.")
+        if self.options.noC1 and re.search(Rune.c1_re, newChars):
+            raise ICharE("C1 control characters are disabled. Is this CP1252?")
+        if self.options.noPrivateUse and re.search(Rune.privateUse_re, newChars):
+            raise ICharE("Private use characters are disabled.")
+        self.buf += newChars
         return self.bufLeft
 
-    def skipSpaces(self, allowComments:bool=True,
-        allowPE:bool=False, allowGE:bool=False) -> None:
-        """Calling this is key to keeping the buffer full.
-        Since this is in EntityFrame, it doesn't handle parameter entities
-        (they change the EntityFrame, so are handled one level up).
+    def dropUsedPart(self, allow:int=100) -> None:
+        """Discard some buffer, AND move the offset of the start.
+        If the used part is smaller than 'allow', don't bother.
+        """
+        if self.bufPos < allow: return
+        self.lineNum += self.buf[0:self.bufPos].count('\n')  # TODO Earlier?
+        self.offset += self.bufPos
+        self.buf = self.buf[self.bufPos:]
+        self.bufPos = 0
+
+    def skipSpaces(self,
+        allowComments:bool=True,        # Can skip comments, too
+        entOpener:Callable=None         # Can see entities?
+        ) -> None:
+        """Basically skip spaces, but at option also:
+            * skip an embedded comment (for SGML not XML DTDs)
+            * callback to expand if we hit an entity reference.
+        TODO Add a way to return comment events.
+        Calling this is key to keeping the buffer full.
         XML eliminated in-markup --...-- comments and in-dlc %entitites.
         Returns: False on EOF, else True (whether or not anything was skipped)
         """
         while True:
-            if self.bufLeft < self.bufSize>>2: self.topOff()
-            if not self.bufLeft: return
-            if self.buf[self.bufPos] in " \t\r\n":
-                self.bufPos += 1
+            if not self.bufLeft:
+                self.topOff()
+                if not self.bufLeft: return
+            c = self.buf[self.bufPos]
+            if c in self.spaceDef:
                 if self.buf[self.bufPos] == "\n": self.lineNum += 1
-            elif allowComments and self.peek(2) == "--":
+                self.bufPos += 1
+            elif entOpener and c in "%&":
+                entOpener()            # TODO How to switch to it?
+            elif allowComments and self.peek(2) == "--":  # TODO emComments
                 mat = self.readRegex(r"^--([^-]|-[^-])+--", self.buf[self.bufPos:])
                 if not mat: return None
                 self.bufPos += len(mat.group())
                 self.lineNum += mat.group().count("\n")
                 _comText = mat.group(1)
-            elif allowPE and self.peek(1) == "%":
-                raise NSuppE("param")
-            elif allowGE and self.peek(1) == "&":
-                raise NSuppE("general")
             else:
                 break
         return
 
     def peek(self, n:int=1) -> str:
-        """Return the next n characters (or fewer if EOF is coming),
-        without actually consuming them. No skipSpaces options here,
+        """Return the next n characters (or None if EOF is hit),
+        without actually consuming them. No skipSpaces option here,
         it could get circular.
         """
         if self.bufLeft < n:
@@ -271,10 +363,7 @@ class InputFrame:
         return self.buf[self.bufPos:self.bufPos+n]
 
     def consume(self, n:int=1) -> str:
-        """Same as peek except the characters really ARE consumed.
-        But only if there are at least n available.
-        No skipSpaces options here, it could get circular.
-        Use discard() instead when the data isn't needed.
+        """Same as peek() except the characters really ARE consumed.
         """
         if self.bufLeft < n:
             self.topOff(n)
@@ -284,7 +373,7 @@ class InputFrame:
         return rc
 
     def discard(self, n:int=1) -> None:
-        """Same as consume except the characters aren't cast or returned.
+        """Same as consume() except the characters aren't cast or returned.
         """
         if self.bufLeft < n:
             self.topOff(n)
@@ -298,23 +387,11 @@ class InputFrame:
         will pick up once the buffer (including the pushBack) is exhausted.
         Barely used.
         """
-        n = len(s)
-        self.dropUsedPart()  # So offset gets updated
+        self.dropUsedPart()  # updates offset
         self.lineNum -= s.count('\n')
-        self.offset -= n
+        self.offset -= len(s)
         self.buf = s + self.buf[self.bufPos:]
         self.bufPos = 0
-
-    def readAll(self) -> str:
-        """Read all that's left. Mainly for CDATA/SDATA entities.
-        """
-        rc = ""
-        while (True):
-            self.topOff()
-            if self.bufLeft == 0: break
-            rc += self.buf
-            self.bufPos = len(self.buf)
-        return rc
 
     def readConst(self, const:str, ss:bool=True,
         thenSp:bool=False, folder:Union[CaseHandler, Normalizer]=None) -> str:
@@ -327,7 +404,7 @@ class InputFrame:
         if ss: self.skipSpaces()
         if self.bufLeft < len(const)+1:
             self.topOff()
-            if self.bufLeft < len(const)+1: return None
+            if self.bufLeft < len(const): return None
 
         if (1):
             if folder: const = folder.normalize(const)
@@ -353,23 +430,46 @@ class InputFrame:
             self.bufPos += len(const)
             return rc
 
-    _firstDelims = "<&%]\\"
-    _allDelims = "<>[]\\/!?#|-+\u2014"  # & and % not ok in non-first pos.
-
-    def peekDelimPlus(self, ss:bool=True) -> (str, str):
-        """Return initial punctuation marks, and following character.
-        TODO Maybe take % and & out of _allDelims?
+    def readToString(self, ender:str, consumeEnder:bool=True) -> str:
+        """Read to the given string. Nothing else is recognized.
+        Unlike most readers, this one doesn't leave things unchanged
+        if it fails, because failure means we hit EOF.
+        For where you really, really have to have some stuff ended by this thing.
         """
-        if ss: self.skipSpaces()
-        delimString = ""
-        i = self.bufPos
-        if self.buf[i] not in self._firstDelims: return None, None
+        rbuf = []
+        while True:
+            if self.bufLeft < self.bufSize>>2:
+                self.topOff()
+                if not self.bufLeft: return None    # TODO or raise SE?
+            where = self.buf.find(ender, self.bufPos)
+            if where < 0:  # Keep going
+                rbuf.extend(self.buf[self.bufPos:])
+                self.discard(self.bufLeft)
+                self.dropUsedPart()
+                self.topOff()
+            else:
+                rbuf.extend(self.buf[self.bufPos:where])
+                moveTo = where + (len(ender) if consumeEnder else 0)
+                self.buf = self.buf[moveTo:]
+                self.bufPos = 0
+                break
+        return ''.join(rbuf) or None
 
-        while (i < len(self.buf)):
-            if self.buf[i] not in self._allDelims: break
-            delimString += self.buf[i]
-            i += 1
-        return delimString, self.buf[i]
+    def readAll(self) -> str:
+        """Read all that's left IN THIS FRAME. Mainly for CDATA/SDATA entities.
+        """
+        rc = ""
+        while (True):
+            self.topOff()
+            if self.bufLeft == 0: break
+            rc += self.buf
+            self.bufPos = len(self.buf)
+        return rc
+
+
+    ###########################################################################
+    ### TOKEN LEVEL
+    ###
 
     hardBackslashes = {
         "\\n": "\n",
@@ -390,59 +490,121 @@ class InputFrame:
         """
         # no ss as we've already seen the \\?
         start = self.peek(2)
+        if start is None or start[0] != "\\": return None
         if start not in InputFrame.hardBackslashes:
             self.discard(2)
             return start[1]
         x = InputFrame.hardBackslashes[start]
         if isinstance(x, str): return x
         self.discard(2)
-        hexString = self.consume(x)
-        c = chr(int(hexString, 16))
-        if not XStr.isXmlChars(c): raise SyntaxError(
+        try:
+            hexString = self.consume(x)
+            c = chr(int(hexString, 16))
+        except (TypeError, ValueError) as e:
+            raise SyntaxError("Backslash hex code invalid.") from e
+        if not Rune.isXmlChars(c): raise SyntaxError(
             "Backslash encoded a non-XML character (0x%s)." % (hexString))
         return c
 
-    def readInt(self, ss:bool=True, signed:bool=True) -> int:
-        """Read a (possibly signed) decimal int.
+    def readNumericChar(self, ss:bool=True) -> str:
+        """XML numeric char ref (not including named).
         """
-        mat = self.readRegex(r"[-+]?\d+" if signed else r"\d+", ss=ss)
-        if not mat: return None
-        return int(mat.group(), 10)
+        if ss: self.skipSpaces()
+        if not self.readConst("&#"): return None
+        base = 10
+        if self.peek(1) in "xX":
+            base = 16
+            self.consume(1)
+        n = self.readInt(ss=False, signed=False, base=base)
+        if n > sys.maxunicode: raise SyntaxError(
+            "Numeric character ref (d%d, x%x) beyond Unicode range." % (n, n))
+        return chr(n)
 
     def readBaseInt(self, ss:bool=True) -> int:
         """Read any of 999, 0xFFF, 0o777, 0b1111.
         """
-        mat = self.readRegex(r"0x[\da-f]+|0o[0-7]+|0b[01]+|[-+]?\d+",
-            fold=True, ss=ss)
-        if not mat: return None
-        return int(mat.group())
+        if ss: self.skipSpaces()
+        start = self.peek(2)
+        if start == "0x":   base = 16
+        elif start == "0o": base = 8
+        elif start == "0b": base = 2
+        else:               base = 10
+        if base != 10: self.consume(2)
+        val = self.readInt(ss=False, signed=False, base=base)
+        return val
+
+    def readInt(self, ss:bool=True, signed:bool=True, base:int=10) -> int:
+        """Read a (possibly signed) int in one of the usual bases.
+        Returns the actual int value, not the string.
+        """
+        if base not in [ 2, 8, 10, 16 ]:
+            raise ValueError(f"Unsupported base {base}.")
+        okDigits = "0123456789ABCDEFabcdef"
+        if base < 16: okDigits = okDigits[0:base]
+        if ss: self.skipSpaces()
+
+        # First make sure we've got an int to read
+        c = self.peek()
+        if c in okDigits:
+            negated = False
+        elif (signed and c in "-+" and self.peek(2)[1] in okDigits):
+            self.consume()  # Just the sign
+            negated = c == "-"
+        else:
+            return None
+
+        # Now we're at the first digit -- skip any 0s and collect rest
+        while self.peek() == "0":
+            self.consume()
+        buf = ""
+        while self.peek() in okDigits:
+            buf += self.consume()
+        val = int(buf, base)
+        return -val if negated else val
 
     def readFloat(self, ss:bool=True, signed:bool=True,
         specialFloats:bool=False) -> float:
         """TODO: exponential notation?
-        TODO: Consumes a sign even if no following number.
         """
         if ss: self.skipSpaces()
         if specialFloats:  # TODO specialFloats should ignore case
+            # TODO: Require non-alpha after specialFloat
             if self.readConst("NaN"): return float("NaN")
             if self.readConst("-Inf"): return float("-Inf")
             if self.readConst("Inf"): return float("Inf")
-        fToken = ""
-        c = self.peek()
-        if signed and c in "+-":
-            fToken = self.consume()
-            c = self.peek()
-        while (c is not None):
-            if c.isdigit():
-                fToken += self.consume()
-            elif c == ".":
-                if "." in fToken: break
-                fToken += self.consume()
-            c = self.peek()
-        if fToken.strip("+-.") == "":
-            self.pushBack(fToken)
-            return None
-        return float(fToken)
+        intVal = self.readInt(signed=signed, base=10)
+        if intVal is None: return None
+        if self.readConst(self.options.radix) is None: return float(intVal)
+        fstr = "%d." % (intVal)
+        while c := self.peek():
+            if not c.isdigit(): break
+            fstr += self.consume()
+        return float(fstr)
+
+    _firstDelims = "<&%]\\"
+    _allDelims = "<>[]\\/!?#|-+\u2014"  # & and % not ok in non-first pos.
+
+    def peekDelimPlus(self, ss:bool=True) -> (str, str):  # TODO To parser
+        """Return initial punctuation marks, and following character.
+        TODO Maybe take % and & out of _allDelims?
+        TODO Maybe move up to Token level?
+        """
+        if ss: self.skipSpaces()
+        self.topOff(100)
+        if self.bufLeft < 1: return None, None
+
+        i = self.bufPos
+
+        c = self.buf[i]
+        if c not in self._firstDelims: return None, None
+
+        delimString = ""
+        while (True):
+            delimString += c
+            i += 1
+            c = self.buf[i]
+            if c not in self._allDelims: break
+        return delimString, c
 
     def readName(self, ss:bool=True) -> str:
         """
@@ -450,10 +612,11 @@ class InputFrame:
         TODO Add option to require \\s, \\b, or \\W after? Meh.
         This doesn't recognize parameter entity refs. Must it?
         """
+        if ss: self.skipSpaces()
         #lg.info("*** %s, buf '%s'.", callerNames(), self.bufSample)
         #lg.warning(f"readName: buf has '{self.buf[self.bufPos:]}'.\n")
         # Not re.fullmatch here!
-        mat = self.readRegex(XStr.QName_re, ss=ss)
+        mat = self.readRegex(Rune.QName_re, ss=ss)
         if not mat: return None
         return mat.group()
 
@@ -481,188 +644,177 @@ class InputFrame:
         self.bufPos += len(mat.group())
         return(mat)
 
-    def readToString(self, ender:str, consumeEnder:bool=True) -> str:
-        rbuf, ender = self.readToAnyOf([ ender ], consumeEnder)
-        return rbuf
 
-    def readToAnyOf(self, enders:List, consumeEnder:bool=True) -> (str, str):
-        """Read to any of the given strings. Nothing else is recognized.
-        Unlike most readers, this one doesn't leave things unchanged
-        if it fails, because failure means we hit EOF.
-        This shouldn't be used for one of several options for what comes next.
-        Rather, it's for where you really, really have to have some stuff
-        ended by this thing.
-        This does not cross entity boundaries (up or down).
-        TODO: Don't use this for marked sections.
+###############################################################################
+#
+class StackReader:
+    """Keep dictionaries of entities and notations, and a stack of
+    open ones being read. Support very basic read operations (leave the
+    fancy stuff for a subclass to add), and support extensions.
+
+    TODO Maybe make this a subclass of InputFrame, which just is the innermost
+    one, with links to the others. Except when it pops, the ref has to change
+    """
+    def __init__(self, encoding:str="utf-8",
+        handlers:Dict=None, entDirs:List=None, bufSize:int=1024,
+        options:Dict=None, path:str=None):
+        if path: lg.info("\n******* StackReader for path '%s'.", path)
+        self.bufSize = bufSize
+        self.options = options
+        self.path = path
+        self.encoding = encoding
+        self.handlers = handlers or {}  # keyed off saxplayer.SaxEvent
+        self.entDirs = entDirs  # dirs to look in
+
+        self.doctype = DocumentType()
+        self.sdataDefs = {  # TODO Hook up dcls and a set method
+            "lt":   "<",
+            "gt":   ">",
+            "amp":  "&",
+            "quot": '"',
+            "apos": "'",
+        }
+
+        self.spaces = {
+            EntitySpace.GENERAL: {},
+            EntitySpace.PARAMETER: {},
+            EntitySpace.NOTATION: {},
+        }
+
+        # IO state
+        self.rootFrame = None
+        self.totLines = 0  # overall lines processed
+        self.totChars = 0  # overall chars processed
+        self.totEvents = 0
+
+        self.frames:List[InputFrame] = []
+
+    def EntE(self, msg:str) -> None:
+        raise SyntaxError(msg + " in stackreader.")
+
+    def open(self, frame:InputFrame) -> InputFrame:
+        self.frames.append(frame)
+
+    def isEntityOpen(self, space:EntitySpace, name:NMTOKEN_t) -> bool:
+        eDef = self.spaces[space][name]
+        if eDef is None: return False
+        for frame in self.frames:
+            if frame.eDef is eDef: return True
+        return False
+
+    def close(self) -> int:
+        """Close the innermost open InputFrame.
         """
-        rbuf = []
-        while True:
+        frame = self.curFrame
+        if not frame: return False
+        lg.info("Closing frame '%s'.", frame.description)
+        frame.close()
+        self.frames.pop()
+        return self.depth
+
+    def closeAll(self) -> None:
+        while (self.frames):
+            self.close()
+
+    @property
+    def curFrame(self) -> InputFrame:
+        # TODO Maybe add a null string outer frame if nobody home?
+        if not self.frames: return None
+        return self.frames[-1]
+
+    @property
+    def depth(self) -> int:
+        return(len(self.frames))
+
+    def wholeLoc(self) -> str:
+        buf = ''.join(
+            "    %2d: Entity %-12s line %6d, file '%s'" %
+                (i,
+                self.frames[i].eDef.entName,
+                self.frames[i].lineNum,
+                self.frames[i].oeFilename)
+            for i in reversed(range(0, self.depth)))
+        return(buf)
+
+
+    ### Reading
+    ###
+    @property
+    def buf(self) -> str:
+        if not self.curFrame: return None
+        return self.curFrame.buf
+    @property
+    def bufPos(self) -> int:
+        if not self.curFrame: return None
+        return self.curFrame.bufPos
+    @bufPos.setter
+    def bufPos(self, n:int) -> None:
+        if not self.curFrame: return None
+        self.curFrame.bufPos = n
+    @property
+    def bufLeft(self) -> int:
+        if not self.curFrame: return None
+        return self.curFrame.bufLeft
+    @property
+    def bufSample(self) -> str:
+        if not self.buf: return ""
+        preLen = min(80, self.bufPos)
+        postLen = min(80, self.bufLeft)
+        rc = SepChar.qcat(self.buf[self.bufPos-preLen:self.bufPos],
+            self.buf[self.bufPos:self.bufPos+postLen])
+        #rc = re.sub("\n", "\u240a", rc)
+        return rc
+
+    def peek(self, n:int=1) -> str:
+        if not self.curFrame: return None
+        return self.curFrame.peek(n)
+    def consume(self, n:int=1) -> str:
+        if not self.curFrame: return None
+        return self.curFrame.consume(n)
+    def discard(self, n:int=1) -> None:
+        if not self.curFrame: return None
+        return self.curFrame.discard(n)
+    def pushBack(self, s:str) -> None:
+        if not self.curFrame: return None
+        return self.curFrame.pushBack(s)
+
+    def topOff(self, n:int=None) -> int:
+        """Close until not at EOF, then top off first remaining frame.
+        """
+        if not n: n = self.bufSize
+        while self.frames:
+            if not self.curFrame.noMoreToRead: self.curFrame.topOff(n)
+            if self.curFrame.bufLeft > 0: break
+            self.close()
+        return 0 if not self.frames else self.curFrame.bufLeft
+
+    def skipSpaces(self, allowComments:bool=False, entOpener:Callable=None) -> None:
+        #crossEntityEnds:bool=False):  # TODO Implement stack!
+        """Basically skip spaces, but at option also:
+            * skip an embedded comment (for SGML not XML DTDs)
+            * expand if we hit a parameter entity reference.
+        TODO Add a way to return comment events.
+        """
+        nFound = 0
+        while (self.bufLeft):
+            c = self.buf[self.bufPos]
+            if c.isspace():
+                self.bufPos += 1
+                nFound += 1
+            elif c == "-" and self.options.fragComments and allowComments:
+                mat = self.curFrame.readRegex(r"^--([^-]|-[^-])+--")
+                if not mat: return
+                self.bufPos += len(mat.group())
+                com = mat.group(1)
+                if com:
+                    self.bufPos += len(com)
+                    #self.doCB(SaxEvent.COMMENT, com)  # SGML only...
+                nFound += len(com)
+            elif entOpener and c in "%&":
+                entOpener()                 # TODO how switch?
+            else:
+                break
             if self.bufLeft < self.bufSize>>2:
                 self.topOff()
-                if not self.bufLeft: return None, None
-            ender, where = self.findFirst(self.buf, enders, self.bufPos)
-            if ender is None:  # Keep going
-                rbuf.extend(self.buf[self.bufPos:])
-                self.discard(self.bufLeft)
-                self.dropUsedPart()
-                self.topOff()
-            else:
-                rbuf.extend(self.buf[self.bufPos:where])
-                moveTo = where + (len(ender) if consumeEnder else 0)
-                self.buf = self.buf[moveTo:]
-                self.bufPos = 0
-                return ''.join(rbuf), ender
-        return ''.join(rbuf), None  # TODO Notify EOF
-
-    def findFirst(self, s:str, targets:List, start:int) -> (str, int):
-        """Return the index of the first occurrence of any of the strings
-        in 'targets', that is part the 'start' point in the buffer.
-        """
-        bestIndex = None
-        bestTarget = None
-        for target in targets:
-            iLoc = s.find(target, start)
-            if iLoc < 0: continue
-            if bestIndex is None or iLoc < bestIndex:
-                bestIndex = iLoc
-                bestTarget = target
-        return bestTarget, bestIndex
-
-
-###############################################################################
-#
-class FileFrame(InputFrame):
-    def __init__(self, encoding:str="utf-8", bufSize:int=1024):
-        super().__init__(encoding, bufSize)
-        self.path = None
-        self.ifh = None
-
-    def addData(self, literal:str=""):
-        raise AttributeError("Don't do that.")
-
-    def addFile(self, theFile:Union[str, IO, EntityDef]=None):
-        if isinstance(theFile, str):
-            self.path = theFile
-            self.ifh = open(theFile, "rb" )
-        elif isinstance(theFile, EntityDef):
-            self.path = self.findLocalPath(eDef=theFile)
-            self.ifh = open(self.path, "rb" )
-        else:
-            self.ifh = theFile
-            try:
-                self.path = theFile.name
-            except AttributeError:
-                self.path = None
-        self.topOff(n=self.bufSize)
-
-    def close(self) -> None:
-        self.ifh.close()
-        self.ifh = None
-        super().close()
-
-    def findLocalPath(self, eDef:'EntityDef', dirs:List[str]=None, trace:bool=1) -> str:
-        """Resolve a set of publicID/systemID(s) to an actual absolute path.
-        TODO: Pulled from xsparser, finish integrating
-        Who holds the catalog, pwd, whatever?
-        """
-        old_level = lg.getEffectiveLevel()
-        if (trace): lg.setLevel(logging.INFO)
-
-        if not eDef.systemId:
-            raise IOError("No system ID for %s." % (eDef.entName))
-        if isinstance(eDef.systemId, list): systemIds = eDef.systemId
-        else: systemIds = [ eDef.systemId ]
-
-        #lg.info("Seeking entity '%s'", eDef.entName)
-        for systemId in systemIds:
-            #lg.info("  System id '%s'", systemId)
-            if os.path.isfile(systemId):
-                #lg.info("    FOUND")
-                lg.setLevel(old_level)
-                return systemId
-            if dirs:
-                for epath in dirs:
-                    cand = os.path.join(epath, systemId)
-                    #lg.info("    Trying dir '%s'", cand)
-                    if os.path.isfile(cand):
-                        #lg.info("      FOUND")
-                        lg.setLevel(old_level)
-                        return cand
-        raise OSError("No file found for %s (systemIds %s)."
-            % (eDef.entName, systemIds))
-
-    def dropUsedPart(self, allow:int=0) -> None:
-        """Discard some buffer, AND move the offset of the start.
-        TODO raise default 'allow'
-        """
-        if self.bufPos < allow: return
-        self.lineNum += self.buf[0:self.bufPos].count('\n')
-        self.offset += self.bufPos
-        self.buf = self.buf[self.bufPos:]
-        self.bufPos = 0
-
-    def topOff(self, n:int=0) -> int:
-        """Refill the buffer so has at least n characters available (if possible),
-        and return how much is then available.
-        We do not top off across entity boundaries here.
-        If we already have enough data, do nothing. That way we can get called
-        all the time at minimal cost.
-        Read more data (if there is any), to get at least n available chars,
-        and preferably a bunch more so we don't read/copy so often.
-        If EOF happens first, buf ends up short.
-        If EOF happens and there's nothing in buf, that's really EOF on the entity.
-        """
-        #lg.info("FileFrame.topOff, buf '%s'.", self.bufSample)
-        n = max(n or (self.bufSize / 4), 80)
-        if self.bufLeft > n or self.noMoreToRead:
-            return self.bufLeft
-
-        self.dropUsedPart()  # TODO Combine with newChars assign?
-        newChars = self.ifh.read(self.bufSize)
-        if not newChars:  # EOF reached
-            self.noMoreToRead = True
-            if not self.buf:  # No more data at all
-                self.ifh.close()
-            return self.bufLeft
-
-        if isinstance(newChars, bytes):
-            newChars = newChars.decode(self.encoding)
-        if (self.encoding != "utf-8"):
-            raise NSuppE("Unsupported encoding (for now)")
-        self.buf += newChars
-
-        return self.bufLeft
-
-
-###############################################################################
-#
-class EntityFrame(FileFrame):
-    """Used by EntityManager for one currently-open (non-SDATA) entity.
-    TODO: How best to signal EOF on the current entity?
-
-    Readers in here will not go past frame EOF, or expand any entities.
-    So it's for things like name tokens, reserved words, single delimiters,
-    qlits, comments,... If they fail to match, they return None and
-    do not move the input cursor.
-    """
-    def __init__(self, eDef:EntityDef, encoding:str="utf-8", bufSize:int=1024):
-        assert isinstance(eDef, EntityDef)
-        assert bufSize > 100
-
-        self.eDef = eDef
-        if self.eDef.literal is not None:
-            super().__init__(encoding=encoding)
-            self.addData(self.eDef.literal)
-            return
-
-        path = self.findLocalPath(eDef)
-        if not path:
-            raise IOError("No file found for entity '%s'." % (eDef.name))
-
-        # Entities may eventually be able to have their own encoding;
-        # otherwise we use the overall one.
-        curEncoding = self.eDef.encoding or encoding
-        super().__init__(encoding=encoding)
-        self.addFile(path)
-        #self.ifh = codecs.open(path, "rb", encoding=curEncoding)
-        self.topOff()
+                if not self.frames: break
+        return

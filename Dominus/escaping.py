@@ -241,7 +241,7 @@ class EscapeHandler:
         self.orthographies = {}     # Orth codes NOT to escape
         self.allRanges = []         # And the corresponding codepoint ranges
 
-    def addOrthography(self, orth:str):
+    def addOrthography(self, orth:str) -> None:
         """Pass an ISO 15924 4-letter orthography code or the equivalent
         English name. The corresponding Unicode ranges will be considered
         ok to NOT escape.

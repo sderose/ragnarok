@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import json
 import logging
 
-from xmlstrings import XmlStrings as XStr
+from xmlstrings import XmlStrings as Rune
 
 lg = logging.getLogger("JBook")
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -25,11 +25,11 @@ VAL_FLAG = "#"
 JKeys = SimpleNamespace(**{
     # The reserved key for what each item is
     #
-    "J_NAME_KEY"       : f"~",
+    "J_NAME_KEY"       : f"~",  # or U+203B?
 
     # Reserved dictionary keys for ROOT node
     #
-    "J_OUR_VER_KEY"  : f"{KEY_FLAG}ourversion",
+    "J_JBOOK_VER_KEY"  : f"{KEY_FLAG}jbookversion",
     "J_JSON_VER_KEY"   : f"{KEY_FLAG}jsonversion",
     "J_XML_VER_KEY"    : f"{KEY_FLAG}xmlversion",
     "J_ENCODING_KEY"   : f"{KEY_FLAG}encoding",
@@ -37,10 +37,10 @@ JKeys = SimpleNamespace(**{
     "J_DOCTYPE_KEY"    : f"{KEY_FLAG}doctype",  # E.g. "html"
     "J_PUBLICID_KEY"   : f"{KEY_FLAG}publicId",
     "J_SYSTEMID_KEY"   : f"{KEY_FLAG}systemId",
-    "J_PRAGMA_KEY"     : f"{KEY_FLAG}target",
+    "J_TARGET_KEY"     : f"{KEY_FLAG}target",
 
     # Root node property *values*
-    "J_OUR_VER"        : "0.9",
+    "J_JBOOK_VER"      : "0.9",
     "J_XML_VER"        : "1.1",
     "J_ENCODING"       : "utf-8",
     "J_STANDALONE"     : "yes",
@@ -91,7 +91,7 @@ class Loader:
         self.check_json(self.jroot)
         self.domDoc = self.JDomBuilder(self.jroot)
 
-    def check_json_root(self, jroot:List):
+    def check_json_root(self, jroot:List) -> None:
         nn = getNodeName(jroot)
         if nn != JKeys.J_NN_DOCUMENT:
             raise SyntaxError(f"JSON top is not named '{nn}'.")
@@ -100,7 +100,7 @@ class Loader:
             f"Error, {JKeys.J_NAME_KEY} is '{nn}', not '{JKeys.NN_TOP}'.")
         assert len(self.jroot) == 2
 
-    def check_json(self, jnode:Any) -> None:
+    def check_json(self, jnode:Any, deep:bool=True) -> None:
         """See if this is really correct JSON usage for us.
         """
         if isinstance(jnode, (str, int, float, bool)):
@@ -114,9 +114,9 @@ class Loader:
                 "Found %s." % (jnode[0]))
         else:
             nn = getNodeName(jnode)
-            if not XStr.isXmlName(nn) and nn not in J_NODENAMES: raise SyntaxError(
+            if not Rune.isXmlName(nn) and nn not in J_NODENAMES: raise SyntaxError(
                 f"Component name '{nn}' is not reserved or QName.")
-            if len(jnode) > 1:
+            if deep and len(jnode) > 1:
                 for ch in jnode[1:]: self.check_json(ch)
 
     def JDomBuilder(self, jroot:List) -> 'Document':
@@ -145,7 +145,7 @@ class Loader:
             od=self.domDoc, par=self.domDoc.documentElement, jnode=jroot[1])
         return self.domDoc
 
-    def JDoc2Dom_R(self, od:'Document', par:'Node', jnode:Any):
+    def JDoc2Dom_R(self, od:'Document', par:'Node', jnode:Any) -> None:
         if isinstance(jnode, list):
             nodeName = jnode[0][JKeys.J_NAME_KEY]
             if nodeName == JKeys.J_NN_TEXT:
@@ -170,11 +170,11 @@ class Loader:
                 node = self.domDoc.createprocessingInstruction(
                     ownerDocument=od, parentNode=par, target=tgt, data=txt)
                 par.appendChild(node)
-            elif XStr.isXmlQName(nodeName):                 # ELEMENT
+            elif Rune.isXmlQName(nodeName):                 # ELEMENT
                 node = self.domDoc.createElement(
                     parent=par, tagName=nodeName)
                 for k, v in jnode[0].items():
-                    if XStr.isXmlQName(k): node.setAttribute(k, str(v))
+                    if Rune.isXmlQName(k): node.setAttribute(k, str(v))
                 if par is not None: par.appendChild(node)
                 for cNum in range(1, len(jnode)):
                     self.JDoc2Dom_R(od=od, par=node, jnode=jnode[cNum])
@@ -248,7 +248,7 @@ class Saver:
 
         docInfo = [
             (JKeys.J_NAME_KEY,       JKeys.J_NN_TOP),
-            (JKeys.J_OUR_VER_KEY,    JKeys.J_OUR_VER),
+            (JKeys.J_JBOOK_VER_KEY,  JKeys.J_JBOOK_VER),
             (JKeys.J_XML_VER_KEY,    JKeys.J_XML_VER),
             (JKeys.J_ENCODING_KEY,   JKeys.J_ENCODING),
             (JKeys.J_STANDALONE_KEY, JKeys.J_STANDALONE),

@@ -2,21 +2,14 @@
 #
 #pylint: disable=W0201, C2801, W0612, W0212
 #
-# TODO: Group classes by source standard
-#
 #pylint: disable=W0401,W0611,W0621
 import sys
-#import os
+import codecs
 import unittest
-#import math
 import random
 import re
-#import unicodedata
-#from collections import defaultdict
-#from typing import List
 
 from basedomtypes import HReqE, ICharE, NSuppE
-#from basedomtypes import NotFoundError
 from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
 from xmlstrings import XmlStrings as XStr
 
@@ -185,8 +178,13 @@ class testByMethod(unittest.TestCase):
         impl = self.n.impl
         doc = self.n.doc
 
+        with self.assertRaises(ICharE):
+            self.n.impl.createDocument(self.dc.ns_uri, "12zork", None)
+
         self.assertIsInstance(self.n.impl.createDocument(
             self.dc.ns_uri, self.dc.root_name, doctype=None), Document)
+        self.assertIsInstance(self.n.impl.createDocument(
+            self.dc.ns_uri, "somens:"+self.dc.root_name, doctype=None), Document)
 
         #self.assertIsInstance(
         #    doc.createDocumentFragment(self.n.ns_uri, qualifiedName="frag",
@@ -222,8 +220,6 @@ class testByMethod(unittest.TestCase):
             ProcessingInstruction("ettin", "fire giant"), ProcessingInstruction)
         self.assertIsInstance(
             EntityReference("chap1", "c:\\ents\\chapter1.xml"), EntityReference)
-
-        self.assertIsInstance(NodeList(), NodeList)
 
         self.assertIsInstance(DOMImplementation(), DOMImplementation)
         self.assertIsInstance(FormatOptions(), FormatOptions)
@@ -272,7 +268,32 @@ class testByMethod(unittest.TestCase):
         self.XX(n0.__reduce__())
         self.XX(n0.__reduce__ex__())
 
+    def testWeirdChildCases(self):
+        n0 = self.n.child0
+        n1 = self.n.child1
+        n2 = self.n.child2
+        lastP = lastT = None
+        for x in range(10):
+            ch = self.n.doc.createElement("P")
+            n1.appendChild(ch)
+            lastP = ch
+            tx = self.n.doc.createTextNode("ahmagoma hmu hmu")
+            n1.appendChild(tx)
+            lastT = tx
+
+        self.assertEqual(lastP.getChildIndex(ofNodeName=True), 9)
+        self.assertEqual(lastP.getChildIndex(onlyElements=True), 10)
+        self.assertEqual(lastT.getChildIndex(ofNodeName=True), 9)
+
+        with self.assertRaises(TypeError):
+            x = n2[3.14]
+        looseNode = n1.removeChild(n1.childNodes[-1])
+        self.assertIsNone(looseNode.parentNode)
+        self.assertIsNone(looseNode.getChildIndex())
+
     def testListBasics(self):
+        self.assertIsInstance(NodeList(), NodeList)
+
         n0 = self.n.child0
         n1 = self.n.child1
         n2 = self.n.child2
@@ -682,7 +703,9 @@ class testByMethod(unittest.TestCase):
 
         print("\n\n" + "="*79
             + "\n####### writexml output (test5ByMethod testSerializers):")
-        self.XX(n0.writexml(sys.stderr, indent="   ", addindent="   ", newl="\n"))
+        with codecs.open("/dev/null", "wb", encoding="utf-8") as ofh:
+            self.assertIsNone(
+                n0.writexml(ofh, indent="   ", addindent="   ", newl="\r\n"))
 
     def testPointers(self):
         n0 = self.n.child0
@@ -790,6 +813,7 @@ class testByMethod(unittest.TestCase):
         self.assertFalse(n0.isWSN)
         self.assertFalse(n0.isWhitespaceInElementContent)
 
+        self.assertFalse(n0.isEqualNode(None))
         self.assertFalse(n0.isEqualNode(n1))
         self.assertFalse(n0.isSameNode(n2))
 
@@ -813,7 +837,8 @@ class testByMethod(unittest.TestCase):
             cur.appendChild(ch)
             cur = ch
         self.assertEqual(cur.getStackedAttribute("id"), stackBuf)
-        self.assertEqual(cur.getStackedAttribute("id", sep="%%%"), re.sub(r"/", "%%%", stackBuf))
+        self.assertEqual(cur.getStackedAttribute("id", sep="%%%"),
+            re.sub(r"/", "%%%", stackBuf))
 
         self.assertEqual(cur.getInheritedAttribute("id"), "idval_4")
         self.assertEqual(cur.getInheritedAttribute("no-such-id", default="x"), "x")
@@ -936,7 +961,7 @@ class testByMethod(unittest.TestCase):
         self.assertTrue(pi.index("P") is None)
         self.assertTrue(pi.clear() is None)
         with self.assertRaises(HReqE):
-            pi.firstChild  # TODO Huh?
+            pi.firstChild
         with self.assertRaises(HReqE):
             pi.lastChild
         with self.assertRaises(AttributeError):

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 #
 import sys
+import os
 import re
 import html
 import random
@@ -26,6 +27,8 @@ nameStartChars = XStr.allNameStartChars()
 nameChars = nameStartChars + XStr.allNameChars()
 
 firstSetup = True
+
+dataDir = os.environ["sjdUtilsDir"] + "/Data"
 
 
 ###############################################################################
@@ -227,6 +230,30 @@ class DAT_DocBook(DAT):
 
     inline_name = 'emph'
 
+class DAT_K(DAT):
+    doc_path = "file://%s/TextFormatSamples/sample.xml" % (dataDir)
+
+    root_name = 'article'
+    p_name = "para"
+    inline_name = "q"
+
+    ns_prefix = "docbook"
+    ns_uri = "http://docbook.org/ns/docbook"
+
+    pi_target = "someTarget"
+    pi_data = """someData='foo' bar="baz" 12.1?"""
+    com_data = "Comments are cool. Lots of potassium."
+    cdata_data = "For example, in XML you say <p>foo</p> [[sometimes]]."
+    base_attr_name = "anAttrName"
+    new_name = "newb"
+    attr1_name = "class"
+    attr1_value = "important"
+    text1 = "aardvark"
+    udk1_name = "myUDKey"
+    udk1_value = "999"
+
+    outer = """<para id="foo">From xml string</para>"""
+
 
 ###############################################################################
 #
@@ -332,7 +359,7 @@ class makeTestDoc0:
             withAttr = { "speaker":"narr" }
         d = node.ownerDocument
 
-        for i in range(n):
+        for _i in range(n):
             newEl = d.createElement(nodeName)
             if withText:
                 newEl.appendChild(d.createTextNode(withText))
@@ -451,3 +478,32 @@ class makeTestDoc2(makeTestDoc0):
 
         # Nodes used later
         self.n.mixedNode = None
+
+
+###############################################################################
+#
+class makeTestDocEachMethod(makeTestDoc0):
+    """Make a common starting doc. Superclass makes just root element.
+    This adds 10 children, same type, @n numbered, and one more attr plus text.
+    TODO: Move to makeTestDoc.
+    """
+    def __init__(self, dc:type=DAT, show:bool=False):
+        super().__init__(dc=dc)
+        assert isinstance(self.n.impl, DOMImplementation)
+        assert isinstance(self.n.doc, Document)
+        assert isinstance(self.n.docEl, Element)
+
+        for i in range(10):
+            p = self.n.doc.createElement(self.dc.p_name)
+            p.setAttribute(self.dc.attr1_name, self.dc.attr1_value)
+            p.setAttribute("n", i)
+            t = self.n.doc.createTextNode(self.dc.text1)
+            p.appendChild(t)
+            self.n.docEl.appendChild(p)
+
+        #DBG.dumpNode(self.n.docEl)
+        #y = self.makeSampleDoc()
+        #x = self.makeSampleDoc()
+
+        if show: sys.stderr.write(
+            "makeTestDocEachMethod produced: " + self.n.doc.outerXML)
