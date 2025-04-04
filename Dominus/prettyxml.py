@@ -12,7 +12,7 @@ from textwrap import wrap
 from html.entities import codepoint2name
 
 from basedomtypes import DOMException, NSuppE, ICharE, NodeType
-from xmlstrings import XmlStrings as Rune #, CaseHandler
+from runeheim import XmlStrings as Rune #, CaseHandler
 
 #from basedom import Node, NamedNodeMap, NodeList
 

@@ -16,6 +16,8 @@ from typing import Any, Callable, Dict, List, Union, Iterable, Tuple, IO
 import functools
 import unicodedata
 import re
+import logging
+
 #from textwrap import wrap
 from xml.parsers import expat
 
@@ -26,10 +28,12 @@ from basedomtypes import DOMImplementation_P, NMTOKEN_t, QName_t, NodeType, dtr
 from saxplayer import SaxEvent
 from domenums import RWord
 from dombuilder import DomBuilder
-from xmlstrings import XmlStrings as Rune, CaseHandler, Normalizer
+from runeheim import XmlStrings as Rune, CaseHandler, Normalizer
 from xsdtypes import XSDDatatypes
 from idhandler import IdHandler
 from prettyxml import FormatOptions, FormatXml
+
+lg = logging.getLogger("basedom")
 
 __metadata__ = {
     "title"        : "BaseDOM",
@@ -201,7 +205,7 @@ _siblingImpl       = SiblingImpl.PARENT
 
 ###############################################################################
 #
-class PlainNode(list):
+class Yggdrasil(list):
     """The main (basically abstract) class for DOM, from which many are derived.
         https://www.w3.org/TR/2000/REC-DOM-Level-2-Core-20001113
 
@@ -232,12 +236,12 @@ class PlainNode(list):
     @property
     def canHaveChildren(self) -> bool:  # HERE
         return self.nodeType in [
-            PlainNode.ABSTRACT_NODE,  # TODO Maybe not?
-            PlainNode.ELEMENT_NODE, PlainNode.DOCUMENT_NODE,
-            PlainNode.DOCUMENT_TYPE_NODE, PlainNode.DOCUMENT_FRAGMENT_NODE ]
+            Yggdrasil.ABSTRACT_NODE,  # TODO Maybe not?
+            Yggdrasil.ELEMENT_NODE, Yggdrasil.DOCUMENT_NODE,
+            Yggdrasil.DOCUMENT_TYPE_NODE, Yggdrasil.DOCUMENT_FRAGMENT_NODE ]
 
-    def __init__(self, ownerDocument:Document=None, nodeName:NMTOKEN_t=None):
-        """PlainNode (and Node) shouldn't really be instantiated.
+    def __init__(self, ownerDocument:'Document'=None, nodeName:NMTOKEN_t=None):
+        """Yggdrasil (and Node) shouldn't really be instantiated.
         minidom lets Node be, but with different parameters.
         I add the params for constructor consistency.
         Also, since here it is a list, there's not much need to distinguish
@@ -289,7 +293,8 @@ class PlainNode(list):
         return self.contains(other)
 
     def __setitem__(self, picker:Union[int, slice], value: 'Node') -> None:
-        """Regular list ops aren't even, as we have to set neighbor link(s).
+        """Regular list ops aren't enough, as we have to set neighbor link(s),
+        prevent inserting one node in multiple places, etc.
         """
         if not isinstance(value, (Node, NodeList)): raise HReqE(
             f"Can't insert ({type(value)}) as child, must be Node or NodeList.")
@@ -370,12 +375,13 @@ class PlainNode(list):
                 % (scheme, self.ownerDocument.schemeHandlers.keys())) from e
 
     def getChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,
-        noWSN:bool=False) -> int:  # HERE
+        wsn:bool=True, coalesceText:bool=False) -> int:  # HERE
         """Return the position in order (from 0), among the node's siblings
         (or selected siblings). This is O(n). It is mainly used when not
         opting to use sibling pointers or explicit _childNum values.
         If self is not an element, it's considered to have position one
         greater than the nearest preceding matching node.
+        If 'coalesceText' is set, adjacent text nodes count as 1.
         """
         if self.parentNode is None: return None
         if hasattr(self, "_childNum"): return self._childNum
@@ -383,16 +389,17 @@ class PlainNode(list):
         for ch in self.parentNode.childNodes:
             if ch is self: return i
             if onlyElements and not ch.isElement: continue
-            if noWSN and ch.isWSN: continue
+            if ch.isTextNode:
+                if coalesceText and ch.nextSibling and ch.nextSibling.isTextNode: continue
+                if not wsn and ch.isWSN: continue
             if ofNodeName and not ch._nodeNameMatches(self): continue
             i += 1
         return None
 
     def getRChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,
-        noWSN:bool=False) -> int:  # HERE
+        wsn:bool=True, coalesceText:bool=False) -> int:  # HERE
         """Return the position from the end (from -1...) among
-        the node's siblings or selected siblings (such as just Elements, or
-        just nodes of the same nodeName.
+        all or selected siblings.
         """
         if self.parentNode is None: return None
         if hasattr(self, "_childNum"):
@@ -401,13 +408,15 @@ class PlainNode(list):
         for ch in reversed(self.parentNode.childNodes):
             if ch is self: return i
             if onlyElements and not ch.isElement: continue
-            if noWSN and ch.isWSN: continue
-            if ofNodeName and ch.nodeName != self.nodeName: continue  # TODO use nodeNameMatches
+            if ch.isTextNode:
+                if coalesceText and ch.previousSibling and ch.previousSibling.isTextNode: continue
+                if not wsn and ch.isWSN: continue
+            if ofNodeName and ch._nodeNameMatches(self): continue
             i -= 1
         #raise HReqE("Child not found.")
         return None
 
-     # Next three are defined here (PlainNode), but only work for Element and Attr.
+     # Next three are defined here (Yggdrasil), but only work for Element and Attr.
     # (though constructors all takes nodeName for consistency...).
     @property
     def prefix(self) -> str:
@@ -433,7 +442,7 @@ class PlainNode(list):
         return True
 
     @property
-    def nodeValue(self) -> str:  # PlainNode
+    def nodeValue(self) -> str:  # Yggdrasil
         """null for Document, Frag, Doctype, Element, NamedNodeMap.
         """
         return None
@@ -530,8 +539,8 @@ class PlainNode(list):
         if the prefixes don't match (several could map to the same URI).
         When disconnecting a node keep relevant namespaces with it.
         """
-        if (self.ownerDocument and self.ownerDocument.options.ElementCase):
-            if self.ownerDocument.options.ElementCase.strnormcmp(
+        if (self.ownerDocument and self.ownerDocument.options.elementFold):
+            if self.ownerDocument.options.elementFold.strnormcmp(
                 self.localName, other.localName): return False
         else:
             if self.localName != other.localName: return False
@@ -552,7 +561,7 @@ class PlainNode(list):
         """
         raise NSuppE("Shouldn't really be cloning an abstract Node.")
 
-    #### Mutators (PlainNode)
+    #### Mutators (Yggdrasil)
 
     def _expandChildArg(self, ch:Union['Node', int]) -> (int, 'Node'):
         """Let callers specify a child either by the object itself or position.
@@ -602,7 +611,7 @@ class PlainNode(list):
                     self.removeChild(fsib)
             fsib = ch
 
-    def appendChild(self, newChild:'Node') -> None:  # PlainNode
+    def appendChild(self, newChild:'Node') -> None:  # Yggdrasil
         self.insert(len(self), newChild)
 
     def append(self, newChild:'Node') -> None:
@@ -620,7 +629,7 @@ class PlainNode(list):
             f"Node to insert after (a {oChild.nodeName}) is not a child.")
         self.childNodes.insert(oNum+1, newChild)
 
-    def insert(self, i:int, newChild:'Node') -> None:  # PlainNode
+    def insert(self, i:int, newChild:'Node') -> None:  # Yggdrasil
         """Note: Argument order is different than (say) insertBefore.
         This implementation does not link siblings, b/c tests showed
         the overhead wasn't worth it.
@@ -689,7 +698,7 @@ class PlainNode(list):
             raise HReqE(f"No parent in removeNode for {self.nodeName}.")
         return self.parentNode.removeChild(self)
 
-    def removeChild(self, oldChild:Union['Node', int]) -> 'Node':  # PlainNode
+    def removeChild(self, oldChild:Union['Node', int]) -> 'Node':  # Yggdrasil
         """Disconnect oldChild from this node, removing it from the tree,
         but not fromm the document. To destroy it, it should also unlinked.
         Namespaces are copied, not cleared (may be if/when re-inserted somewhere).
@@ -750,7 +759,7 @@ class PlainNode(list):
         fo=FormatOptions(indent=addindent, newl=newl)
         writer.write(self.toprettyxml(fo=fo) or "")
 
-    ### Python list operations (PlainNode)
+    ### Python list operations (Yggdrasil)
 
     def count(self, x:Any) -> int:
         found = 0
@@ -830,7 +839,7 @@ class PlainNode(list):
             if newChild.declaredNS is None: newChild.declaredNS = {}
             newChild.declaredNS[k] = v
 
-    ### More Python list operations, for PlainNode.
+    ### More Python list operations, for Yggdrasil.
     #
     #def reverse(self) -> None: -- Should just work on superclass.
 
@@ -872,7 +881,7 @@ class PlainNode(list):
     # Though you *can* put them into NodeLists.
     # So __add__, __mul__, etc. have to become non-in-place.
     #
-    def __mul__(self, x:int) -> 'NodeList':  # PlainNode
+    def __mul__(self, x:int) -> 'NodeList':  # Yggdrasil
         """Well, I guess for completeness... We can't multiple in place
         (well, maybe for 0 or 1), so make a new NodeList.
         """
@@ -908,7 +917,7 @@ class PlainNode(list):
             self.appendChild(ch)
         return self
 
-    ### Misc (PlainNode)
+    ### Misc (Yggdrasil)
 
     def getInterface(self) -> None:
         raise NSuppE("getInterface: obsolete.")
@@ -919,7 +928,7 @@ class PlainNode(list):
 
 ###############################################################################
 #
-class Node(PlainNode):
+class Node(Yggdrasil):
     # whatwgAdditions, EtAdditions, OtherAdditions,
     #CssSelectors,
     #__slots__ = ("nodeType", "nodeName", "ownerDocument", "parentNode")
@@ -1342,17 +1351,23 @@ class Node(PlainNode):
     #######################################################################
     # Paths, pointers, etc. (Node)  TODO: Move to ranges
     #
-    def getNodePath(self, useId:str=None, attrOk:bool=False, wsn:bool=True) -> str:  # XPTR
-        steps = self.getNodeSteps(useId=useId, attrOk=attrOk, wsn=wsn)
+    def getNodePath(self, useId:str=None, attrOk:bool=False,
+        wsn:bool=True, typed:bool=False) -> str:
+        """Get a basic XPounter child-sequence string.
+        """
+        steps = self.getNodeSteps(useId=useId, attrOk=attrOk, wsn=wsn, typed=typed)
         if not steps: return None
         return "/".join([ str(step) for step in steps ])
 
-    def getNodeSteps(self, useId:bool=False, attrOk:bool=False, wsn:bool=True) -> List:
-        """Get the child-number path to the node, as a list.  # XPTR
-        At option, start it at the nearest ID (given an attr name for ids).
-        Attributes yield the ownerElement unless 'attrOk' is set.
+    def getNodeSteps(self, useId:bool=False, attrOk:bool=False,
+        wsn:bool=True, typed:bool=False) -> List:
+        """Get the child-number path to the node, as a list. Options:
+            'useId': start it at the nearest ID (given an attr name for ids)
+            'attrOk': Support attr node via '@{name}' (else use the ownerElement)
+            'wsn': whitespace-only text nodes count
+            'typed': suffix element type to the child number
         """
-        if self.nodeType == PlainNode.ABSTRACT_NODE:
+        if self.nodeType == Yggdrasil.ABSTRACT_NODE:
             raise NSuppE("No paths to abstract Nodes.")
         cur = self
         f = []
@@ -1367,10 +1382,8 @@ class Node(PlainNode):
                     break
             if cur.parentNode is None:
                 f.insert(0, 1)
-            elif wsn:
-                f.insert(0, cur.getChildIndex() + 1)
             else:
-                f.insert(0, cur.getChildIndex(noWSN=True) + 1)
+                f.insert(0, cur.getChildIndex(wsn=wsn) + 1)
             cur = cur.parentNode
         return f
 
@@ -1633,12 +1646,14 @@ class Node(PlainNode):
             assert isinstance(self.userData, dict)
 
         # Following checks via getChildIndex() ensure sibling uniqueness
-        if self.previousSibling is not None:
-            assert self.previousSibling.nextSibling is self
-            assert self.previousSibling.getChildIndex() == self.getChildIndex() - 1
-        if self.nextSibling is not None:
-            assert self.nextSibling.previousSibling is self
-            assert self.nextSibling.getChildIndex() == self.getChildIndex() + 1
+        ps = self.previousSibling
+        if ps is not None:
+            assert ps.nextSibling is self
+            assert ps.getChildIndex() == self.getChildIndex() - 1
+        ns = self.nextSibling
+        if ns is not None:
+            assert ns.previousSibling is self
+            assert ns.getChildIndex() == self.getChildIndex() + 1
 
         # For the alternative sibling implementations:
         if self.parentNode is not None:
@@ -1756,17 +1771,7 @@ class Document(Node):
     def initOptions(self) -> SimpleNamespace:  # HERE
         return SimpleNamespace(**{
             "parser":         "lxml", # Default parser to use
-
-            "ElementCase":    None,  # None, CaseHandler, Normalizer
-            "AttributeCase":  None,  #                                # TODO
-            "IdCase":         None,  # (pass to idhandler calls)      # TODO
-            "EntityCase":     None,  # (to xsparser?)                 # TODO
-            "NSURICase":      None,  #                                # TODO
-
             "NameTest":       None,  # None or a NameTest enum        # TODO
-
-            "attributeTypes": False, # Attribute datatype check/cast  # TODO
-            "xsdTypes":       True,  # impl option                    # TODO
 
             # API extensions
             "getItem":        True,  # Overload [] for child selection
@@ -1775,13 +1780,22 @@ class Document(Node):
             "whatwgStuff":    True,  # Support whatwg calls           # TODO
             "BSStuff":        False, # Support bsoup/etree calls      # TODO
 
+            # TODO Merge w/ Loki options
+            "elementFold":    None,  # None, CaseHandler, Normalizer
+            "attrFold":       None,  #                                # TODO
+            "entityFold":     None,  # (to xsparser?)                 # TODO
+            "idFold":         None,  # (pass to idhandler calls)      # TODO
+            "xsdFold":        None,  # (for true, nan, types)         # TODO
+
+            "NSURICase":      None,  #                                # TODO
+            "attributeTypes": False, # Attribute datatype check/cast  # TODO ???
+            "xsdTypes":       True,  # impl option                    # TODO
+
             # Namespace options
-            "IdNameSpaces":   False, # Allow ns prefixes on ID values # TODO
+            "idNameSpaces":   False, # Allow ns prefixes on ID values # TODO
             "ns_global":      False, # Limit ns dcls to doc element   # TODO
             "ns_redef":       True,  # Allow redefining a ns prefix?  # TODO
             "ns_never":       False, # No namespaces please           # TODO
-
-            # Syntax extensions -- see xsparser
         })
 
     def setOption(self, k:str, v:Any):  # Document
@@ -2314,12 +2328,12 @@ class Element(Node):
         """
         od = self.ownerDocument
         if od.idHandler is None:
-            caseH = CaseHandler(od.options.IdCase)
+            caseH = CaseHandler(od.options.idFold)
             od.idHandler = IdHandler(od, caseHandler=caseH)
         return od.getElementById(IdValue)
 
     def getElementsByClassName(self, name:str, attrName:str="class",
-        nodeListNodEList=None) -> NodeList:
+        nodeList:NodeList=None) -> NodeList:
         """Works even if it's just one of multiple class tokens.
         """
         if nodeList is None: nodeList = NodeList()
@@ -2528,7 +2542,9 @@ class Element(Node):
                 #nsp = anode.prefix is defined
                 anode.checkNode()
 
-        if self.childNodes is not None:
+        if self.childNodes:
+            assert isinstance(self.childNodes, list)
+            prevChild = None
             for i, ch in enumerate(self.childNodes):
                 assert isinstance(ch, Node)
                 assert ch.nodeType in [
@@ -2542,9 +2558,14 @@ class Element(Node):
                     # docfrag??? entref???
                 ]
                 assert ch.parentNode == self
-                if i > 0: assert ch.previousSibling is not None
-                if i < len(self.childNodes)-1: assert ch.nextSibling is not None
-                if deep: ch.checkNode(deep)
+                ps = ch.previousSibling
+                if i > 0: assert ps is prevChild
+                if i < len(self.childNodes)-1:
+                    assert isinstance(ch.nextSibling, Node)
+                if deep:
+                    #lg.info(f"Recursing to check: {ch.getNodePath(typed=True)}.")
+                    ch.checkNode(deep)
+                prevChild = ch
 
     # End class Element
 
@@ -2948,7 +2969,7 @@ class Attr(Node):
         raise HReqE("Attributes are not children.")
 
     def getChildIndex(self, onlyElements:bool=False, ofNodeName:bool=False,
-        noWSN:bool=False) -> int:  # Attr  # HERE
+        wsn:bool=True, coalesceText:bool=False) -> int:  # Attr  # HERE
         raise HReqE("Attributes are not children.")
 
     def compareDocumentPosition(self, other:'Node') -> int:  # Attr
@@ -3038,13 +3059,13 @@ class NamedNodeMap(OrderedDict):
         self.ownerDocument = ownerDocument
         if aname: self.setNamedItem(aname, avalue)
 
-    def __eq__(self, other:NamedNodeMap) -> bool:
+    def __eq__(self, other:'NamedNodeMap') -> bool:
         """NOTE: Python considers OrderedDicts unequal if order differs.
         But here we want OrderedDict only for serializing, so...
         """
         return dict(self) == dict(other)
 
-    def __ne__(self, other:NamedNodeMap) -> bool:
+    def __ne__(self, other:'NamedNodeMap') -> bool:
         return not (self == other)
 
     def setNamedItem(self, attrNodeOrName:Union[str, Attr], avalue:Any=None,

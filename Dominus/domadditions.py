@@ -12,7 +12,7 @@ from typing import List, Iterable, Union
 import logging
 
 from basedomtypes import InvalidCharacterError, NotSupportedError
-from xmlstrings import NameTest  #XmlStrings as Rune, UNormHandler, CaseHandler
+from runeheim import NameTest  #XmlStrings as Rune, UNormHandler, CaseHandler
 lg = logging.getLogger("BaseDOM")
 
 # Provide synonym types for type-hints these common args

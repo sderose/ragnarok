@@ -1,5 +1,15 @@
 ==To decide or do==
 
+==Option switching==
+
+    <?xml ... opt1=val1...?>
+
+    <?loki ...?>
+
+    <?loki bull=0x2022 AGr=0x0391... ?>
+
+    <?loki ename=para aname="class:NMTOKENS=normal" ?>
+
 
 ==XmlStrings==
 
@@ -60,6 +70,8 @@ Semantics for isEqualNode? Separate methods/options for cast vs. str values?
 
 * Should PlainNode/Node be constructable?
 
+* Make sure splicing multiples in/out doesn't go n**2 on sibling update
+
 * Should lack of attrs/ns/etc be empty or None?
 
 * Should removeAttribute___ unlink from ownerDoc/ownerEl?
@@ -116,6 +128,8 @@ only be on Document anyway?
     ** maintain entity structure
 
 Which xsparser options should also be available in FormatOptions?
+
+* Option to write Loki options into the XML dcl?
 
 * Integrate OLIST, TagML, Clix into Dominµs.
 

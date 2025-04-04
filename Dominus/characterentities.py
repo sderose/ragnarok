@@ -8,7 +8,7 @@ import codecs
 import logging
 import re
 
-from xmlstrings import XmlStrings as Rune
+from runeheim import XmlStrings as Rune
 
 lg = logging.getLogger("addCharacterEntities.py")
 

@@ -10,7 +10,7 @@ import base64
 
 from basedomtypes import FlexibleEnum, DOMException
 #from domenums import RWord
-from xmlstrings import XmlStrings as Rune, WSHandler
+from runeheim import XmlStrings as Rune, WSHandler
 #from basedom import Node
 
 

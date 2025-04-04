@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import json
 import logging
 
-from xmlstrings import XmlStrings as Rune
+from runeheim import XmlStrings as Rune
 
 lg = logging.getLogger("JBook")
 logging.basicConfig(level=logging.INFO, format='%(message)s')

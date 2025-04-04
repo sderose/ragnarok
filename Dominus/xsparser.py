@@ -9,7 +9,6 @@
 #pylint: disable=W1201
 #
 import codecs
-import os
 import re
 import logging
 from typing import Union, List, Dict, Tuple, IO, Any
@@ -19,7 +18,7 @@ import inspect
 #import html
 from html.entities import name2codepoint  # codepoint2name
 
-from xmlstrings import CaseHandler, UNormHandler, WSHandler, Normalizer
+from runeheim import XmlStrings as Rune  #CaseHandler, UNormHandler, WSHandler, Normalizer
 from saxplayer import SaxEvent
 from basedomtypes import NSuppE, DOMException, NMTOKEN_t
 from documenttype import (EntitySpace, EntityDef, EntityParsing, Model,
@@ -37,18 +36,17 @@ EOF = -1
 
 __metadata__ = {
     "title"        : "XSParser",
-    "description"  : "An XML and extended syntax parser, with DTD++ support.",
+    "description"  : "An extensible XML parser.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.7",
     "created"      : "2011-03-11",
-    "modified"     : "2025-03-09",
+    "modified"     : "2025-04-01",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
 __version__ = __metadata__['modified']
-
 
 def callerNames(n1:int=3, n2:int=1) -> str:
     buf = ""
@@ -129,148 +127,6 @@ class TagStack(list):
 
 ###############################################################################
 #
-class XSPOptions:
-    """Keep track of parser extensions in use (if any).
-
-    Shunt the deuterium from the main cryo-pump to the auxiliary tank.
-    Er, the tank can't withstand that kind of pressure.
-    Where'd you... where'd you get that idea?
-    ...It's in the impulse engine specifications.
-    Regulation 42/15 -- Pressure Variances on the IRC Tank Storage?
-    Yeah.
-    Forget it. I wrote it. Just... boost the flow. It'll work.
-            -- ST:TNG "Relics"
-    """
-    def __init__(self, options:Dict=None):
-        ### Size limits and security (these are XML compatible)
-        self.MAXEXPANSION    = 1<<20  # Limit expansion length of entities
-        self.MAXENTITYDEPTH  = 100    # Limit nesting of entities
-        self.charEntities    = True   # Allow SDATA and CDATA entities
-        self.extEntities     = True   # External entity refs?
-        self.netEntities     = True   # Off-localhost entity refs?
-        self.entityDirs      = []     # Permitted dirs to get ents from
-        self.extSchema       = True   # Fetch and process external schema
-
-        ### Case and Unicode
-        NM = Union[ CaseHandler, UNormHandler, WSHandler, Normalizer ]
-        self.elementFold:NM  = None
-        self.attrFold:NM     = None   # (attribute NAMEs)
-        self.entityFold:NM   = None
-        self.keywordFold:NM  = None   # (for ATTLIST, SYSTEM, CDATA, etc)
-        self.xsdFold         = None   # (for true, false, inf, nan, etc) TODO
-            # When set, modify xsdtypes entries ["boolean"|"float"|...]["xsdFold"]
-        self.uNormHandler    = None   #                                 TODO
-        self.wsDef           = None   # (XML default)                   TODO
-        self.radix           = "."    # Decimal point choice            TODO
-        self.noC0            = True   # No C0 controls (XML 1.0)
-        self.noC1            = False  # No C1 controls (b/c CP1252)
-        self.noPrivateUse    = False  # No Private Use chars
-
-        ### Schemas
-        self.schemaType      = "DTD"  # <!DOCTYPE foo SYSTEM "" NDATA XSD>
-        self.fragComments    = False  # In-dcl like SGML
-        #self.setDcls        = False  # <!ENTITY % x SET (i b tt)>      TODO
-
-        ### Elements
-        self.groupDcl        = False  # <!ELEMENT (x|y|z)...>
-        self.oflag           = False  # <!ELEMENT - O para...>
-        self.sgmlWord        = False  # CDATA RCDATA #CURRENT etc.
-        self.mixel           = False  # Dcl content ANYELEMENT          TODO
-        self.mixins          = False  # cf incl exceptions
-        self.repBrace        = False  # {min,max} for repetition
-
-        self.emptyEnd        = False  # </>
-        self.omitEnd         = False  # May omit end-tags before another
-        self.omitAtEOF       = False  # May omit end-tags at EOF
-        self.restart         = False  # <|> to close & reopen current element
-        self.levelCount      = None   # Enable Schemera for depths      TODO
-        self.endTagID        = False  # Permit ID on end-tag            TODO
-
-        ### Beyond hierarchy
-        self.multiTag        = False  # <div/title>...</title/div>      TODO
-        self.simultaneous    = False  # <b|i> </i|/b>
-        self.suspend         = False  # <x>...<-x>...<+x>...</x>
-        self.olist           = False  # olist not stack
-        self.suspendDcl      = False  # <!ELEMENT ... SUSPENDABLE>      TODO
-        self.olistDcl        = False  # <!ELEMENT ... OLISTABLE>        TODO
-        self.trojanDcl       = False  # <!ATTLIST q s TROJAN_START etc. TODO
-            # BEG SUS RES END ?
-
-        ### Attributes
-        self.saxAttr         = False  # SEparate SAX event per attribute
-        self.globalAttr      = False  # <!ATTLIST * ...>
-        self.anyAttr         = False  # <!ATTLIST foo #ANY CDATA #IMPLIED>
-        self.xsdType         = False  # XSD builtins for attr types
-        self.attrCast        = False  # Cast attr to declared type      TODO
-        self.xsdPlural       = False  # XSD types + plurals             TODO
-        self.specialFloat    = False  # Nan Inf etc. (needed?)
-        self.unQuotedAttr    = False  # <p x=foo>
-        self.curlyQuote      = False
-        self.booleanAttr     = False  # <x +border -foo>
-        self.bangAttr        = False  # != on first use to set dft
-        self.bangAttrType    = False  # !typ= to set datatype           TODO
-
-        ### IDs
-        self.coID            = False  # co-index Trojans                TODO
-        self.nsID            = False  # IDs can have ns prefix          TODO
-        self.stackID         = False  # ID is cat(anc:@id)              TODO
-        self.idSep           = ""     # <p*obj27> to save ( xml:id="")  TODO
-
-        ### Validation (beyond WF!)
-        self.valElementNames = False  # Must be declared
-        self.valModels       = False  # Child sequences                 TODO
-        self.valAttrNames    = False  # Must be declared
-        self.valAttrTypes    = False  # Must match datatype
-
-        ### Entities and special characters
-        self.htmlNames       = False  # Enable HtML/Annex D named char refs
-        self.unicodeNames    = False  # Enable Raku-like unicode entities
-        self.multiPath       = False  # Multiple SYSTEM IDs
-        self.multiSDATA      = False  # <!SDATA nbsp 160 z 0x9D>        TODO
-        self.backslash       = False  # \n \xff \uffff (not yet \\x{}
-
-        ### Other
-        self.expatBreaks     = False  # Break at \n and entities like expat
-        self.emComments      = False  # emdash as -- for comments
-        self.poundComments   = False  # <# ... #>
-        self.piEscapes       = False  # Recognize char refs in PIs      TODO
-        self.piAttr          = False  # PI parsed like attributes.
-        self.piAttrDcl       = False  # <!ATTLIST ?target ...>          TODO
-        self.nsSep           = ":"    #                                 TODO
-        self.nsUsage         = None   # one/global/noredef/regular      TODO
-        self.MSTypes         = False  # Allow other than CDATA?
-
-        if options:
-            for k, v in options.items():
-                self.setOption(k, v)
-
-    def setOption(self, optName:str, optValue) -> None:
-        if optName.startswith("_") or not hasattr(self, optName):
-            raise ValueError(f"Unknown option '{optName}'.")
-        curVal = getattr(self, optName)
-        if (curVal is not None
-            and not isinstance(optValue, type(curVal))): raise TypeError(
-            f"Unexpected value type {type(optValue)} (not {type(curVal)}) for '{optName}'.")
-        if (optName == "entityDirs"):
-            for adir in optValue: assert os.path.isdir(adir)
-        if isinstance(curVal, bool):
-            optValue = XSPOptions.boolOption(optName, optValue)
-        setattr(self, optName, optValue)
-
-    @staticmethod
-    def boolOption(name:str, value:Any, strict:bool=True) -> bool:
-        """Recognize a small range of boolean values. Unknowns mean false,
-        unless 'strict' is set.
-        """
-        if value in [ True, "yes", "1", 1 ]: return True
-        if value in [ False, "no", "0", 0 ]: return False
-        if strict: raise SyntaxError(
-            f"Unrecognized boolean value '{value}' for option '{name}'.")
-        return False
-
-
-###############################################################################
-#
 class ErrorRecord:
     def __init__(self, theParser, code:int):
         self.theParser = theParser
@@ -284,6 +140,89 @@ class ErrorRecord:
         return "ERROR {%d}: In entity '{%s}' @%d:%d (offset %d)." % (
             self.code, self.entName,
             self.lineNumber, self.columnNumber, self.byteIndex)
+
+
+###############################################################################
+#
+class XSPOptions:
+    """Keep track of parser extensions in use (if any).
+    By default, this just adds options that do not touch XML syntax at all.
+    For example, constraints on entity security, extra charset restrictions,
+    tweaks to how SAX events are generated, etc.
+
+    To get Loki extensions, explicitly call addLokiOptions().
+
+    Shunt the deuterium from the main cryo-pump to the auxiliary tank.
+    Er, the tank can't withstand that kind of pressure.
+    Where'd you... where'd you get that idea?
+    ...It's in the impulse engine specifications.
+    Regulation 42/15 -- Pressure Variances on the IRC Tank Storage?
+    Yeah.
+    Forget it. I wrote it. Just... boost the flow. It'll work.
+            -- ST:TNG "Relics"
+    """
+    def __init__(self, options:Dict=None):
+        self.utgard = False
+
+        ### Size limits and security (these are XML compatible)
+        self.MAXEXPANSION:int   = 1<<20  # Limit expansion length of entities
+        self.MAXENTITYDEPTH:int = 100    # Limit nesting of entities
+        self.charEntities    = True   # Allow SDATA and CDATA entities
+        self.extEntities     = True   # External entity refs?
+        self.netEntities     = True   # Off-localhost entity refs?
+        self.entityDirs:List = []     # Permitted dirs to get ents from
+        self.extSchema       = True   # Fetch and process external schema
+
+        self.noC0            = True   # No C0 controls (XML 1.0)
+        self.noC1            = False  # No C1 controls (b/c CP1252)
+        self.noPrivateUse    = False  # No Private Use chars
+
+        ### Attributes
+        self.saxAttr         = False  # Separate SAX event per attribute
+        self.attrCast        = False  # Cast attr to declared type      TODO
+
+        ### Validation (beyond WF!)
+        self.valElementNames = False  # Must be declared
+        self.valModels       = False  # Child sequences                 TODO
+        self.valAttrNames    = False  # Must be declared
+        self.valAttrTypes    = False  # Must match datatype
+
+        ### Other
+        self.expatBreaks     = False  # Break at \n and entities like expat
+        self.nsUsage         = None   # one/global/noredef/regular      TODO
+
+        if options:
+            for k, v in options.items():
+                self.setOption(k, v)
+
+    def __getattr__(self, name):
+        return None
+
+    def setOption(self, optName:str, optValue) -> None:
+        if optName.startswith("_") or not hasattr(self, optName):
+            if not self.utgard and hasattr(self.getLokiDefaults(), optName):
+                raise ValueError(f"Option '{optName}' is recognized only in Loki.")
+            raise ValueError(f"Unknown xsparser option '{optName}'.")
+        curVal = getattr(self, optName)
+        if (curVal is not None
+            and not isinstance(optValue, type(curVal))): raise TypeError(
+            f"Unexpected value type {type(optValue)} (not {type(curVal)}) for '{optName}'.")
+        if (optName == "entityDirs"):
+            for adir in optValue: assert os.path.isdir(adir)
+        if isinstance(curVal, bool):
+            optValue = LokiOptions.boolOption(optName, optValue)
+        setattr(self, optName, optValue)
+
+    @staticmethod
+    def boolOption(name:str, value:Any, strict:bool=True) -> bool:
+        """Recognize a small range of boolean values. Unknowns mean false,
+        unless 'strict' is set.
+        """
+        if value in [ True, "yes", "1", 1 ]: return True
+        if value in [ False, "no", "0", 0 ]: return False
+        if strict: raise SyntaxError(
+            f"Unrecognized boolean value '{value}' for option '{name}'.")
+        return False
 
 
 ###############################################################################
@@ -308,18 +247,16 @@ class XSParser(StackReader):
         self.BOM = None
         self.sniffedEncoding = None
         self.setEncoding = None
+        self.utgard = False
 
+        # Set up options for xsparser or Loki, as needed
         self.options = XSPOptions(options)
-        if self.options.xsdType:
-            self.attrTypes = XSDDatatypes
-        else:
-            self.attrTypes = sgmlAttrTypes
+        self.attrTypes = sgmlAttrTypes
 
         # Parser state
         self.msStack = []
         self.tagStack = TagStack()
         self.sawSubsetOpen:bool = False
-        self.bangAttrs:dict = {}
 
     def SE(self, msg:str) -> None:
         """Deal with a syntax error.
@@ -575,7 +512,7 @@ class XSParser(StackReader):
         """
         tBuf = []  # Use List for performance
         while c := self.peek(1) is not None:
-            delim, _nextChar = self.peekDelimPlus()
+            delim, nextChar = self.peekDelimPlus()
             lg.info("delim '%s', then '%s'.", delim, nextChar)
             if not delim:
                 while True:
@@ -1246,7 +1183,7 @@ class XSParser(StackReader):
 
         if self.options.saxAttr:
             self.doCB(SaxEvent.START, name, None, empty)
-            for k, v in attrs.items:
+            for k, v in attrs.items():
                 self.doCB(SaxEvent.ATTRIBUTE, k, v)
         else:
             self.doCB(SaxEvent.START, name, attrs, empty)
@@ -1449,8 +1386,6 @@ class XSParser(StackReader):
         frame.addEntity(eDef)
         self.sr.open(frame)
 
-    peRefExpr = r"%(\w[-_.\w]*);"  # TODO Upgrade to use XmlStrings
-
     def expandPEntities(self, s:List, depth:int=0) -> str:
         """Expand parameter entity references in a string.
         's' is a list of chars, not a regular string.
@@ -1459,11 +1394,11 @@ class XSParser(StackReader):
             self.EntE("Parameter entity too deep ({depth}).")
 
         s = ''.join(s)
-        expBuf = re.sub(self.peRefExpr, self.getPEText, s)
+        expBuf = re.sub(Rune.pentref_re, self.getPEText, s)
         if len(expBuf) > self.options.MAXEXPANSION: raise ValueError(
             "Parameter entity expansion exceeds MAXEXPANSION (%d)."
             % (self.options.MAXEXPANSION))
-        if re.search(self.peRefExpr, expBuf):
+        if re.search(Rune.pentref_re, expBuf):
             expBuf = self.expandPEntities(expBuf, depth=depth+1)
         return expBuf
 

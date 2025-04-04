@@ -11,7 +11,7 @@ import logging
 from basedomtypes import (NMTOKEN_t, QName_t, FlexibleEnum,
     NSuppE, DOMException, ICharE)  # NodeType
 from domenums import RWord
-from xmlstrings import XmlStrings as Rune, CaseHandler #, UNormHandler, WSHandler
+from runeheim import XmlStrings as Rune, CaseHandler #, UNormHandler, WSHandler
 from basedom import Node
 from xsdtypes import XSDDatatypes
 from prettyxml import FormatXml
@@ -790,8 +790,8 @@ class DocumentType(Node):
     def defineNotation(self, name:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
         assert name not in self.notationDefs
-        self.notationDefs[name] = EntityDef(name,
-            EntitySpace.NOTATION, literal, publicId, systemId)
+        self.notationDefs[name] = EntityDef(name, EntitySpace.NOTATION,
+            publicId=publicId, systemId=systemId, data=literal)
 
     # Basic operations
     #

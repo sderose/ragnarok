@@ -7,7 +7,7 @@ import re
 from basedomtypes import NMTOKEN_t, dtr
 from basedomtypes import HReqE, NSE
 from domenums import RWord
-from xmlstrings import XmlStrings as Rune, CaseHandler, Normalizer
+from runeheim import XmlStrings as Rune, CaseHandler, Normalizer
 #from basedom import Node, Document, Element, Attr
 
 NS_ANY = RWord.NS_ANY

@@ -194,7 +194,7 @@ class OpenEnum(Enum):
 ###############################################################################
 #
 class NodeType(IntEnum):
-    ABSTRACT_NODE                = -1  # (PlainNode/Node) Not in DOM nodeType
+    ABSTRACT_NODE                = -1  # (Yggdrasil/Node) Not in DOM nodeType
     ELEMENT_NODE                 = 1
     ATTRIBUTE_NODE               = 2
     TEXT_NODE                    = 3

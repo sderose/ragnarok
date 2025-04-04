@@ -17,7 +17,7 @@ import inspect
 #import html
 #from html.entities import name2codepoint  # codepoint2name
 
-from xmlstrings import XmlStrings as Rune, CaseHandler, Normalizer  #, UNormHandler, WSHandler
+from runeheim import XmlStrings as Rune, CaseHandler, Normalizer  #, UNormHandler, WSHandler
 #from saxplayer import SaxEvent
 from basedomtypes import NSuppE, ICharE , NMTOKEN_t, SepChar #, DOMException,
 from documenttype import EntityDef , EntitySpace  #, EntityParsing
@@ -574,7 +574,7 @@ class InputFrame:
             if self.readConst("Inf"): return float("Inf")
         intVal = self.readInt(signed=signed, base=10)
         if intVal is None: return None
-        if self.readConst(self.options.radix) is None: return float(intVal)
+        if self.readConst(".") is None: return float(intVal)
         fstr = "%d." % (intVal)
         while c := self.peek():
             if not c.isdigit(): break

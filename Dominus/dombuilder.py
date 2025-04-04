@@ -16,7 +16,7 @@ import logging
 
 from basedomtypes import NMTOKEN_t, NCName_t, XMLParser_P, NodeType, DOMException
 from domenums import RWord
-from xmlstrings import XmlStrings as Rune
+from runeheim import XmlStrings as Rune
 #import xsparser
 
 lg = logging.getLogger("dombuilder")
