@@ -6,11 +6,11 @@ import re
 import unicodedata
 
 #from basedomtypes import HReqE, ICharE, NSuppE  # NotFoundError
-from xmlstrings import XmlStrings as XStr
-from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler, Normalizer
+from runeheim import XmlStrings as Rune
+from runeheim import NameTest, WSHandler, CaseHandler, UNormHandler, Normalizer
 from prettyxml import FormatOptions, FormatXml
 #import basedom
-#from basedom import DOMImplementation, PlainNode, Node
+#from basedom import DOMImplementation, Yggdrasil, Node
 #from basedom import FormatOptions, Document, Element, Attr
 #from basedom import CharacterData, Text, NamedNodeMap, NodeList
 
@@ -180,72 +180,72 @@ class testByMethod(unittest.TestCase):
             self.assertTrue(nt.isName(randName))
             #msg=f"randName should pass for {wh}: {randName}'.")
 
-    def testXStr(self):
-        allNS = XStr.allNameStartChars()
-        allNCA = XStr.allNameCharAddls()
-        allNC = XStr.allNameChars()
+    def testRune(self):
+        allNS = Rune.allNameStartChars()
+        allNCA = Rune.allNameCharAddls()
+        allNC = Rune.allNameChars()
         self.assertEqual(len(allNS), 54001)
         self.assertEqual(len(allNCA), 127)
         self.assertEqual(len(allNC), 54128)
 
-        self.assertTrue(XStr.isXmlChars("aArdVarK7.\x2022"))
-        self.assertFalse(XStr.isXmlChars("aArd\x04VarK7"))
-        self.assertFalse(XStr.isXmlChars(""))
+        self.assertTrue(Rune.isXmlChars("aArdVarK7.\x2022"))
+        self.assertFalse(Rune.isXmlChars("aArd\x04VarK7"))
+        self.assertFalse(Rune.isXmlChars(""))
 
-        self.assertTrue(XStr.isXmlName("Rainbow.1"))
-        self.assertTrue(XStr.isXmlName("_Rainbow.1"))
-        self.assertTrue(XStr.isXmlQName("lb"))
-        self.assertTrue(XStr.isXmlQName("tei:lb"))
-        self.assertTrue(XStr.isXmlQQName("tei"))
-        self.assertTrue(XStr.isXmlQQName("tei:lb"))
-        self.assertTrue(XStr.isXmlQQName("tei:lb:c"))
-        self.assertTrue(XStr.isXmlPName("svg:g"))
-        self.assertTrue(XStr.isXmlNMTOKEN("-foo-"))
-        self.assertTrue(XStr.isXmlNumber("0123456789"))
+        self.assertTrue(Rune.isXmlName("Rainbow.1"))
+        self.assertTrue(Rune.isXmlName("_Rainbow.1"))
+        self.assertTrue(Rune.isXmlQName("lb"))
+        self.assertTrue(Rune.isXmlQName("tei:lb"))
+        self.assertTrue(Rune.isXmlQQName("tei"))
+        self.assertTrue(Rune.isXmlQQName("tei:lb"))
+        self.assertTrue(Rune.isXmlQQName("tei:lb:c"))
+        self.assertTrue(Rune.isXmlPName("svg:g"))
+        self.assertTrue(Rune.isXmlNMTOKEN("-foo-"))
+        self.assertTrue(Rune.isXmlNumber("0123456789"))
 
-        self.assertFalse(XStr.isXmlName("Rain•bow'1"))
-        self.assertFalse(XStr.isXmlName("-Rain"))
-        self.assertFalse(XStr.isXmlName(".Rain"))
-        self.assertFalse(XStr.isXmlName("1Rain"))
-        self.assertFalse(XStr.isXmlName("1Rain"))
-        self.assertFalse(XStr.isXmlQName("  zork "))
-        self.assertFalse(XStr.isXmlQName("tei:lb:c"))
-        self.assertFalse(XStr.isXmlQQName("tei:lb:-c"))
-        self.assertFalse(XStr.isXmlPName("g"))
-        self.assertFalse(XStr.isXmlPName("1svg:g"))
-        self.assertFalse(XStr.isXmlNMTOKEN("-f#o-"))
-        self.assertFalse(XStr.isXmlNumber("a999"))
-        self.assertFalse(XStr.isXmlNumber("{45}"))
+        self.assertFalse(Rune.isXmlName("Rain•bow'1"))
+        self.assertFalse(Rune.isXmlName("-Rain"))
+        self.assertFalse(Rune.isXmlName(".Rain"))
+        self.assertFalse(Rune.isXmlName("1Rain"))
+        self.assertFalse(Rune.isXmlName("1Rain"))
+        self.assertFalse(Rune.isXmlQName("  zork "))
+        self.assertFalse(Rune.isXmlQName("tei:lb:c"))
+        self.assertFalse(Rune.isXmlQQName("tei:lb:-c"))
+        self.assertFalse(Rune.isXmlPName("g"))
+        self.assertFalse(Rune.isXmlPName("1svg:g"))
+        self.assertFalse(Rune.isXmlNMTOKEN("-f#o-"))
+        self.assertFalse(Rune.isXmlNumber("a999"))
+        self.assertFalse(Rune.isXmlNumber("{45}"))
 
-    def testXStrOther(self):
-        allNS = XStr.allNameStartChars()
-        allNCA = XStr.allNameCharAddls()
-        allNC = XStr.allNameChars()
-        self.assertEqual(XStr.dropNonXmlChars("abc\x05d\x1Ee\x02f"), "abcdef")
-        self.assertEqual(XStr.unescapeXml("a&#65;-&bull;-&lt;.&#x2022;"), "aA-•-<.•")
+    def testRuneOther(self):
+        allNS = Rune.allNameStartChars()
+        allNCA = Rune.allNameCharAddls()
+        allNC = Rune.allNameChars()
+        self.assertEqual(Rune.dropNonXmlChars("abc\x05d\x1Ee\x02f"), "abcdef")
+        self.assertEqual(Rune.unescapeXml("a&#65;-&bull;-&lt;.&#x2022;"), "aA-•-<.•")
         with self.assertRaises(ValueError):
-            XStr.unescapeXml("a&zerg;-&lt;.")
+            Rune.unescapeXml("a&zerg;-&lt;.")
 
-        self.assertTrue(c in XStr.xmlSpaces_list for c in " \t\r\n")
-        self.assertTrue(c not in XStr.xmlSpaces_list for c in "z4-.\xA0\u2003")
+        self.assertTrue(c in Rune.xmlSpaces_list for c in " \t\r\n")
+        self.assertTrue(c not in Rune.xmlSpaces_list for c in "z4-.\xA0\u2003")
 
-        self.assertEqual(XStr.normalizeSpace(
+        self.assertEqual(Rune.normalizeSpace(
             "  a   b\t\n c\rd  ", allUnicode=False), "a b c d")
-        self.assertEqual(XStr.normalizeSpace(
+        self.assertEqual(Rune.normalizeSpace(
             "  \u2007a   b\t\u2002\n\u2003\u2004\u2005 c\rd  \u2006\u2008\u2009\u200A",
             allUnicode=True), "a b c d")
 
-        self.assertEqual(XStr.replaceSpace(
+        self.assertEqual(Rune.replaceSpace(
             "  a   b\t\n c\rd  ", allUnicode=False),
             "  a   b   c d  ")
-        self.assertEqual(XStr.replaceSpace(
+        self.assertEqual(Rune.replaceSpace(
             "  \u2007ab\t\u2002\n\u2003\u2004\u2005 c\rd\u2006\u2008\u2009\u200A\u200b",
             allUnicode=True),
             "   ab       c d    \u200b")
 
-        self.assertEqual(XStr.stripSpace("\r\n\t  a b  \t\n \r  ", allUnicode=False), "a b")
-        self.assertEqual(XStr.stripSpace("  a\n \rb  ", allUnicode=False), "a\n \rb")
-        self.assertEqual(XStr.stripSpace(
+        self.assertEqual(Rune.stripSpace("\r\n\t  a b  \t\n \r  ", allUnicode=False), "a b")
+        self.assertEqual(Rune.stripSpace("  a\n \rb  ", allUnicode=False), "a\n \rb")
+        self.assertEqual(Rune.stripSpace(
             "  \u2007a   b\t\u2002\n\u2003\u2004\u2005 c\rd  \u2006\u2008\u2009\u200A",
             allUnicode=True),
             "a   b\t\u2002\n\u2003\u2004\u2005 c\rd")
@@ -267,12 +267,12 @@ class testByMethod(unittest.TestCase):
             ' border="border&lt;1 " id="foo"')
         self.assertEqual(FormatXml.makeEndTag("DiV"), "</DiV>")
 
-        self.assertEqual(XStr.getLocalPart("foo:bar"), "bar")
-        self.assertEqual(XStr.getPrefixPart("foo:bar"), "foo")
+        self.assertEqual(Rune.getLocalPart("foo:bar"), "bar")
+        self.assertEqual(Rune.getPrefixPart("foo:bar"), "foo")
 
         failed = []
         for c in allNS:
-            if (not XStr.isXmlName(c+"restOfName")):
+            if (not Rune.isXmlName(c+"restOfName")):
                 failed.append("U+%04x" % (ord(c)))
         if (failed):
             self.assertFalse(
@@ -281,16 +281,16 @@ class testByMethod(unittest.TestCase):
 
         failed = []
         for c in allNCA:
-            if (XStr.isXmlName(c+"restOfName")):
+            if (Rune.isXmlName(c+"restOfName")):
                 failed.append("U+%04x" % (ord(c)))
         if (failed):
             self.assertFalse(
                 print("Chars should not be namestart but are: [ %s ]"
                     % (" ".join(failed))))
 
-        self.assertTrue(XStr.isXmlName(allNS*2))
+        self.assertTrue(Rune.isXmlName(allNS*2))
 
-        self.assertTrue(XStr.isXmlName("A"+allNC))
+        self.assertTrue(Rune.isXmlName("A"+allNC))
 
     def testEscapers(self):
         self.assertEqual(FormatXml.escapeAttribute(

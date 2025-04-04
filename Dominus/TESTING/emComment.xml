@@ -1,0 +1,3 @@
+<doc>
+<!-- a comment. -->
+<p id="foo">Ok.<!—emcomm—></p></doc>

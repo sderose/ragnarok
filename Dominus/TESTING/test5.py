@@ -10,12 +10,12 @@ import random
 import re
 
 from basedomtypes import HReqE, ICharE, NSuppE
-from xmlstrings import NameTest, WSHandler, CaseHandler, UNormHandler
-from xmlstrings import XmlStrings as XStr
+from runeheim import NameTest, WSHandler, CaseHandler, UNormHandler
+from runeheim import XmlStrings as Rune
 
 import basedom
 from basedom import DOMImplementation, FormatOptions
-from basedom import PlainNode, Node, Document, Element, Attr
+from basedom import Yggdrasil, Node, Document, Element, Attr
 from basedom import CharacterData, Text, NamedNodeMap, NodeList
 
 from documenttype import DocumentType
@@ -47,7 +47,7 @@ Integrate __getitem__
 
 NodeList
 
-PlainNode
+Yggdrasil
     getChildIndex / getRChildIndex fail
     _resetinheritedNS bad
     isEqualNode w/ each mismatch -- nodeName, path len, no/one/!= attrs
@@ -362,8 +362,8 @@ class testByMethod(unittest.TestCase):
         #self.XX(n0._string2doc(self.dc.xml))
         self.XX(self.n.docEl.checkNode(deep=False))
         self.XX(self.n.docEl.checkNode(deep=True))
-        self.XX(n0.getChildIndex(onlyElements=False, ofNodeName=False, noWSN=False))
-        self.XX(n0.getRChildIndex(onlyElements=False, ofNodeName=False, noWSN=False))
+        self.XX(n0.getChildIndex(onlyElements=False, ofNodeName=False, wsn=True))
+        self.XX(n0.getRChildIndex(onlyElements=False, ofNodeName=False, wsn=True))
         #self.XX(nameMatch(n2, self.dc.target_name, self.dc.ns_uri))
         #self.XX(n0._nodeNameMatches(other))
         #self.XX(n0.unlink(keepAttributes=False))
@@ -729,7 +729,7 @@ class testByMethod(unittest.TestCase):
         n1 = self.n.child1
         n2 = self.n.child2
         nAttrs = 257
-        nameChars = XStr.allNameChars()
+        nameChars = Rune.allNameChars()
         nnc = len(nameChars)
         self.assertEqual(nnc, 54128)
 

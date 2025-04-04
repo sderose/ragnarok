@@ -1,0 +1,70 @@
+Additional Dominus tests
+
+* More testing w/ siblingImpl alternatives
+
+* formatoptions inline lists
+* delete item not in nodelist
+X __contains__ all
+* __setitem__ w/ slice
+    * and with various picker so __filter__
+X isEqualNode(None)
+X _expandChildArg w/ bad argtypes
+X _normalizeIntIndex w/ negs
+X clear() abstract node -> HReqE
+X out of range pop()
+X sorted()
+X bool(Node) -- move "Node" case down!
+X ditch NOTYET__getitem__
+X textContent -- fix msg on getter, test both on Node
+* compareDocumentPosition lots of cases
+X replaceChild w/ swapped args
+X hasSubElements w/ search fail
+X hasTextNodes w/ search fail
+* changeOwnerDocument
+* getNodeSteps w/ id and attr
+X eachChild
+X eachSaxEvent
+* isEqualNode w/ len(childNodes), attrs vs. not, len(attrs), some attr, some ch
+* getElementsByClassName, getElementsByTagName (and ...NS) (see test4 and test5)
+* outerXML setter, innerXML setter ? in 4
+X CharacterData.remove, replaceData offset
+X CharacterData child ops
+
+
+NS:
+* _filterOldInheritedNS
+* _nodeNameMatches w/ ns
+** nameMatch
+* isDefaultNamespace
+* lookupPrefix
+* _addNamespace
+* Element.namespaceURI
+* getElementsByTagNameNS
+* NameSpaces.__setitem__, __delitem__
+* NamedNodeMap.getNamedItemNS &c
+
+
+documenttype:
+* AttlistDef setitem, tostring
+* RepType setbounds (revamp), tostring
+* ModelGroup getNames, tostring
+* Model -- unclosed, unexp token, tostring
+
+
+jsonx
+* getNodeName
+* check_jsonx_root
+* JDomBuilder
+* gatherAtomTexts
+
+
+xsparser
+* pushback
+* nested entities
+* readInt, readBaseInt, readFloat, readEnumName
+* getParameterText, isOpen, open, close, closeAll, depth, wholeLoc
+X curlyQuote
+* readNameGroup
+* readRepIndicator (esp. with {})
+X readStartTag, readEndTag
+X parseDocument

@@ -1,0 +1,2 @@
+<!ELEMENT p ANY>
+<!ATTLIST p id ID #IMPLIED>

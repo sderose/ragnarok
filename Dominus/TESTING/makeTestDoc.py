@@ -12,7 +12,7 @@ import logging
 
 from xml.dom import minidom
 
-from xmlstrings import XmlStrings as XStr
+from runeheim import XmlStrings as Rune
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation, Document, Node, Element
 from basedom import getDOMImplementation, DOMImplementation, Document, Node, Element
 
@@ -23,8 +23,8 @@ from basedom import getDOMImplementation, DOMImplementation, Document, Node, Ele
 lg = logging.getLogger("makeTestDoc")
 #fr = FormatRec()
 
-nameStartChars = XStr.allNameStartChars()
-nameChars = nameStartChars + XStr.allNameChars()
+nameStartChars = Rune.allNameStartChars()
+nameChars = nameStartChars + Rune.allNameChars()
 
 firstSetup = True
 

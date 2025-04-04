@@ -6,7 +6,7 @@ import unittest
 import re
 import datetime
 
-from xmlstrings import CaseHandler
+from runeheim import CaseHandler
 from xsdtypes import facetCheck, XsdFacet, DateTimeFrag, Duration
 from documenttype import (
     DocumentType, SimpleType, ComplexType, SeqType,

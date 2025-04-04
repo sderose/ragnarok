@@ -8,11 +8,11 @@ from collections import defaultdict
 from typing import List, Tuple, Callable
 
 from basedomtypes import *
-from xmlstrings import XmlStrings as XStr
+from runeheim import XmlStrings as Rune
 from saxplayer import SaxEvent
 
 from basedom import DOMImplementation, getDOMImplementation
-from basedom import PlainNode, Node, Document, Element
+from basedom import Yggdrasil, Node, Document, Element
 from basedom import Attr, NamedNodeMap, NodeList, RelPosition
 
 from makeTestDoc import (makeTestDoc0, makeTestDoc2, makeTestDocEachMethod,
@@ -168,7 +168,7 @@ class testNodeList(unittest.TestCase):
 
 ###############################################################################
 #
-class testPlainNode(unittest.TestCase):
+class testYggdrasil(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=DAT_K)
         self.dc = DAT_K
@@ -177,7 +177,7 @@ class testPlainNode(unittest.TestCase):
     def tests(self):
         docEl = self.n.docEl
         el8 = docEl.childNodes[8]
-        pnode = PlainNode(ownerDocument=None, nodeName="aPlainNodeToTry")
+        pnode = Yggdrasil(ownerDocument=None, nodeName="aYggdrasilToTry")
 
         with self.assertRaises(AttributeError):
             pnode.__contains__(12)
@@ -458,7 +458,7 @@ class testDocument(unittest.TestCase):
         self.assertEqual(theDoc.charset, "utf-8")
         #self.assertTrue(theDoc.contentType)
         self.assertTrue(theDoc.documentElement.isElement)
-        self.assertTrue(XStr.isXmlQName(theDoc.documentElement.nodeName))
+        self.assertTrue(Rune.isXmlQName(theDoc.documentElement.nodeName))
         #self.assertIsNone(theDoc.documentURI)
         #self.assertIsNone(theDoc.domConfig)
         self.assertEqual("utf-8", theDoc.inputEncoding)
