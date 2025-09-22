@@ -3,7 +3,7 @@
 # saxplayer: Common stuff for SAX-like interfaces
 #
 #from enum import Enum
-from basedomtypes import FlexibleEnum
+from ragnaroktypes import FlexibleEnum
 
 class SaxEvent(FlexibleEnum):
     """An enum for SAX events. Parsers commonly make you monkey-patch

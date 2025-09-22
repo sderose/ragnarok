@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
 import unittest
 import logging
@@ -9,7 +9,7 @@ import logging
 from makeTestDoc import makeTestDoc0, DAT  #, DBG
 
 lg = logging.getLogger("testNode")
-#logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 class TestDOMNode(unittest.TestCase):
     def setUp(self):
@@ -27,16 +27,25 @@ class TestDOMNode(unittest.TestCase):
         child = self.n.doc.createElement("child")
         self.assertEqual(len(self.n.docEl.childNodes), 0)
         self.n.docEl.appendChild(child)
-        #DBG.dumpNode(self.n.docEl, msg="test_child_nodes")
+        self.assertEqual(len(self.n.docEl.childNodes), 1)
         self.assertIs(child.parentNode, self.n.docEl)
         self.assertEqual(child.getChildIndex(), 0)
+
+        child2 = self.n.doc.createElement("child2")
         self.assertEqual(len(self.n.docEl.childNodes), 1)
+        self.n.docEl.appendChild(child2)
+        self.assertEqual(len(self.n.docEl.childNodes), 2)
+        self.assertIs(child2.parentNode, self.n.docEl)
+        self.assertEqual(child2.getChildIndex(), 1)
+        self.assertEqual(child2.previousSibling, child)
+        self.assertEqual(child.nextSibling, child2)
+
         #for i, x in enumerate(self.n.docEl.childNodes):
         #    DBG.msg("  %2d: %s" % (i, x.toxml()))
         #DBG.msg("Eh? " + self.n.docEl.childNodes[0].toxml())
         self.assertEqual(self.n.docEl.childNodes[0], child)
         self.assertEqual(self.n.docEl.firstChild, child)
-        self.assertEqual(self.n.docEl.lastChild, child)
+        self.assertEqual(self.n.docEl.lastChild, child2)
 
         aname = "class"
         self.assertFalse(child.hasAttributes())

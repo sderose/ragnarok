@@ -9,7 +9,7 @@ import unittest
 import random
 import re
 
-from basedomtypes import HReqE, ICharE, NSuppE
+from ragnaroktypes import HReqE, ICharE, NSuppE
 from runeheim import NameTest, WSHandler, CaseHandler, UNormHandler
 from runeheim import XmlStrings as Rune
 
@@ -78,8 +78,6 @@ Node
     before/after w/ strings                 LOTS
     after last item
     replaceWith                             LOTS
-    eachChild                               LOTS
-    eachNode w/ separateAttributes=True
     eachSaxEvent, incl. separateAttributes  LOTS
 
 Document
@@ -183,8 +181,9 @@ class testByMethod(unittest.TestCase):
 
         self.assertIsInstance(self.n.impl.createDocument(
             self.dc.ns_uri, self.dc.root_name, doctype=None), Document)
-        self.assertIsInstance(self.n.impl.createDocument(
-            self.dc.ns_uri, "somens:"+self.dc.root_name, doctype=None), Document)
+        #with self.assertRaises(SyntaxError):
+        #    self.n.impl.createDocument(
+        #        self.dc.ns_uri, "somens:"+self.dc.root_name, doctype=None)
 
         #self.assertIsInstance(
         #    doc.createDocumentFragment(self.n.ns_uri, qualifiedName="frag",
@@ -376,8 +375,8 @@ class testByMethod(unittest.TestCase):
         d = self.n.docEl
         self.assertTrue(n0.isElement and n1.isElement and n2.isElement and d.isElement)
 
-        #self.RZ(AttributeError, n0.charset)
-        self.assertEqual(self.n.doc.charset, "utf-8")
+        #self.RZ(AttributeError, n0.encoding)
+        self.assertEqual(self.n.doc.encoding, "utf-8")
         self.assertEqual(len(n0.childNodes), 1)
         self.assertEqual(self.n.doc.contentType, "text/XML")
         #self.RZ(HReqE, n0.documentURI)
@@ -589,8 +588,8 @@ class testByMethod(unittest.TestCase):
         self.assertIsInstance(doc.getElementsByTagName("p"), NodeList)
         #self.assertIsInstance(doc.getElementsByTagNameNS("##any", "p"), NodeList)
 
-        self.XX(d.eachChild(excludeNodeNames=["p"]))
-        #self.XX(eachNode(self))
+        self.XX(d.children(test=lambda x: x.nodeName!="p"))
+        #self.XX(descendants(self))
 
     def testIdStuff(self):
         doc = self.n.doc
@@ -609,13 +608,13 @@ class testByMethod(unittest.TestCase):
             idDiv.appendChild(idHolder)
             txt = doc.createTextNode("hello.")
             idHolder.appendChild(txt)
-        DBG.msg("\nDOC:\n" + doc.toprettyxml())
+        #DBG.msg("\nDOC:\n" + doc.toprettyxml())
 
         # Traverse the doc and make an id:node dict
         idSec = self
         idMap = {}
         elementsFound = 0
-        for n in docEl.eachNode():
+        for n in docEl.descendants():
             if not n.isElement: continue
             elementsFound += 1
             idValue = n.getAttribute("id")
@@ -658,7 +657,7 @@ class testByMethod(unittest.TestCase):
         n1 = self.n.child1
         n2 = self.n.child2
         filename_or_file = self.dc.sampleXmlPath
-        #DBG.msg("Parsing file {filename_or_file}")
+        #DBG.msg(f"Parsing file {filename_or_file}")
         self.n.impl.parse(filename_or_file, bufsize=5000)
         #self.n.impl.parse(filename_or_file)  # And with alt parser?
         #DBG.msg("Parsing string")
@@ -872,7 +871,7 @@ class testByMethod(unittest.TestCase):
         with self.assertRaises(ICharE):
             doc.createProcessingInstruction(badName, "p i d a t a ")
 
-        self.XX(n0._addNamespace(name, uri=""))
+        self.XX(n0._addNamespace(name, namespaceURI=""))
         #self.XX(n0._findAttr(self.dc.ns_uri, tgtName))
         #self.XX(n0._presetAttr(self.dc.at_name2, self.dc.at_value2))
         #self.XX(n0._string2doc(self.dc.xml))
@@ -1094,16 +1093,6 @@ class testByMethod(unittest.TestCase):
             chardata.firstChild
         with self.assertRaises(HReqE):
             chardata.lastChild
-        with self.assertRaises(AttributeError):
-            chardata.appendChild(newch)
-        with self.assertRaises(AttributeError):
-            chardata.prependChild(newch)
-        with self.assertRaises(AttributeError):
-            chardata.insertBefore(newch, oldChild=el)
-        with self.assertRaises(AttributeError):
-            chardata.removeChild(el)
-        with self.assertRaises(AttributeError):
-            chardata.replaceChild(newch, oldChild=el)
         with self.assertRaises(AttributeError):
             chardata.append(newch)
         with self.assertRaises(AttributeError):

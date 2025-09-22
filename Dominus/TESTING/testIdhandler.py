@@ -5,7 +5,7 @@ import logging
 #from typing import Callable
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation, Element
-from basedomtypes import NodeType
+from ragnaroktypes import NodeType
 
 #from basedom import Node
 #

@@ -2,7 +2,7 @@
 #
 import re
 from typing import Any, List
-from basedomtypes import NMTOKEN_t
+from ragnaroktypes import NMTOKEN_t
 
 class CssSelectors:
     """
@@ -10,8 +10,8 @@ class CssSelectors:
     *
     [name?]#id
     [name?].class
-    name[attrname]
-    name[attrname="value"]  (and *= $= ~= |= ^=)  (and " [is]" at end) (and unquoted vale as ident
+    name[attrName]
+    name[attrName="value"]  (and *= $= ~= |= ^=)  (and " [is]" at end) (and unquoted vale as ident
 
     name desc
     name + nextSib
@@ -40,7 +40,9 @@ class CssSelectors:
         topOp   ::= s* ("+" | ">" | "~" | " " | "!") s*
         atom    ::= star | namePlus | id | class | virtual
         star    ::= "*"
-        nameP   ::= name | name "[" atname (op atval)? "]"
+        nameP   ::= name | name "[" attrName (op attrVal)? "]"
+        attrName ::= name
+        attrVal  ::= qlit
         name    ::= \\w[-\\w]*
         id      ::= "#" name
         class   ::= "." name
@@ -49,7 +51,6 @@ class CssSelectors:
     """
     nameX = r"\w[-\w]*"
     topExpr = r"(\w+|\*)?(\.\w+)"
-
 
     """Drafted by Claude 3.5.
     These methods can be added to a Node class.
@@ -164,13 +165,13 @@ class CssSelectors:
         elif selector.startswith('.'):
             return selector[1:] in node.getAttribute('class').split()
         elif '[' in selector:
-            tag, attr = selector.split('[', 1)
-            attr = attr.rstrip(']')
+            tag, att = selector.split('[', 1)
+            att = att.rstrip(']')
             if tag and tag != '*' and tag != node.tagName:
                 return False
-            mat = re.split(r"\s*([$*^~|]?=)\s*([is])?\s*$", attr)
-            if not mat: raise ValueError("Bad [] syntax in '%s'." % (attr))
-            return self.testAttr(
+            mat = re.split(r"\s*([$*^~|]?=)\s*([is])?\s*$", att)
+            if not mat: raise ValueError("Bad [] syntax in '%s'." % (att))
+            return self.testAttribute(
                 node, mat.group(1), mat.group(2), mat.group(3), mat.group(4))
         elif ':' in selector:  # TODO Handle multiple pseudos
             tag, pseudo = selector.split(':')
@@ -181,13 +182,14 @@ class CssSelectors:
         else:
             return node.tagName == selector
 
-    def testAttr(self, node:'Node', aname:NMTOKEN_t, op:str, tgtValue:str, caseFlag:str) -> bool:
+    def testAttribute(self, node:'Node', attrName:NMTOKEN_t,
+        op:str, tgtValue:str, caseFlag:str) -> bool:
         """Test whether a node's attribute satisfies the [] condition.
         """
         if not op and not tgtValue:
-            return node.hasAttribute(aname)
+            return node.hasAttribute(attrName)
         tgtValue = tgtValue.strip(" \t\n\r\"'")
-        docValue = node.getAttribute(aname).strip()
+        docValue = node.getAttribute(attrName).strip()
         tgtValue = CssSelectors.maybeFold(tgtValue, caseFlag)
         docValue = CssSelectors.maybeFold(docValue, caseFlag)
 

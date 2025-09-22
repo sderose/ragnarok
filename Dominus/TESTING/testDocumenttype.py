@@ -11,10 +11,10 @@ from xsdtypes import facetCheck, XsdFacet, DateTimeFrag, Duration
 from documenttype import (
     DocumentType, SimpleType, ComplexType, SeqType,
     ElementDef, RepType, ModelGroup, ModelItem, Model,
-    AttributeDef, DftType, EntityDef, EntitySpace, EntityParsing)
+    AttrDef, DftType, EntityDef, EntitySpace, EntityParsing)
 import xsparser
-#from basedomtypes import HierarchyRequestError
-#from basedomtypes import NotFoundError
+#from ragnaroktypes import HierarchyRequestError
+#from ragnaroktypes import NotFoundError
 
 from makeTestDoc import makeTestDocEachMethod, DBG
 import test4
@@ -543,7 +543,7 @@ class testSCType(unittest.TestCase):
         self.assertEqual(st.caseTx, CaseHandler.NONE)
 
         ct = ComplexType(name="p", baseType=None, model=Model(contentType="ANY"))
-        self.assertEqual(len(ct.attributeDefs), 0)
+        self.assertEqual(len(ct.attrDefs), 0)
 
 
 ###############################################################################
@@ -593,7 +593,7 @@ class testModelItem(unittest.TestCase):
         self.assertIsInstance(ModelItem(name="hr", rep=RepType.NOREP), ModelItem)
 
 
-class testAttributeDef(unittest.TestCase):
+class testAttrDef2(unittest.TestCase):
     def setup(self):
         pass
 
@@ -601,40 +601,40 @@ class testAttributeDef(unittest.TestCase):
         #pylint: disable=W0612
         # First the usual SGML-based ones
         #
-        a1 = AttributeDef(ens=None, ename=None, ans=None, aname="id",
-            atype="ID", adfttype=DftType.IMPLIED)
-        a2 = AttributeDef(ens=None, ename=None, ans=None, aname="class",
-            atype="NMTOKENS", adfttype=DftType.IMPLIED)
-        a3 = AttributeDef(ens=None, ename=None, ans=None, aname="font-family",
-            atype="NMTOKEN", adfttype=DftType.IMPLIED)
-        a4 = AttributeDef(ens=None, ename=None, ans=None, aname="alt",
-            atype="CDATA", adfttype="#REQUIRED")
+        a1 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="id",
+            attrType="ID", attrDft=DftType.IMPLIED)
+        a2 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="class",
+            attrType="NMTOKENS", attrDft=DftType.IMPLIED)
+        a3 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="font-family",
+            attrType="NMTOKEN", attrDft=DftType.IMPLIED)
+        a4 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="alt",
+            attrType="CDATA", attrDft="#REQUIRED")
 
-        a5 = AttributeDef(ens=None, ename=None, ans=None, aname="version",
-            atype="NUTOKEN", adfttype="#FIXED", literal="THE_FIXED_VALUE")
-        a6 = AttributeDef(ens=None, ename=None, ans=None, aname="Author.Of-it",
-            atype="NUTOKEN", adfttype="#FIXED")
+        a5 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="version",
+            attrType="NUTOKEN", attrDft="#FIXED", literal="THE_FIXED_VALUE")
+        a6 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="Author.Of-it",
+            attrType="NUTOKEN", attrDft="#FIXED")
 
-        a7 = AttributeDef(ens=None, ename=None, ans=None, aname="target",
-            atype="IDREF", adfttype=DftType.IMPLIED)
-        a8 = AttributeDef(ens=None, ename=None, ans=None, aname="targets",
-            atype="IDREFS", adfttype=DftType.IMPLIED)
-        a9 = AttributeDef(ens=None, ename=None, ans=None, aname="format",
-            atype="NOTATION", adfttype=DftType.IMPLIED)
-        a10 = AttributeDef(ens=None, ename=None, ans=None, aname="object",
-            atype="ENTITY", adfttype=DftType.IMPLIED)
-        a11 = AttributeDef(ens=None, ename=None, ans=None, aname="objects",
-            atype="ENTITIES", adfttype=DftType.IMPLIED)
+        a7 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="target",
+            attrType="IDREF", attrDft=DftType.IMPLIED)
+        a8 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="targets",
+            attrType="IDREFS", attrDft=DftType.IMPLIED)
+        a9 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="format",
+            attrType="NOTATION", attrDft=DftType.IMPLIED)
+        a10 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="object",
+            attrType="ENTITY", attrDft=DftType.IMPLIED)
+        a11 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="objects",
+            attrType="ENTITIES", attrDft=DftType.IMPLIED)
 
-        a12 = AttributeDef(ens=None, ename=None, ans=None, aname="orth",
-            atype="( LAT GRK ENG )", adfttype=DftType.IMPLIED)
+        a12 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="orth",
+            attrType="( LAT GRK ENG )", attrDft=DftType.IMPLIED)
 
         # Now with namespaces and element assigments
         svgNS = "http://www.w3.org/2000/svg"
-        b1 = AttributeDef(ens=None, ename=None, ans="svg", aname="path",
-            atype="CDATA", adfttype=DftType.IMPLIED)
-        b1 = AttributeDef(ens=svgNS, ename="g", ans=svgNS, aname="x",
-            atype="NUTOKEN", adfttype=DftType.IMPLIED)
+        b1 = AttrDef(elemNS=None, elemName=None, attrNS="svg", attrName="path",
+            attrType="CDATA", attrDft=DftType.IMPLIED)
+        b1 = AttrDef(elemNS=svgNS, elemName="g", attrNS=svgNS, attrName="x",
+            attrType="NUTOKEN", attrDft=DftType.IMPLIED)
 
 
 class testElementDefs(unittest.TestCase):
@@ -647,8 +647,8 @@ class testElementDefs(unittest.TestCase):
         el = ElementDef("para", m)
         self.assertIsInstance(el, ElementDef)
 
-        a1 = AttributeDef(ens=None, ename=None, ans=None, aname="id",
-            atype="ID", adfttype=DftType.IMPLIED)
+        a1 = AttrDef(elemNS=None, elemName=None, attrNS=None, attrName="id",
+            attrType="ID", attrDft=DftType.IMPLIED)
         el.attachAttr(a1)
 
 

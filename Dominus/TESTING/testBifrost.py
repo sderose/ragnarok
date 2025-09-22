@@ -10,7 +10,7 @@ import logging
 
 import basedom
 from basedom import Document  #, Element, Attr
-#from basedomtypes import HReqE
+#from ragnaroktypes import HReqE
 
 from bifrost import Loader, Saver
 

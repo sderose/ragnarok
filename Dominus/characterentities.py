@@ -18,7 +18,7 @@ __metadata__ = {
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
-    "language"     : "Python 3.9",
+    "language"     : "Python 3.11",
     "created"      : "2024-09-09",
     "modified"     : "2024-09-09",
     "publisher"    : "http://github.com/sderose",

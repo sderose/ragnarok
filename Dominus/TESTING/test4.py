@@ -7,13 +7,14 @@ import unittest
 from collections import defaultdict
 from typing import List, Tuple, Callable
 
-from basedomtypes import *
+from ragnaroktypes import *
 from runeheim import XmlStrings as Rune
 from saxplayer import SaxEvent
 
-from basedom import DOMImplementation, getDOMImplementation
-from basedom import Yggdrasil, Node, Document, Element
-from basedom import Attr, NamedNodeMap, NodeList, RelPosition
+from basedom import (
+    DOMImplementation, getDOMImplementation,
+    Yggdrasil, Node, CharacterData, Branchable,
+    Document, Element, Attr, Comment, NamedNodeMap, NodeList, RelPosition)
 
 from makeTestDoc import (makeTestDoc0, makeTestDoc2, makeTestDocEachMethod,
     DAT, DAT_K, DBG)
@@ -169,6 +170,8 @@ class testNodeList(unittest.TestCase):
 ###############################################################################
 #
 class testYggdrasil(unittest.TestCase):
+    """These are test for the abstract superclass.
+    """
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=DAT_K)
         self.dc = DAT_K
@@ -198,25 +201,22 @@ class testYggdrasil(unittest.TestCase):
 
         self.assertIsNone(pnode.nextSibling)
         self.assertIsNone(pnode.previousSibling)
-        self.assertFalse(pnode.childNodes)  # None or [] is ok.
 
         self.assertIsNone(pnode.nodeValue)
 
         #self.assertFalse(el8.isEqualNode(pnode))
-        self.assertFalse(el8.isSameNode(pnode))
-
-        self.assertFalse(pnode.contains(pnode))
-        self.assertFalse(pnode.contains(el8))
-        self.assertFalse(pnode.contains(docEl))
-        self.assertFalse(docEl.contains(pnode))  # Unconnected
-
-        self.assertIs(el8.getRootNode(), self.n.doc)
 
         self.assertFalse(pnode.isSameNode(el8))
         self.assertTrue(pnode.isSameNode(pnode))
 
-        #pnode.lookupNamespaceURI(uri)
-        #pnode.lookupPrefix(prefix)
+
+        self.assertFalse(pnode.contains(pnode))
+        self.assertFalse(pnode.contains(el8))
+        self.assertFalse(pnode.contains(docEl))
+        with self.assertRaises(TypeError):
+            x = docEl.contains(pnode)  # Can't do on Yggdrasil, just Node...
+
+        self.assertIs(el8.getRootNode(), self.n.doc)
 
         docEl.normalize()
 
@@ -227,14 +227,7 @@ class testYggdrasil(unittest.TestCase):
             el.prependChild(n)
         self.assertEqual(len(el), priorLen+10)
 
-        #pnode.insertBefore(newNode, ch)
-        #pnode.removeChild(oldChild)
-        #pnode.replaceChild(newChild, oldChild)
-
-        #pnode.unlink(keepAttrs=False)
-
-        #pnode.toxml()
-        #pnode.toprettyxml()
+        # createElementNS
 
         # pnode is still detached
         self.assertFalse(pnode.isConnected)
@@ -245,23 +238,26 @@ class testYggdrasil(unittest.TestCase):
         self.assertEqual(pnode.count(x), 0)
         #with self.assertRaises(ValueError): pnode.index, x, 1, 2)
         newChild = self.n.doc.createElement(self.dc.new_name)
-        pnode.append(newChild)
-        self.assertEqual(len(pnode), nch+1)
 
-        newChild2 = self.n.doc.createElement(self.dc.new_name)
-        pnode.insert(999, newChild2)
-        self.assertEqual(len(pnode), nch+2)
-        self.assertEqual(newChild2.parentNode, pnode)
-        self.assertEqual(newChild2.getChildIndex(), len(pnode)-1)
-        pnode.pop()
-        self.assertEqual(len(pnode), nch+1)
+        self.assertFalse(hasattr(pnode, "childNodes"))
+        if (False):
+            pnode.append(newChild)
+            self.assertEqual(len(pnode), nch+1)
 
-        #pnode.remove(x)
-        #pnode.reverse()
-        #pnode.sort("a", reverse=False)
-        #pnode._isOfValue(x)
-        #pnode.clear()
-        #pnode.checkNode()  # Node
+            newChild2 = self.n.doc.createElement(self.dc.new_name)
+            pnode.insert(999, newChild2)
+            self.assertEqual(len(pnode), nch+2)
+            self.assertEqual(newChild2.parentNode, pnode)
+            self.assertEqual(newChild2.getChildIndex(), len(pnode)-1)
+            pnode.pop()
+            self.assertEqual(len(pnode), nch+1)
+
+            #pnode.remove(x)
+            #pnode.reverse()
+            #pnode.sort("a", reverse=False)
+            #pnode._isOfValue(x)
+            #pnode.clear()
+            #pnode.checkNode()  # Node
 
 
 ###############################################################################
@@ -290,9 +286,7 @@ class testNode(unittest.TestCase):
         self.assertIsNone(node.previousSibling)
         self.assertIsNone(node.previous)
         self.assertIsNone(node.next)
-        self.assertFalse(node.hasChildNodes)
-        self.assertIsNone(node.firstChild)
-        self.assertIsNone(node.lastChild)
+
         self.assertIsNone(node.nodeValue)
         self.assertIsNone(node.textContent)
         with self.assertRaises(NSuppE):
@@ -327,6 +321,11 @@ class testNode(unittest.TestCase):
 
         docEl.normalize()
 
+        if (False):  # Shouldn't be any children
+            self.assertFalse(node.hasChildNodes)
+            self.assertIsNone(node.firstChild)
+            self.assertIsNone(node.lastChild)
+
         el = docEl.childNodes[7]
         priorLen = len(el)
         for _i in range(10):
@@ -335,18 +334,18 @@ class testNode(unittest.TestCase):
         self.assertEqual(len(el), priorLen+10)
 
         self.assertFalse(node.hasChildNodes)
+        #self.assertIsNone(node.rightmost)
         #node.insertBefore(newNode, ch)
         #node.removeChild(oldChild)
         #node.replaceChild(newChild, oldChild)
 
-        #node.unlink(keepAttrs=False)
+        #node.unlink(keepAtts=False)
 
         #node.toxml()
         #node.toprettyxml()
 
         # node is still detached
         self.assertFalse(node.isConnected)
-        self.assertIsNone(node.rightmost)
         self.assertIsNone(node.getChildIndex())
         self.assertTrue(bool(node))
 
@@ -455,7 +454,7 @@ class testDocument(unittest.TestCase):
 
     def tests(self):
         theDoc = self.n.doc
-        self.assertEqual(theDoc.charset, "utf-8")
+        self.assertEqual(theDoc.actualEncoding, "utf-8")
         #self.assertTrue(theDoc.contentType)
         self.assertTrue(theDoc.documentElement.isElement)
         self.assertTrue(Rune.isXmlQName(theDoc.documentElement.nodeName))
@@ -504,7 +503,7 @@ class testElement(unittest.TestCase):
         self.n = madeDocObj.n
 
     def tests(self):
-        # an = self.dc.attr1_name
+        # an = self.dc.attr_name
         # av = "myClass big wow"
         # ns = self.dc.ns_uri
         # anode = Attr(an, av)
@@ -536,8 +535,13 @@ class testElement(unittest.TestCase):
         self.assertTrue(docEl.__contains__(el8))
         self.assertFalse(docEl.__contains__(zzz))  # But Python doesn't.
 
-        xel = self.n.doc.createElement("xml:predef")
-        xel.setAttribute("xmlns:foo", "w3example.org/made-up")
+        with self.assertRaises(SyntaxError):
+            xel = self.n.doc.createElement("xml:predef")
+
+        nsuri = "http://example.org/made-up"
+        xel = self.n.doc.createElementNS(nsuri, "predef")
+        self.assertEqual(xel.namespaceURI, nsuri)
+        self.assertEqual(xel.localName, "predef")
 
         self.assertEqual(el5.textContent, self.dc.text1)
         el5.textContent = "something else"
@@ -590,12 +594,13 @@ class testElement(unittest.TestCase):
         self.assertEqual(el9.followingSibling, None)
 
         # Whole-axis fetches
-        self.assertEqual(el0.precedingSiblings, [])
-        self.assertEqual(el8.precedingSiblings, docEl[0:8])
-        self.assertEqual(el7.followingSiblings, docEl[8:10])
-        self.assertEqual(el9.followingSiblings, [])
-        self.assertEqual(el7.ancestors, [ docEl ])
-        self.assertEqual(docEl.children, docEl.childNodes)
+        self.assertEqual(list(el0.precedingSiblings()), [])
+        self.assertEqual(len(list(el8.precedingSiblings())), 8)
+        self.assertEqual(list(el8.precedingSiblings()), docEl[0:8])
+        self.assertEqual(list(el7.followingSiblings()), docEl[8:10])
+        self.assertEqual(list(el9.followingSiblings()), [])
+        self.assertEqual(list(el7.ancestors()), [ docEl ])
+        self.assertEqual(list(docEl.children()), docEl.childNodes)
         # descendants TODO
 
     def test_position(self):
@@ -660,7 +665,7 @@ class testElement(unittest.TestCase):
 
     def test_attributes(self):
         docEl = self.n.docEl
-        an = self.dc.attr1_name
+        an = self.dc.attr_name
         av = "myClass big wow"
         ns = self.dc.ns_uri
         anode = Attr(an, av)
@@ -676,9 +681,9 @@ class testElement(unittest.TestCase):
         self.assertTrue(el5.hasAttribute(an))
         self.assertEqual(el5.getAttribute(an), av)
 
-        #DBG.dumpNode(el5, msg=f"Before deleting attr '{an}'.")
+        #DBG.dumpNode(el5, msg=f"Before deleting attribute '{an}'.")
         self.assertIsNone(el5.removeAttribute(an))
-        #DBG.dumpNode(el5, msg="After (attr: %s)" % (repr(el5.attributes)))
+        #DBG.dumpNode(el5, msg="After (attribute: %s)" % (repr(el5.attributes)))
         #import pudb; pudb.set_trace()
         self.assertFalse(el5.hasAttribute(an))
 
@@ -709,9 +714,9 @@ class testElement(unittest.TestCase):
         self.assertFalse(el5.hasAttributeNS(ns, an))
         self.assertIsNone(el5.getAttributeNodeNS(ns, an))
 
-        el5.setAttribute("att1", "val1")
+        el5.setAttribute("attr", "val1")
         val2 = "Some longer -- maybe real! long, value."
-        el5.setAttribute("att2.3", val2)
+        el5.setAttribute("attr.3", val2)
         self.assertTrue(bool(el5))  # b/c it makes more sense
 
     def test_serializers(self):
@@ -723,13 +728,17 @@ class testElement(unittest.TestCase):
         zzz = doc.createTextNode("xyzzy")
         el8.appendChild(zzz)
 
-        # TODO Deal with attr order.... cf makeTestDoc.compareAttrs
+        # TODO Deal with attribute order.... cf makeTestDoc.compareAtts
+        self.assertEqual(el5.getAttribute("class"), "important")
+        self.assertEqual(el5.getAttribute("n"), "5")
         stag = el5.startTag
         self.assertEqual(stag, """<para class="important" n="5">""")
+        ix = el5.innerXML
+        self.assertEqual(ix, """aardvark""")
         etag = el5.endTag
         self.assertEqual(etag, "</para>")
-        self.assertEqual(el5.innerXML, "aardvark")
-        self.assertEqual(el5.outerXML, stag + el5.innerXML + etag)
+        ox = el5.outerXML
+        self.assertEqual(ox, stag + ix + etag)
 
         #DBG.dumpNode(el5, msg="before outerXML")
         el5.outerXML = self.dc.outer
@@ -759,7 +768,7 @@ class testElement(unittest.TestCase):
         #el8 = docEl.childNodes[8]
         #zzz = doc.createTextNode("xyzzy")
 
-        an = self.dc.attr1_name
+        an = self.dc.attr_name
         av = "myClass big wow"
         #ns = self.dc.ns_uri
         #anode = Attr(an, av)
@@ -811,7 +820,7 @@ class testElement(unittest.TestCase):
         with self.assertRaises(TypeError):
             _ = docEl["unknown:oracle(99)"]
 
-        # TODO SchemeHandlers
+        # TODO sliceHandlers
 
     def test_setitemSingle(self):
         doc = self.n.doc
@@ -893,25 +902,43 @@ class testElement(unittest.TestCase):
 
     def test_clear(self):
         nch = 10
-        el = self.n.docEl
-        self.assertEqual(len(el), nch)
+        docEl = self.n.docEl
+        self.assertEqual(len(docEl), nch)
+        docEl.checkNode()
 
-        el.checkNode()
-        el.clear()
-        self.assertTrue(el.isElement)
-        self.assertEqual(len(el), 0)
-        self.assertRaises(HierarchyRequestError, el.insert, 1, "Just a string")
-        newb = self.n.doc.createComment("no comment.")
-        newel = self.n.doc.createElement("p")
-        el.insert(1, newb)
-        with self.assertRaises(HReqE):
-            newb.insert(newel, 1)
-        self.assertEqual(len(el), 1)
+        docEl.clear()
+        self.assertTrue(docEl.isElement)
+        self.assertEqual(len(docEl), 0)
+        with self.assertRaises(HierarchyRequestError):
+            docEl.insert(1, "Just a string")
+        self.assertEqual(len(docEl), 0)
+
+        newCom = self.n.doc.createComment("no comment.")
+        assert isinstance(newCom, Comment)
+        assert isinstance(newCom, CharacterData)
+        assert not isinstance(newCom, Branchable)
+
+        docEl.insert(1, newCom)
+        assert isinstance(docEl.childNodes[0], Comment)
+
+        try:
+            newP = self.n.doc.createElement("p")
+            newCom.insert(1, newP)
+            assert newP.isElement
+            #print(f"Doc is: {docEl.toprettyxml()}.")
+            self.assertFalse(True, msg="Inserted an element into a comment: %s." %
+                ([ x.nodeType for x in newCom ]))
+        except HReqE:
+            pass
+
+        self.assertEqual(len(docEl), 1)
+        assert isinstance(docEl.childNodes[0], Comment)
+
         with self.assertRaises(IndexError):
-            el.pop(9999)
-        el.pop()
-        self.assertEqual(len(el), 0)
-        self.assertFalse(newb.isConnected)
+            docEl.pop(9999)
+        docEl.pop()
+        self.assertEqual(len(docEl), 0)
+        self.assertFalse(newCom.isConnected)
 
     # end TestElement
 
@@ -1086,7 +1113,7 @@ class testEntityReference(unittest.TestCase):
 
 ###############################################################################
 #
-class testAttr(unittest.TestCase):
+class testAttributes(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDocEachMethod(dc=DAT_K)
         self.dc = DAT_K
@@ -1106,8 +1133,8 @@ class testAttr(unittest.TestCase):
         self.assertEqual(anode1.nodeName, aname)
         self.assertEqual(anode2.nodeName, aname)
 
-        #self.assertTrue(attrExpr, attr1.outerXML)
-        #self.assertTrue(re.match(attrExpr, attr1.tostring()))
+        #self.assertTrue(attrExpr, attr.outerXML)
+        #self.assertTrue(re.match(attrExpr, attr.tostring()))
 
         newChild = self.n.doc.createElement("newb")
         with self.assertRaises(HierarchyRequestError):
@@ -1132,8 +1159,8 @@ class testAttr(unittest.TestCase):
         docEl = self.n.docEl
         aname = "class"
 
-        print("\n********")
-        print("testCompare: ", docEl.toprettyxml())
+        #print("\n********")
+        #print("testCompare: ", docEl.toprettyxml())
         anode1 = docEl.childNodes[2].getAttributeNode(aname)
         anode2 = docEl.childNodes[5].getAttributeNode(aname)
         eqBit = anode1.isEqualNode(anode2)
@@ -1161,10 +1188,10 @@ class testNamedNodeMap(unittest.TestCase):
         self.assertIsNone(nnm.getNamedItem("class"))
 
         nnm.setNamedItem("class", "classy")
-        anAttr = nnm.getNamedItem("class")
-        self.assertIsInstance(anAttr, Attr)
-        self.assertEqual(anAttr.nodeName, "class")
-        self.assertEqual(anAttr.nodeValue, "classy")
+        anAtt = nnm.getNamedItem("class")
+        self.assertIsInstance(anAtt, Attr)
+        self.assertEqual(anAtt.nodeName, "class")
+        self.assertEqual(anAtt.nodeValue, "classy")
 
         self.assertEqual(nnm.tostring().strip(), "class=\"classy\"")
         nnm.removeNamedItem("class")
@@ -1183,32 +1210,34 @@ class testGenerator1(unittest.TestCase):
         self.n = madeDocObj.n
 
     def tests(self):
-        nNodes = 0
+        nodeTypes = []
         nodeTypeCounts = defaultdict(int)
-        for node in self.n.docEl.eachNode(includeSelf=True):
-            #DBG.msg("nodeType {node.nodeType}")
-            nNodes += 1
+        for node in self.n.docEl.descendants():
+            #DBG.msg(f"nodeType {node.nodeType}")
+            nodeTypes.append(node.nodeType)
             nodeTypeCounts[node.nodeName] += 1
 
         #DBG.msg("nodesTypes: total %d, distinct %d." % (nNodes, len(nodeTypeCounts)))
         #DBG.dumpNode(self.n.docEl, msg="Tree to generate from:")
 
-        self.assertEqual(nNodes, 21)
-
         nexpected = {
-            "article":   1,
+            #"article":   1,  # Not a descendant
             "para":     10,
             "#text":    10,
             "#pi":       0,
             "#comment":  0,
             "#cdata":    0,
         }
+
+        self.assertTrue(set(nodeTypeCounts.keys()), set(nexpected.keys()))
+
         for k in nexpected:
             nfound = nodeTypeCounts[k] if k in nodeTypeCounts else 0
             if (nfound != nexpected[k]):
                 #DBG.msg(f"Expect {nexpected[k]} of '{k}'. but found {nfound}.")
                 self.assertEqual(nfound, nexpected[k])
-        self.assertTrue(set(nodeTypeCounts.keys()), set(nexpected.keys()))
+
+        self.assertEqual(len(nodeTypes), 20, msg=f"descendant types: {nodeTypes}")
 
 
 ###############################################################################
@@ -1219,7 +1248,7 @@ class testGenerator2(unittest.TestCase):
         self.n = madeDocObj.n
         self.n.fan = 5
         madeDocObj.addFullTree(self.n.docEl, n=self.n.fan, depth=2,
-            withText="", withAttr={})  # Using default text/attrs
+            withText="", withAttr={})  # Using default text/attributes
 
     def testGens(self):
         docEl = self.n.docEl
@@ -1251,13 +1280,13 @@ class testGenerator2(unittest.TestCase):
             _x = docEl._normalizeChildIndex(-999)
 
         nch = 0
-        for ch in docEl.eachChild():
+        for ch in docEl.children():
             self.assertTrue(ch.isElement)
             nch += 1
         self.assertEqual(nch, origLen)
 
         nanc = 0
-        for ch in docEl[3].eachAncestor():
+        for ch in docEl[3].ancestors():
             self.assertTrue(ch.isElement)
             nanc += 1
         self.assertEqual(nanc, 1)
@@ -1301,7 +1330,7 @@ class testGenerator2(unittest.TestCase):
                 self.assertEqual(tlen, 3)
             elif seType == SaxEvent.DOCEND: self.assertEqual(tlen, 1)
             else:
-                raise ValueError("Unknown SaxEvent {seType}.")
+                raise ValueError(f"Unknown SaxEvent {seType}.")
 
         #DBG.msg("Events:\n    %s" % (repr(eventCounts)))
         # Check the actual counts

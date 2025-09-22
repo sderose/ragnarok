@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# prettyxml: Support nice serialization for basedom.
+# prettyxml: Support nice serialization for Dominµs or other DOMs.
 #
 #pylint: disable=W0613, W0212
 #
@@ -11,7 +11,7 @@ from typing import Dict, Any, Union, Iterable, IO, Match, Mapping
 from textwrap import wrap
 from html.entities import codepoint2name
 
-from basedomtypes import DOMException, NSuppE, ICharE, NodeType
+from ragnaroktypes import DOMException, NSuppE, ICharE, NodeType
 from runeheim import XmlStrings as Rune #, CaseHandler
 
 #from basedom import Node, NamedNodeMap, NodeList
@@ -20,7 +20,7 @@ lg = logging.getLogger("prettyxml")
 
 __metadata__ = {
     "title"        : "prettyxml",
-    "description"  : "Support nice serialization for basedom",
+    "description"  : "Support nice serialization for Dominµs or other DOMs.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
@@ -56,7 +56,7 @@ class FormatOptions:
         self.dropWS:bool = False        # Drop whitespace-only text nodes
         self.breakBB:bool = True        # Newline before start tags
         self.breakAB:bool = False       # Newline after start tags
-        self.breakAttrs:bool = False    # Newline before each attribute
+        self.breakAttributes:bool = False # Newline before each attribute
         self.breakBText:bool = False    #
         self.breakBE:bool = False       # Newline before end tags
         self.breakAE:bool = False       # Newline after end tags
@@ -78,8 +78,8 @@ class FormatOptions:
         self.useEmpty:bool = True       # Use XML empty-element syntax
         self.emptySpace:bool = True     # Include a space before the /
         self.quoteChar:str = '"'        # Char to quote attributes
-        self.sortAttrs:bool = False     # Alphabetical order (cf readOrder)
-        self.normAttrs = False          # Normalize whitespace in attributes
+        self.sortAttributes:bool = False  # Alphabetical order (cf readOrder)
+        self.normAttributes = False     # Normalize whitespace in attributes
         self.useCDATA:bool = True       # Use CDATA when textNode.isCDATA
 
         # Escaping
@@ -96,8 +96,8 @@ class FormatOptions:
 
         self._charFormat = self.deriveCharFormat()
 
-        # TODO: Format for float attrs
-        # TODO: Pull in options like repBrace, xsdType, emptyEnd, unQuotedAttr...
+        # TODO: Format for float-valued attributes?
+        # TODO: Pull in repBrace, xsdType, emptyEnd, unQuotedAttribute...
 
         for k, v in kwargs.items():
             self.setOption(k, v)
@@ -187,7 +187,7 @@ class FormatOptions:
         return self.newl + self.indent * self.depth
 
     # Global FormatOptions objects for default and for canonical XML output.
-    # TODO: fix attr order to do namespace dcl before other attrs, by ns URI
+    # TODO: fix attribute order to do namespace dcl before others, by ns URI
     # TODO: Only make one of these....
     @staticmethod
     def getCanonicalFO() -> 'FormatOptions':
@@ -196,22 +196,31 @@ class FormatOptions:
             stripTextNodes = True,
             QNameAware = True,
             PrefixRewrite = True,
-            sortAttrs = True, normAttrs = True,
-            newl = "\n", quoteChar = '"', htmlChars = False,
-            includeDoctype = False, useEmpty = False,
+            sortAttributes = True,
+            normAttributes = True,
+            newl = "\n",
+            quoteChar = '"',
+            htmlChars = False,
+            includeDoctype = False,
+            useEmpty = False,
             indent = "", wrapTextAt = 0,
-            breakBB = False, breakAB = False, breakAttrs = False,
+            breakBB = False, breakAB = False, breakAttributes = False,
             breakBE = False, breakAE = False,
             useCDATA = False)
 
     @staticmethod
     def getDefaultFO(**kwargs) -> 'FormatOptions':
         fo = FormatOptions(
-            sortAttrs = True, normAttrs = True,
-            newl = "\n", quoteChar = '"', htmlChars = False,
-            includeDoctype = False, useEmpty = False,
-            indent = "  ", wrapTextAt = 0,
-            breakBB = True, breakAB = False, breakAttrs = False,
+            sortAttributes = True,
+            normAttributes = True,
+            newl = "\n",
+            quoteChar = '"',
+            htmlChars = False,
+            includeDoctype = False,
+            useEmpty = False,
+            indent = "  ",
+            wrapTextAt = 0,
+            breakBB = True, breakAB = False, breakAttributes = False,
             breakBE = False, breakAE = False)
         for k, v in kwargs.items():
             fo.setOption(k, v)
@@ -234,6 +243,54 @@ class FormatOptions:
 ###############################################################################
 #
 class FormatXml:
+    """Do the actual formatting. This is all static methods at the moment.
+
+    TODO: but they perhaps should all become non-statics and hang off
+    FormatOptions, or vice-versa.
+    """
+
+    # Alternate versions of tag-makers, than those in Dominµs itself.
+    # These don't depend on the DOM Element having tag-makers.
+    #
+    @staticmethod
+    def startTag(theNode:'Node', fo:FormatOptions=None) -> str:
+        #print(f"FormatXml.startTag for {theNode.nodeName}")
+        tag = "<" + theNode.nodeName
+        if theNode.attributes:
+            tag += FormatXml.formatAttributes(theNode, fo=fo)
+        if len(theNode.childNodes) > 0 or (fo and not fo.useEmpty):
+            tag += ">"
+        else:
+            tag += " />" if (fo and fo.emptySpace) else "/>"
+        return tag
+
+    @staticmethod
+    def endTag(theNode:'Node') -> str:
+        """Don't call this for empty-element cases.
+        """
+        return f"</{theNode.nodeName}>"
+
+    @staticmethod
+    def formatAttributes(theNode:'Node', fo:FormatOptions=None) -> str:
+        """Turn a dict into a serialized attribute list (possibly sorted
+        and/or space-normalized). Escape as needed.
+        """
+        if not theNode.attributes: return ""
+        if fo and fo.breakAttributes:
+            ws = fo.newl + (fo.indent * fo.depth)
+        else:
+            ws = " "
+        attrNames = list(theNode.attributes.keys())
+        if fo and fo.sortAttributes: attrNames = sorted(attrNames)
+        attrString = ""
+        for a in (attrNames):
+            attrNode = theNode.attributes[a]
+            v = attrNode.nodeValue
+            if isinstance(v, list): v = ' '.join(v)
+            if fo and fo.normAttributes: v = Rune.normalizeSpace(v)
+            attrString += f"{ws}{a}={FormatXml.escapeAttribute(v)}"
+        return attrString
+
     @staticmethod
     def toprettyxml(node:'Node',
         indent:str='\t', newl:str='\n', encoding:str="utf-8", standalone=None,
@@ -244,8 +301,9 @@ class FormatXml:
                 indent=indent, newl=newl, encoding=encoding, standalone=standalone)
             #lg.info(fo.tostring())
 
+        #print(f"FormatXml.toprettyxml for {node.nodeName} ({node.__class__.__name__})")
         try:
-            ntype = node.nodeType
+            nType = node.nodeType
         except AttributeError:
             if node.__class__.__name__ == 'NamedNodeMap':
                 return FormatXml._prettyNamedNodeMap(node, fo)
@@ -253,45 +311,44 @@ class FormatXml:
                 return FormatXml._prettyNodeList(node, fo)
             return ""
 
-        if ntype == NodeType.ELEMENT_NODE:
+        if nType == NodeType.ELEMENT_NODE:
             return FormatXml._prettyElement(node, fo)
-        elif ntype == NodeType.ATTRIBUTE_NODE:
+        elif nType == NodeType.ATTRIBUTE_NODE:
             return FormatXml._prettyAttribute(node, fo)
-        elif ntype == NodeType.TEXT_NODE:
+        elif nType == NodeType.TEXT_NODE:
             return FormatXml._prettyText(node, fo)
-        elif ntype == NodeType.PROCESSING_INSTRUCTION_NODE:
+        elif nType == NodeType.PROCESSING_INSTRUCTION_NODE:
             return FormatXml._prettyPI(node, fo)
-        elif ntype == NodeType.COMMENT_NODE:
+        elif nType == NodeType.COMMENT_NODE:
             return FormatXml._prettyComment(node, fo)
-        elif ntype == NodeType.CDATA_SECTION_NODE:
+        elif nType == NodeType.CDATA_SECTION_NODE:
             return FormatXml._prettyCdataSection(node, fo)
-        elif ntype == NodeType.DOCUMENT_NODE:
+        elif nType == NodeType.DOCUMENT_NODE:
             return FormatXml._prettyDocument(node, fo)
-        elif ntype == NodeType.DOCUMENT_TYPE_NODE:
+        elif nType == NodeType.DOCUMENT_TYPE_NODE:
             return FormatXml._prettyDocType(node, fo)
-        elif ntype == NodeType.ENTITY_REFERENCE_NODE:
+        elif nType == NodeType.ENTITY_REFERENCE_NODE:
             return FormatXml._prettyEntRef(node, fo)
-        elif ntype == NodeType.ENTITY_NODE:
+        elif nType == NodeType.ENTITY_NODE:
             return FormatXml._prettyEntity(node, fo)
-        elif ntype == NodeType.DOCUMENT_FRAGMENT_NODE:
+        elif nType == NodeType.DOCUMENT_FRAGMENT_NODE:
             return FormatXml._prettyDocFrag(node, fo)
-        elif ntype == NodeType.NOTATION_NODE:
+        elif nType == NodeType.NOTATION_NODE:
             return FormatXml._prettyNotation(node, fo)
-        elif ntype == NodeType.ABSTRACT_NODE:
+        elif nType == NodeType.ABSTRACT_NODE:
             return FormatXml._prettyAbstract(node, fo)
         else:
-            raise DOMException("Unknown nodeType.")
-
+            raise DOMException("Unknown nodeType {nType}.")
 
     @staticmethod
     def _prettyNamedNodeMap(node:'Node', fo:FormatOptions=None) -> str:
         ks = node.keys()
-        if node.ownerDocument and node.ownerDocument.options.sortAttrs:
-            ks = sorted(ks)
+        if node.ownerDocument and fo and fo.sortAttributes: ks = sorted(ks)
         buf = ""
         for k in ks:
-            escVal = FormatXml.escapeAttribute(
-                node[k].nodeValue, addQuotes=True, fo=fo)
+            v = node[k].nodeValue
+            if isinstance(v, list): v = ' '.join(v)
+            escVal = FormatXml.escapeAttribute(v, addQuotes=True, fo=fo)
             buf += f" {k}={escVal}"
         return buf
 
@@ -308,30 +365,33 @@ class FormatXml:
 
     @staticmethod
     def _prettyElement(node:'Node', fo:FormatOptions=None) -> str:
-        buf = ""
+        bufList = []
         ws = "" if node.nodeName in fo.tagInfos else fo.ws
-        if fo.breakBB: buf += ws
-        stag = node._startTag(fo=fo)  # TODO Specify ns behavior
+        if fo.breakBB: bufList.append(ws)
+        stag = FormatXml.startTag(node)  # TODO Specify ns behavior
         if len(node.childNodes) == 0:
-            if not fo.useEmpty: buf += stag + node.endTag
-            elif fo.emptySpace: buf += f"{stag[0:-1]} />"
-            else: buf += f"{stag[0:-1]}/>"
+            if not fo.useEmpty: stag = stag + node.endTag
+            elif fo.emptySpace: stag = f"{stag[0:-1]} />"
+            else: stag = f"{stag[0:-1]}/>"
+            bufList.append(stag)
         else:
-            buf += stag
-            if fo.breakAB: buf += ws
+            bufList.append(stag)
+            if fo.breakAB: bufList.append(ws)
             fo.depth += 1
             for ch in node.childNodes:
-                buf += ch.toprettyxml(fo=fo) or ""
+                #print(f"""###{"  " * ch.depth}{ch.nodeName} ({ch.getChildIndex()})""")
+                bufList.append(ch.toprettyxml(fo=fo) or "")
             fo.depth -= 1
-            if fo.breakBE: buf += ws
-            buf += node.endTag
-        if fo.breakAE: buf += ws
-        return buf
+            if fo.breakBE: bufList.append(ws)
+            bufList.append(FormatXml.endTag(node))
+        if fo.breakAE: bufList.append(ws)
+        return ''.join(bufList)
 
     @staticmethod
     def _prettyAttribute(node:'Node', fo:FormatOptions=None) -> str:
-        escVal = FormatXml.escapeAttribute(
-            node.nodeValue, addQuotes=True, fo=fo)
+        v = node.nodeValue
+        if isinstance(v, list): v = ' '.join(v)
+        escVal = FormatXml.escapeAttribute(v, addQuotes=True, fo=fo)
         return f"{node.nodeName}={escVal}"
 
     @staticmethod
@@ -402,27 +462,29 @@ class FormatXml:
 
 
     ###########################################################################
-    # Escapers (TODO Move into prettyxml)
+    # Escapers
     #
     @staticmethod
-    def escapeAttribute(s:str, addQuotes:bool=True,
-        fo:FormatOptions=None) -> str:
+    def escapeAttribute(s:str, addQuotes:bool=True, fo:FormatOptions=None) -> str:
         """Turn characters special in (double-quoted) attributes, into char refs.
-        If 'addQuotes' is set, also add the quotes.
+        If 'addQuotes' is set, also add the surrounding quotes.
         """
-        if not fo: fo = fo = FormatOptions.getDefaultFO()
+        if isinstance(s, list): s = ' '.join(s)
+        #if not fo: fo = fo = FormatOptions.getDefaultFO()  # TODO check below
         s = Rune.dropNonXmlChars(s)
         s = s.replace('&', "&amp;")
         s = s.replace('<', "&lt;")
         # TODO Impl fo.escapeGT
-        if fo.quoteChar == '"':
+        quoteChar = fo.quoteChar if fo else '"'
+        if quoteChar == '"':
             s = s.replace('"', "&quot;")
         else:
-            tgtChar = FormatXml.escapeOneChar(fo.quoteChar, fo=fo)
-            s = s.replace(fo.quoteChar, tgtChar)
-        if fo.ASCII: s = FormatXml.escapeASCII(s, fo=fo)
-        if addQuotes: return fo.quoteChar + s + fo.quoteChar
+            tgtChar = FormatXml.escapeOneChar(quoteChar, fo=fo)
+            s = s.replace(quoteChar, tgtChar)
+        if fo and fo.ASCII: s = FormatXml.escapeASCII(s, fo=fo)
+        if addQuotes: return f"{quoteChar}{s}{quoteChar}"
         return s
+
     escapeXmlAttribute = escapeAttribute
 
     @staticmethod
@@ -495,34 +557,3 @@ class FormatXml:
         if fo.htmlChars and ord(c) in codepoint2name:
             return f"&{codepoint2name[ord(c)]};"
         return fo._charFormat % (ord(c))
-
-    @staticmethod
-    def makeStartTag(gi:str, attrs:Union[str, Dict]="",
-        empty:bool=False, sort:bool=False) -> str:
-        tag = "<" + gi
-        if attrs:
-            if isinstance(attrs, str):
-                tag += " " + attrs.strip()
-            else:
-                tag += FormatXml.dictToAttrs(attrs, sort=sort)
-        tag += "/>" if empty else ">"
-        return tag
-
-    @staticmethod
-    def dictToAttrs(dct:Dict, sort:bool=False, normValues:bool=False) -> str:
-        """Turn a dict into a serialized attribute list (possibly sorted
-        and/or space-normalized). Escape as needed.
-        """
-        sep = " "
-        anames = dct.keys()
-        if sort: anames = sorted(list(anames))
-        attrString = ""
-        for a in (anames):
-            v = dct[a]
-            #if normValues: v = XmlStrings.normalizeSpace(v)
-            attrString += f"{sep}{a}={FormatXml.escapeAttribute(v)}"
-        return attrString
-
-    @staticmethod
-    def makeEndTag(name:str) -> str:
-        return f"</{name}>"

@@ -10,7 +10,7 @@ import string
 import unicodedata
 from html.entities import name2codepoint
 
-from basedomtypes import FlexibleEnum
+from ragnaroktypes import FlexibleEnum
 
 __metadata__ = {
     "title"        : "xmlstrings",
@@ -237,6 +237,11 @@ For the most recent version, see [http://www.derose.net/steve/utilities] or
 
 # (thanks, Claude, for formatting the lists for me)
 #
+
+### TODO:
+# Organize into ascii << XML 1.0 << XML 1.1 << PrivateUse?
+#     (Where do the various HTMLs fit?
+
 # XML 1.0 NameStartChar
 XML_1_0_NAME_START_CHAR = [
     (":", "_", "A-Z", "a-z"),
@@ -368,9 +373,6 @@ XML_1_1_NAME_CHAR_ADDITIONAL.extend([
 # Similarly, 0x0030-0x0039 (ASCII digits) is covered in XML 1.0 by "0-9"
 # And 0x005F (underscore) is already in XML 1.0 NameStartChar as "_"
 
-
-###############################################################################
-#
 def rangelist2rangespec(ranges:List) -> str:
     """Convert a list of codepoint pairs (start, end) to the form to put
     inside [] in a regex. Doesn't insert the brackets themselves.
@@ -384,23 +386,31 @@ def rangelist2rangespec(ranges:List) -> str:
         else: buf += "\\u%04x-\\u%04x" % (r[0], r[1])
     return buf
 
+
+###############################################################################
+#
 class XmlStrings:
     """This class contains static methods and variables for basic XML
     operations such as testing syntax forms, escaping strings, etc.
+    TODO: Perhaps it should become non-static, to allow setting the definitions
+    of names, spaces, folding, etc.
     """
     xmlSpaces_list = " \t\r\n"
     punc_set = set("""-!"#$%&'()*+,./:;<=>?@[\\]^_`{|}~]""")
 
-    xmlSpaces_re:Final = re.compile(r"[" + xmlSpaces_list + r"]+")
-    xmlSpaceOnly_re:Final = re.compile("^[%s]*$" % (xmlSpaces_list))
-    c0NonXml_re:Final = r"[\x00-\x08\x0b\x0c\x0e\x0f]"
-    c1_re:Final = r"[\x80-\x9F]"
-    privateUse_re:Final = r"[\uE000-\uF8FF\U000F0000-\U000FFFFF\U00100000-\U0010FFFF]"
-    punc_re:Final = '[' + re.escape(string.punctuation) + ']'
+    xmlSpaces_re:Final    = r"[" + xmlSpaces_list + r"]+"
+    xmlSpaceOnly_re:Final = r"^[%s]*$" % (xmlSpaces_list)
+    digits_re:Final       = r"[0-9]+"
+
+    c0NonXml_re:Final     = r"[\x00-\x08\x0b\x0c\x0e\x0f]"
+    c1_re:Final           = r"[\x80-\x9F]"
+    privateUse_re:Final   = r"[\uE000-\uF8FF\U000F0000-\U000FFFFF\U00100000-\U0010FFFF]"
+    punc_re:Final         = '[' + re.escape(string.punctuation) + ']'
 
     ### TODO Support switching between XML 10 and 1.1 sets
 
     # This excludes colon (":") b/c we want to distinguish QNames.
+    ####### TODO Finish switching this over to 1.0/1.1 data from above.
     _nameStartChar_rangelist:Final = [
         ( ord("_"), ord("_") ),
         ( ord("A"), ord("Z") ),
@@ -448,9 +458,18 @@ class XmlStrings:
     NMTOKEN_re:Final = r"[%s]+" % (_nameChar_rangespec)
     NCName_re:Final  = r"[%s][%s]*" % (_nameStartChar_rangespec, _nameChar_rangespec)
 
-    QName_re:Final = r"%s(:%s)?" % (NCName_re, NCName_re)
-    QQName_re:Final = r"%s(:%s)*" % (NCName_re, NCName_re)
-    PName_re:Final = r"%s:%s" % (NCName_re, NCName_re)
+    QName_re:Final   = r"%s(:%s)?" % (NCName_re, NCName_re)
+    QQName_re:Final  = r"%s(:%s)*" % (NCName_re, NCName_re)
+    PName_re:Final   = r"%s:%s" % (NCName_re, NCName_re)
+
+    # And SGML additions (see also xsdtypes.getSgmlAttrTypes())
+    #
+    NAME_re:Final       = r"[%s]+" % (_nameChar_rangespec)
+    NAMES_re:Final      = r"[%s]+(\s+[%s]+)*" % (_nameChar_rangespec, _nameChar_rangespec)
+    NUMBER_re:Final     = digits_re
+    NUMBERS_re:Final    = r"%s(\s+%s+)*" % (NUMBER_re, NUMBER_re)
+    NUTOKEN_re:Final    = r"%s[%s]*" % (digits_re, _nameChar_rangespec)
+    NUTOKENS_re:Final   = r"(%s)(\s+[%s]+)*" % (NUTOKEN_re, NUTOKEN_re)
 
     @staticmethod
     def allNameStartChars() -> str:
@@ -478,7 +497,7 @@ class XmlStrings:
 
 
     ###########################################################################
-    # XML string predicates
+    # XML compiled regexes and string predicate methods
     #
     isXmlChars_cre = re.compile(r"[%s]" % (_nonXml_rangespec))
 
@@ -627,15 +646,16 @@ class NameTest(FlexibleEnum):
     "Stat rosa pristina nomine, nomina nuda tenemus"
         -- Umberto Ecu, Il nome d'rosa
     """
-    XML    = "XML"
-    PYTHON = "PYTHON"
-    HTML   = r"^[^ \t\r\n]+$"
-    WHATWG = r"^[^ \t\r\n\f]+$"
-    ASCII  = r"^[_a-zA-Z][-_.a-zA-Z0-9]*$"
+    # TODO Finish XML 1.0 / 1. split; case for no-private-use, etc.?
+    NAME_XML    = "XML"
+    NAME_PYTHON = "PYTHON"
+    NAME_HTML   = r"^[^ \t\r\n]+$"
+    NAME_WHATWG = r"^[^ \t\r\n\f]+$"
+    NAME_ASCII  = r"^[_a-zA-Z][-_.a-zA-Z0-9]*$"
 
     def isName(self, s:str) -> bool:
-        if self.name == "XML": return XmlStrings.isXmlName(s)
-        elif self.name == "PYTHON": return str.isidentifier(s)
+        if self.name == "NAME_XML": return XmlStrings.isXmlName(s)
+        elif self.name == "NAME_PYTHON": return str.isidentifier(s)
         return re.match(self.value, s)
 
 
@@ -821,7 +841,7 @@ class WSHandler(FlexibleEnum):
 class Normalizer:
     """Do a selected set of normalizations (case, unicode, and/or whitespace).
 
-    TODO Integrate
+    TODO Integrate Normalizer. make superclass for CaseHandler etc.?
 
     Nobody realizes that some people expend tremendous energy
     merely to be normal.

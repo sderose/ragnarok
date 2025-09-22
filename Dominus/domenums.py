@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 #
-#from basedomtypes import FlexibleEnum
+#from ragnaroktypes import FlexibleEnum
 from types import SimpleNamespace
 
-# Move into xmlstrings
+# TODO: Move RWord into Runeheim
 
 # "'It is a most repulsive quality, indeed,’ said he.
 #  ‘Oftentimes very convenient, no doubt, but never pleasing.
@@ -19,9 +19,9 @@ RWord = SimpleNamespace(**{
     "XSI_PREFIX"     : "xsi",
 
     # Attribute qnames
-    "LANG_ATTR"      : "xml:lang",
-    "SPACE_ATTR"     : "xml:space",
-    "BASE_ATTR"      : "xml:base",
+    "LANGIBUTE" : "xml:lang",
+    "SPACE_ATTRIBUTE": "xml:space",
+    "BASE_ATTRIBUTE" : "xml:base",
     "ID_QNAME"       : "xml:id",
 
     # XML namespace URIs

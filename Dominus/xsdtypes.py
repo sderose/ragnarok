@@ -5,10 +5,10 @@ import re
 import datetime
 from datetime import timedelta
 from enum import Enum
-from typing import List, Any, Union, Iterable
+from typing import List, Dict, Any, Union, Iterable
 import base64
 
-from basedomtypes import FlexibleEnum, DOMException
+from ragnaroktypes import FlexibleEnum, DOMException
 #from domenums import RWord
 from runeheim import XmlStrings as Rune, WSHandler
 #from basedom import Node
@@ -113,7 +113,6 @@ class Duration:
             microseconds = (self.duSecondFrag - int(self.duSecondFrag)) * 1000000
         )
         return td
-
 
 
 ###############################################################################
@@ -537,7 +536,7 @@ class base64Binary(bytes):
 ###########################################################################
 # iscastable; iscanonical; ispybaseof;
 # tocanonical; lists/unions? inheritable fetch?
-# TODO: Integrate w/ NewType items in basedomtypes?
+# TODO: Integrate w/ NewType items in ragnaroktypes?
 #
 class XsdFacet(Enum):
     """Cf https://www.w3.org/TR/xmlschema11-1/
@@ -870,8 +869,8 @@ XSDDatatypes = {
     }),
 }  # XSDDatatypes
 
-# "CDATA" is the only XML attr type not copied in XSD.
-# For convenience mostly in xsparser, we add it:
+# "CDATA" is the only XML attribute type not copied in XSD.
+# For convenience mostly in xsparser, add it:
 XSDDatatypes["CDATA"] = XsdType({
     "pybase": str,
     "base": "string",
@@ -893,46 +892,52 @@ xmlAttrTypes = {
     # plus enumerations
 }
 
-# TODO These exprs are imprecise.  Add reality to xmlstrings.
-sgmlAttrTypes = xmlAttrTypes.copy()
-sgmlAttrTypes.update({
-    "NAME": XsdType({       # (namechar+)
-        "pybase": str,
-        "base": "token",
-        "pattern": r".+",
-    }),
-    "NAMES": XsdType({
-        "pybase": str,
-        "base": "token",
-        "pattern": r".+",
-        "variety": "list",
-    }),
-    "NUMBER": XsdType({     # (digits)
-        "pybase": int,
-        "base": "nonNegativeInteger",
-        "pattern": r"\d+",
-    }),
-    "NUMBERS": XsdType({
-        "pybase": int,
-        "base": "nonNegativeInteger",
-        "pattern": r"\d+",
-        "variety": "list",
-    }),
-    "NUTOKEN": XsdType({    # (digits then namechars)
-        "pybase": str,
-        "base": "token",
-        "pattern": r"\d\S*",
-    }),
-    "NUTOKENS": XsdType({
-        "pybase": str,
-        "base": "token",
-        "pattern": r"\d\S*",
-        "variety": "list",
-    }),
-    # plus enumerations
-})
+# TODO: Possible additional types?
+#   "COMPLEX", "PROB", "LOGPROB", "REGEX", "CHAR", "TENSOR(shape)", ...
 
-anyAttrKeyword = "#ANY"  # (extension)
+def getSgmlAttrTypes():
+    """Add in the SGML types, too.
+    """
+    sgmlAttrTypes = xmlAttrTypes.copy()
+    sgmlAttrTypes.update({
+        "NAME": XsdType({       # (namechar+)
+            "pybase": str,
+            "base": "token",
+            "pattern": Rune.NAME_re,
+        }),
+        "NAMES": XsdType({
+            "pybase": str,
+            "base": "token",
+            "pattern": Rune.NAMES_re,
+            "variety": "list",
+        }),
+        "NUMBER": XsdType({     # (digits)
+            "pybase": int,
+            "base": "nonNegativeInteger",
+            "pattern": Rune.NUMBER_re,
+        }),
+        "NUMBERS": XsdType({
+            "pybase": int,
+            "base": "nonNegativeInteger",
+            "pattern": Rune.NUMBERS_re,
+            "variety": "list",
+        }),
+        "NUTOKEN": XsdType({    # (digits then namechars)
+            "pybase": str,
+            "base": "token",
+            "pattern": Rune.NUTOKEN_re,
+        }),
+        "NUTOKENS": XsdType({
+            "pybase": str,
+            "base": "token",
+            "pattern": Rune.NUTOKENS_re,
+            "variety": "list",
+        }),
+        # plus enumerations
+    })
+    return sgmlAttrTypes
+
+anyAttributeKeyword = "#ANY"  # (extension)
 fixedKeyword = "#FIXED"
 
 sgmlAttrDefaults = {
@@ -1054,3 +1059,59 @@ def facetCheck(val:str, typ:Union[str, XsdType]) -> XsdFacet:
         if "fractionDigits" in typeSpec and len(post) > typeSpec["fractionDigits"]:
             return XsdFacet.fractionDigits
     return None  # Passes all facet checks
+
+
+###############################################################################
+# Specialty IDs, e.g. for co-indexing tags in non-hierarchical markup.
+# (ENDID can also be applied to co-indexing regular start/end)
+# See also documenttype and Loki options.
+#
+def addOverlapIdTypes(base:Dict):
+    base["STACKID"] = XsdType({     # Normal IDs, but accumulate to uniqueness
+        "pybase": str,
+        "base": "ID",
+        "pattern": Rune.QName_re,
+    })
+    base["TYPEID"] = XsdType({      # Only inique within same element type
+        "pybase": str,
+        "base": "ID",
+        "pattern": Rune.QName_re,
+    })
+    base["COMPOUNDID"] = XsdType({  # Construct compound ID, e.g. via XPath
+        "pybase": str,
+        "base": "str",
+        "pattern": ".*",
+    })
+
+    # Following have normal syntax but constraints on usage/references
+    #
+    base["COID"] = XsdType({
+        "pybase": str,
+        "base": "ID",
+        "pattern": Rune.QName_re,
+    })
+    base["STARTID"] = XsdType({
+        "pybase": str,
+        "base": "ID",
+        "pattern": Rune.QName_re,
+    })
+    base["SUSPENDID"] = XsdType({
+        "pybase": str,
+        "base": "ID",
+        "pattern": Rune.QName_re,
+    })
+    base["RESUMEID"] = XsdType({
+        "pybase": str,
+        "base": "ID",
+        "pattern": Rune.QName_re,
+    })
+    base["ENDID"] = XsdType({
+        "pybase": str,
+        "base": "ID",
+        "pattern": Rune.QName_re,
+    })
+    base["BOUNDARYID"] = XsdType({
+        "pybase": str,
+        "base": "ID",
+        "pattern": Rune.QName_re,
+    })

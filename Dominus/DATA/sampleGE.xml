@@ -2,8 +2,13 @@
 <!-- Try out some general entities. -->
 <!DOCTYPE html [
     <!ENTITY nasa "National Aeronautics and Space Administration">
-    <!ENTITY warn "<blockquote>Flying planes can be dangerous.</blockquote>"
+    <!-- comment 1 -->
+    <!ENTITY warnText "Flying planes can be dangerous.">
+    <!-- comment 2 -->
+    <!ENTITY warn "<blockquote>Flying planes can be dangerous.</blockquote>">
+    <!-- comment 3 -->
     <!ENTITY ext  SYSTEM "sampleExtEntity.xml">
+    <!-- comment 4 -->
     <!ENTITY pStart "<p>">
 
 ]>
@@ -13,7 +18,7 @@
 </head>
 
 <body>
-  <h1>A sample not from &nasa.</h1>
+  <h1>A sample not from &nasa;.</h1>
 
   <div id="chap1" class="important">
     <h1>Introduction</h1>

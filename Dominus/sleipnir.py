@@ -5,7 +5,6 @@ import struct
 from typing import Dict, IO
 
 from basedom import Node, CharacterData
-#from basedomtypes import NodeType
 
 class Sleip:
     """A class whose instances are bundles of the 8 fields of a node
@@ -54,11 +53,11 @@ class Sleip:
         return Sleip(*(struct.unpack("!"+key*8, packed)))
 
 class BXML:
-    """Support a packed binary interface to basedom Nodes.
+    """Support a packed binary interface to Dominµs Nodes.
     This is the top-level object, which knows:
         * a DOM to work with
         * a size (2/4/8) for nodes packed via Sleip
-        * Dict of namespaces and elem/attr/target names, assigning them codes
+        * Dict of namespaces and names, assigning them codes
         * ? dict of text with offsets into a big buffer ?
 
     This is largely based on: DeRose, Steven et al. 1996. Data processing
@@ -83,31 +82,31 @@ class BXML:
         self.size = size
         self.eids = {}
         self.nsnames = None
-        self.enames = None
-        self.anames = None
+        self.elemNames = None
+        self.attrNames = None
         self.textMap = None
 
     def numberNodes(self) -> int:
         """Add a sequence number to every node (in order).
         """
         nodeNum = 0
-        for node in self.doc.documentElement.eachDescendant():
+        for node in self.doc.documentElement.descendants():
             nodeNum += 1
             node.eid = nodeNum
             if node.isElement and node.hasAttributes:
-                for anode in sorted(node.attributes.keys()):
+                for attrNode in sorted(node.attributes.keys()):
                     nodeNum += 1
-                    anode.eid = nodeNum
+                    attrNode.eid = nodeNum
         return nodeNum
 
     def makeTextMap(self, tgt:IO) -> int:
         """Pack all the text (incl. text node, pi, and comment data,
-        attr values,...) into one big file. No nulls, maybe round each
+        attribute values,...) into one big file. No nulls, maybe round each
         piece to 2**n to later support compaction. Meh.
         """
         theMap = {}
         offset = 0
-        for node in self.doc.documentElement.eachNode(attrs=True):
+        for node in self.doc.documentElement.descendants(attrs=True):
             if isinstance(node, CharacterData):
                 buf = node.data
             elif node.isAttribute:

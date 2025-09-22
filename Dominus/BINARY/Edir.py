@@ -9,7 +9,8 @@ import struct
 import array
 from typing import IO, Dict
 
-from xmlstrings import XmlStrings as XStr
+from runeheim import XmlStrings as Rune
+from prettyxml import FormatXml
 #import BaseDOM
 from basedom import Node
 import DomBuilder
@@ -99,7 +100,7 @@ a Perl version I wrote beginning around 2009-12-31.
 
 * 2023-11-21: lint, type-hints.
 
-* 2024-06-28: Split these classes out from Dominus.py.
+* 2024-06-28: Split these classes out from Sleipner0.py.
 
 
 =Rights=
@@ -176,7 +177,7 @@ class EDir:
         offs = self.getOffset(eid)
         self.edirFH.seek(offs)
         buf = self.edirFH.read(self.edirRecSize)
-        rawNode = EDirRec(self, buf)    # TODO: theDominus needed?
+        rawNode = EDirRec(self, buf)    # TODO: theSleipner0 needed?
         fullNode = EDirRec.fromRawNode(pdocument, rawNode)
         return fullNode
 
@@ -307,9 +308,9 @@ class EDirRec:
         if (eidSize==8): return EDirRec.EDIR_FORMAT_8
         raise IOError("Bad eidSize %d." % (eidSize))
 
-    def __init__(self, theDominus:'Dominus', buf, eidSize:int=4, eid:int=0):
+    def __init__(self, theSleipner0:'Sleipner0', buf, eidSize:int=4, eid:int=0):
         assert len(buf) == EDirRec.eidSizeToBufSize(eidSize)
-        self.theDominus = theDominus
+        self.theSleipner0 = theSleipner0
         self.eid = eid
         self.eidSize = eidSize
         self.dat = None  # Lazy loading from tstart?
@@ -339,8 +340,8 @@ class EDirRec:
         """Get the text data for a node (#text for text, attrs for elements)
         These are just supposed to be \\0-terminated.
         """
-        self.theDominus.dfh.seek(self.tstart, 0)
-        self.dat = self.theDominus.dfh.readToChar()
+        self.theSleipner0.dfh.seek(self.tstart, 0)
+        self.dat = self.theSleipner0.dfh.readToChar()
         if (self.nodeType == Node.ELEMENT_NODE):
             self.attlist = self.parseAttlist(self.dat)
             self.dat = None
@@ -385,9 +386,9 @@ class EDirRec:
         assert len(buf) == struct.calcsize(fmt)
         return buf
 
-    def readRecord(self, theDominus):
-        buf = theDominus.edir.edirFH.read(theDominus.header.recordSize)
-        return EDirRec(buf, theDominus.header.eidSize)
+    def readRecord(self, theSleipner0):
+        buf = theSleipner0.edir.edirFH.read(theSleipner0.header.recordSize)
+        return EDirRec(buf, theSleipner0.header.eidSize)
 
     def writeRecord(self, ofh:IO, dfh:IO, node:'Node'):
         # Figure out where to write other node data
@@ -397,11 +398,11 @@ class EDirRec:
             dat = node.nodeName
         elif (node.nodeType==Node.ATTRIBUTE_NODE):
             aname = node.name
-            avalue = XStr.escapeAttribute(node.value)
+            avalue = FormatXml.escapeAttribute(node.value)
             dat = "%s=%s" % (aname, avalue)
         elif (node.nodeType==Node.PROCESSING_INSTRUCTION_NODE):
             tgt = node.target
-            pidata = XStr.escapePI(node.data)
+            pidata = FormatXml.escapePI(node.data)
             dat = "%s %s" % (tgt, pidata)
         else:  # Other nodeTypes
             dat = node.data

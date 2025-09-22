@@ -5,9 +5,9 @@ import os
 #import codecs
 import unittest
 import logging
-from typing import Dict
+from typing import Dict, Union, Any
 from types import ModuleType
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from xml.parsers import expat
 
@@ -49,63 +49,73 @@ tdoc = """<html>
 myStack = []
 eventCounts = defaultdict(int)
 
+traceSaxEvents:bool = True
+
 
 ###############################################################################
 #pylint: disable=W0613
 #
-def pr(s:str, *args):
-    if args: s += " ".join(args)
-    print("  " * len(myStack), "Event: ", s)
-
-def common(typ:SaxEvent, name:str="") -> None:
+def common(typ:SaxEvent, name:str="", arg1:Any=None, arg2:Any=None) -> None:
+    """Report a SAX event.
+    Enable/disable tracing via global 'traceSaxEvents'.
+    """
     eventCounts[typ] += 1
-    pr("%s:  %s", typ.name, name)
+    if not traceSaxEvents: return
+    buf = f"{'  ' * len(myStack)}{typ.name} {name}"
+    if isinstance(arg1, str): buf += f"; \"{arg1}\""
+    elif isinstance(arg1, dict) and len(arg1) > 0: buf += f"; {repr(arg1)}"
+    if isinstance(arg2, str): buf += f"; \"{arg2}\""
+    elif isinstance(arg2, dict) and len(arg2) > 0: buf += f"; {repr(arg2)}"
+    print(buf)
 
 def StartElement(name:str, attrs:Dict=None) -> None:
-    common(SaxEvent.START)
+    common(SaxEvent.START, name, attrs)
     myStack.append(name)
 def EndElement(name:str) -> None:
-    common(SaxEvent.END)
     myStack.pop()
+    common(SaxEvent.END, name)
 def CharacterData(data:str="") -> None:
-    common(SaxEvent.CHAR)
+    common(SaxEvent.CHAR, data)
+def ProcessingInstruction(target:str="", data:str="") -> None:
+    common(SaxEvent.PROC, target, data)
+def Comment(data:str="") -> None:
+    common(SaxEvent.COMMENT, data)
+
 def StartCdataSection() -> None:
     common(SaxEvent.CDATA)
 def EndCdataSection() -> None:
-    common(SaxEvent.CDATAEND)
-def ProcessingInstruction(target:str="", data:str="") -> None:
-    common(SaxEvent.PROC)
-def Comment(data:str="") -> None:
-    common(SaxEvent.COMMENT)
-
+    common(SaxEvent.CDATAEND, None)
 def StartDoctypeDecl(doctypeName:str, systemId="", publicId="",
     has_internal_subset:bool=False) -> None:
-    common(SaxEvent.DOCTYPE)
+    common(SaxEvent.DOCTYPE, doctypeName)
 def EndDoctypeDecl() -> None:
-    common(SaxEvent.DOCTYPEEND)
+    common(SaxEvent.DOCTYPEEND, None)
 
-def Default(data:str="") -> None:
-    common(SaxEvent.DEFAULT)
+def Default(data:str="", *args) -> None:
+    common(SaxEvent.DEFAULT, f"'{data}'")
 
 def ElementDecl(name:str, model:str="") -> None:
-    common(SaxEvent.ELEMENTDCL)
+    common(SaxEvent.ELEMENTDCL, name, model)
 def AttlistDecl(elname:str, attname, typ="", default="", required=False) -> None:
-    common(SaxEvent.ATTLISTDCL)
+    common(SaxEvent.ATTLISTDCL, attname, typ)
 def NotationDecl(notationName:str, base="", systemId="", publicId="") -> None:
-    common(SaxEvent.NOTATIONDCL)
+    common(SaxEvent.NOTATIONDCL, notationName)
 def EntityDecl(entityName:str, is_parameter_entity=False, value="", base="",
     systemId="", publicId="", notationName=None) -> None:
-    common(SaxEvent.ENTITYDCL)
+    assert not base, "Unexpected 'base' arg for EntityDecl."
+    if is_parameter_entity: entityName = "% " + entityName
+    loc = "[IDENT]" if systemId or publicId else f"'{value}'"
+    common(SaxEvent.ENTITYDCL, entityName, loc)
 def UnparsedEntityDecl(entityName:str, value="", base="",
     systemId="", publicId="", notationName=None) -> None:
-    common(SaxEvent.UENTITYDCL)
+    common(SaxEvent.UENTITYDCL, entityName)
 
 def EntityReference(context:str, base:str, systemId:str, publicId:str) -> None:
-    common(SaxEvent.ENTREF)
+    common(SaxEvent.ENTREF, context, base)
 def Entity(name:str="") -> None:
-    common(SaxEvent.ENTITY)
+    common(SaxEvent.ENTITY, name)
 
-def setHandlers(parser):
+def setHandlers(parser) -> None:
     parser.StartElementHandler = StartElement
     parser.EndElementHandler = EndElement
     parser.CharacterDataHandler = CharacterData
@@ -130,24 +140,27 @@ def setHandlers(parser):
     #parser.DefaultHandlerExpand(data)
     #parser.SkippedEntityHandler(entityName, is_parameter_entity)
 
-def runParser(pc:ModuleType, path:str=None, string:str=None, encoding:str="utf-8"):
+def runParser(pc:ModuleType, path:str=None, string:str=None,
+    encoding:str="utf-8") -> None:
     assert isinstance(expat, ModuleType)
     parser = pc.ParserCreate()
     setHandlers(parser)
     myStack.clear()
     eventCounts.clear()
     if (path):
-        print(f"Parsing file {path} with {pc.__name__}.")
+        print(f"\n####### runParser: Parsing file {path} using {pc.__name__}.")
         assert os.path.isfile(path)
         with open(path, "rb") as ifh:
             parser.ParseFile(ifh)
     else:
-        print(f"Parsing a string with {pc.__name__}.")
+        print("n####### runParser: Parsing a string (length %d) using %s." %
+            (len(string), pc.__name__))
         parser.Parse(string)
 
     showEventCounts()
 
-def showEventCounts():
+def showEventCounts() -> None:
+    print("\nTotal event counts:")
     for k, v in eventCounts.items():
         print("    %-16s %4d" % (k, v))
 
@@ -168,7 +181,7 @@ class TestXSP(unittest.TestCase):
             systemId=sampleEnt)
         frame = InputFrame()
         frame.addEntity(ch1)
-        thePath = frame.findLocalPath(eDef=ch1)
+        thePath = frame.entDef.findLocalPath(entDef=ch1)
         self.assertTrue(os.path.isfile(thePath))
 
         #data="<chap><ti>Hello</ti></chap>"

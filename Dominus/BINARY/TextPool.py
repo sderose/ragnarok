@@ -9,7 +9,8 @@ import codecs
 #import array
 from typing import Dict, Any
 
-from xmlstrings import XmlStrings as XStr
+from runeheim import XmlStrings as Rune
+from prettyxml import FormatXml
 #import BaseDOM
 #import DomBuilder
 
@@ -72,7 +73,7 @@ Washington, DC, August 5 - 8, 2014. In I<Proceedings of Balisage: The Markup Con
 a Perl version I wrote beginning around 2009-12-31.
 * 2019-12-30: Integrate with DomExtensions, DomBuilder, etc.
 * 2023-11-21: lint, type-hints.
-* 2024-06-28: Split these classes out of Dominus.
+* 2024-06-28: Split these classes out of Sleipner0.
 
 
 =Rights=
@@ -220,7 +221,7 @@ class TextishPieces(TextPool):
         buf = self[offset]
         for mat in re.finditer(TextishPieces.ATTR, buf):
             avalue = mat.group(2)[1:-1]
-            attrs[mat.group(1)] = XStr.unescapeXml(avalue)
+            attrs[mat.group(1)] = Rune.unescapeXml(avalue)
         return attrs
 
     def setAttrAt(self, offset:int, aname:str, avalue:Any) -> (int, int):
@@ -237,7 +238,7 @@ class TextishPieces(TextPool):
     def encodeAttrs(self, attrs:Dict) -> str:
         buf = ""
         for k, v in attrs.items():
-            buf += " %s=\"%s\"" % (k, XStr.escapeAttribute(v))
+            buf += " %s=\"%s\"" % (k, FormatXml.escapeAttribute(v))
         return buf
 
 

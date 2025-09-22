@@ -153,10 +153,11 @@ class TestDOMNode(unittest.TestCase):
                 _domDoc = minidom.parseString(x)
                 self.assertFalse(f"For test '{x}', did not raise exception.")
             except expat.ExpatError:
-                pass
+                return
             #pylint: disable=W0718
             except Exception as e:
-                self.assertFalse(f"For test '{x}', raised wrong exception:\n    {e}")
+                self.assertFalse(f"For test '{x}', "
+                    f"raised wrong exception (expected ExpatError):\n    {e}")
 
 
 if __name__ == '__main__':

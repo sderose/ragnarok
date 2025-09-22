@@ -7,22 +7,18 @@
 #
 #import codecs
 import sys
-#import os
 import re
 import logging
 from typing import Union, List, Dict, Iterable, IO, Callable
 from types import SimpleNamespace
 import inspect
 
-#import html
-#from html.entities import name2codepoint  # codepoint2name
-
 from runeheim import XmlStrings as Rune, CaseHandler, Normalizer  #, UNormHandler, WSHandler
-#from saxplayer import SaxEvent
-from basedomtypes import NSuppE, ICharE , NMTOKEN_t, SepChar #, DOMException,
-from documenttype import EntityDef , EntitySpace  #, EntityParsing
-from documenttype import DocumentType  # , ContentType, ModelGroup, Model, RepType,
-#from basedom import Document
+from ragnaroktypes import NSuppE, ICharE , NMTOKEN_t, SepChar #, DOMException,
+from documenttype import (
+    EntityDef , EntitySpace,  # EntityParsing
+    # ElementDef, ContentType, ModelGroup, Model, RepType,
+    DocumentType)
 
 lg = logging.getLogger("StackReader")
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -35,7 +31,7 @@ __metadata__ = {
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
-    "language"     : "Python 3.7",
+    "language"     : "Python 3.11",
     "created"      : "2011-03-11",
     "modified"     : "2025-02-18",
     "publisher"    : "http://github.com/sderose",
@@ -52,14 +48,15 @@ def callerNames(n1:int=3, n2:int=1) -> str:
 
 ###############################################################################
 # Support for recognizing Unicode character names (incl. abbreviation and
-# ignoring case), as character reference entities.
+# ignoring case), as character references (~entities).
 #
 # Note: It's possible, if unlikely, that someone declares an entity with
 # the same abbreviated name as some Unicode character. If you're going to
-# do that, don't enable the 'unicodeNames' option.
+# do that, don't enable the 'unicodeNames' option. If it's a problem I can
+# make sure that explicit dcls take priority.
 #
-# Support planes past BMP?
-# TODO Upgrade to a class or whole separate package and normalizer command?
+# Cost/benefit to support planes past BMP?
+# TODO Upgrade to a class with own normalizer command?
 # Could also normalize:
 #    LATIN -> 0; CAPITAL LETTER -> UC; SMALL LETTER -> LC;
 #    MODIFIER LETTER -> ML; WITH -> W; ....
@@ -78,14 +75,14 @@ def abbreviate(s:str, length:int=4) -> str:
     del parts[-1]
     return ' '.join(part[0:min(len(part), length)] for part in parts) + " " + last
 
-def enameMatches(ename:str, uname:str) -> bool:
+def elemNameMatches(elemName:str, uname:str) -> bool:
     """Return true if every token of the entity name is a prefix of
     the corresponding token of the unicode name (treating any runs of
     hyphen, underscore, space, and dot as equivalent to a space).
     This is used to distinguish among collisions (user could just add
     enough extra to disambiguate, and we'd catch it).
     """
-    etokens = re.sub(r"[-. _]+", " ", ename).split()
+    etokens = re.sub(r"[-. _]+", " ", elemName).split()
     utokens = re.sub(r"[-. _]+", " ", uname).split()
     if len(etokens) != len(utokens): return False
     for i in range(len(utokens)):
@@ -127,7 +124,7 @@ def uname2codepoint(name:str) -> int:
     # Abbreviate the name and look up.
     normname = abbreviate(name)
     if normname not in abbrname2char:
-        raise SyntaxError("Unrecognized (unicode?) entity name '{name}'.")
+        raise SyntaxError(f"Unrecognized (unicode?) entity name '{name}'.")
     x = abbrname2char[normname]
     if isinstance(x, int): return x
 
@@ -135,13 +132,13 @@ def uname2codepoint(name:str) -> int:
     # provided more than that to disambiguate. Let's see.
     matches = []
     for cp in x:
-        if enameMatches(name, unicodedata.name(chr(cp))): matches.append(cp)
+        if elemNameMatches(name, unicodedata.name(chr(cp))): matches.append(cp)
     if len(matches) == 1:
         return matches[0]
     elif len(matches) == 0:
-        raise SyntaxError("No full match for (unicode?) entity name '{name}'.")
+        raise SyntaxError(f"No full match for (unicode?) entity name '{name}'.")
     else:
-        raise SyntaxError("Unicode entity name '{name}' is ambiguous among [ %s ]."
+        raise SyntaxError(f"Unicode entity name '{name}' is ambiguous among [ %s ]."
             % (", ".join(unicodedata.name(chr(cp)) for cp in matches)))
 
 
@@ -154,8 +151,7 @@ class InputFrame:
 
     Nothing in here reads across frame boundaries (even readAll()).
 
-    Nothing in here really knows any syntax rules, either; except for
-    skipping whitespace.
+    Nothing in here really knows any syntax rules except for whitespace.
 
     Readers for token-ish things like ints, qnames, entity references, qlits,
     etc. are handled higher up.
@@ -166,36 +162,47 @@ class InputFrame:
         self.bufSize = max(bufSize, 512)
         self.options = options or SimpleNamespace()
 
-        self.buf = ""       # Data buffer
-        self.bufPos = 0     # Next char to read from buf
-        self.offset = 0     # Source offset to start of buf (see dropUsedPart()0
-        self.lineNum = 1    # Number of \n's we've read
+        self.buf:str = ""           # Data buffer
+        self.bufPos:int = 0         # Next char to read from buf
+        self.offset:int = 0         # Source offset to start of buf (see dropUsedPart()
+        self.lineNum:int = 1        # Number of \n's we've read
         self.spaceDef = " \t\r\n"
-        self.eDef = None    # If source is an entity, the definition
-        self.path = None    # If a file, the path
-        self.ifh = None     # Open file handle if any
+        self.newlineDef = "\\n"
+        self.entDef = None          # If source is an entity, the definition
+        self.path:str = None        # If a file, the path
+        self.ifh:IO = None          # Open file handle if any
 
         self.noMoreToRead = False
+        self._oldWay = True         # Config case-handling method
+
+    def frameLoc(self) -> str:
+        """Return a description of the location in this frame.
+        (see also StackReader.wholeLoc).
+        """
+        entName = self.entDef.entName if self.entDef else "[NONE]"
+        buf = "Line %5d of entity '%s'" % (self.lineNum, entName)
+        if self.path: buf += f"(file '{self.path}')"
+        return buf
 
     def description(self) -> str:
         """Make a string to describe/identify the frame, like in messages.
         """
-        if self.eDef:
-            p = "parameter " if self.eDef.space == EntitySpace.PARAMETER else ""
-            return "%sentity %s" % (p, self.eDef.entName)
+        if self.entDef:
+            p = "parameter " if self.entDef.space == EntitySpace.PARAMETER else ""
+            return "%sentity %s" % (p, self.entDef.entName)
         elif self.path:
             return "file '%s'" % (self.path)
         else:
             return "string"
 
-    def addEntity(self, eDef:EntityDef) -> None:
-        self.eDef = eDef
-        if eDef.literal is not None:
-            if self.buf: self.buf += eDef.literal
-            else: self.buf = eDef.literal
+    def addEntity(self, entDef:EntityDef) -> None:
+        self.entDef = entDef
+        if entDef.literal is not None:
+            if self.buf: self.buf += entDef.literal
+            else: self.buf = entDef.literal
             return
         # Find the system object and attach
-        path = self.eDef.source.findLocalPath(eDef=eDef)
+        path = self.entDef.source.findLocalPath(entDef=entDef)
         self.addFile(path)
 
     def addFile(self, theFile:Union[str, IO]) -> None:
@@ -217,7 +224,7 @@ class InputFrame:
         self.buf = None
         if self.ifh:
             self.ifh.close(); self.ifh = None
-        if self.eDef: self.eDef = None
+        if self.entDef: self.entDef = None
 
     def clear(self) -> None:
         self.buf = ""
@@ -232,21 +239,21 @@ class InputFrame:
 
     @property
     def fullOffset(self) -> int:
-        """This is the global character offset to the read point.
+        """The global character offset to the read point.
         """
         return self.offset + self.bufPos
 
     @property
     def fullLineNum(self) -> int:
-        """This is the global line number to the read point.
+        """The global line number to the read point.
         """
-        return self.lineNum + self.buf[0:self.bufPos].count("\n")
+        return self.lineNum + self.buf[0:self.bufPos].count(self.newlineDef)
 
     def __bool__(self) -> bool:
         return self.bufLeft > 0
 
     def __str__(self) -> str:
-        """This returns the the remaining part of the loaded buffer.
+        """The remaining part of the loaded buffer.
         """
         return self.buf[self.bufPos:]
 
@@ -265,7 +272,7 @@ class InputFrame:
             if ind.step: raise IndexError("step not supported.")
             return self.buf[start:stop]
         else:
-            raise TypeError("Only use int or slice, not {type(ind)}.")
+            raise TypeError(f"Only use int or slice, not {type(ind)}.")
 
     def __setitem__(self, *args) -> None:
         raise NSuppE("No __setitem__ for now.")
@@ -273,11 +280,11 @@ class InputFrame:
     def topOff(self, n:int=0) -> int:
         """Refill so at least n characters are available.
         If this source is just a literal string, does nothing.
-        Return how much is then available.
+        Return how much actually ends up being available.
 
-        Refills drops used part then loads bufSize chars; but only happen if
+        Drops any used part then loads bufSize chars; but only if
         avail < n, with n defaulting to bufSize/4, so we don't do i/o so often.
-        TODO: not sure that really helps -- need to profile
+        TODO: not sure that really helps -- need to profile more
 
         If EOF happens first, buf ends up short.
         If EOF happens and there's nothing in buf, that's really end.
@@ -329,7 +336,7 @@ class InputFrame:
             * callback to expand if we hit an entity reference.
         TODO Add a way to return comment events.
         Calling this is key to keeping the buffer full.
-        XML eliminated in-markup --...-- comments and in-dlc %entitites.
+        XML eliminated in-markup --...-- comments and in-dcl %entitites.
         Returns: False on EOF, else True (whether or not anything was skipped)
         """
         while True:
@@ -338,15 +345,15 @@ class InputFrame:
                 if not self.bufLeft: return
             c = self.buf[self.bufPos]
             if c in self.spaceDef:
-                if self.buf[self.bufPos] == "\n": self.lineNum += 1
+                if self.buf[self.bufPos] == self.newlineDef: self.lineNum += 1
                 self.bufPos += 1
             elif entOpener and c in "%&":
-                entOpener()            # TODO How to switch to it?
+                entOpener()            # TODO How to switch between & and %?
             elif allowComments and self.peek(2) == "--":  # TODO emComments
-                mat = self.readRegex(r"^--([^-]|-[^-])+--", self.buf[self.bufPos:])
+                mat = self.readRegex(StackReader.commExpr, self.buf[self.bufPos:])
                 if not mat: return None
                 self.bufPos += len(mat.group())
-                self.lineNum += mat.group().count("\n")
+                self.lineNum += mat.group().count(self.newlineDef)
                 _comText = mat.group(1)
             else:
                 break
@@ -400,13 +407,14 @@ class InputFrame:
         If 'thenSP' is set, require whitespace after the const (for
         example, to ensure that it's a complete token).
         If 'folder' is set, use it for comparison, to ignore case.
+        TODO: Generalize 'thenSP' to also do thenNonAl(num).
         """
         if ss: self.skipSpaces()
         if self.bufLeft < len(const)+1:
             self.topOff()
             if self.bufLeft < len(const): return None
 
-        if (1):
+        if self._oldWay:
             if folder: const = folder.normalize(const)
             rc = self.peek(len(const))  # TODO could be faster
             if folder: rc = folder.normalize(rc)
@@ -416,14 +424,11 @@ class InputFrame:
             self.bufPos += len(const)
             return rc
         else:  # TODO Try this for speed; do same in other places?
-            failed = False
             for i, c in enumerate(const):
                 if c == self.buf[self.bufPos+i]: continue
                 if folder and folder.strcasecmp(c, self.buf[self.bufPos+i]) == 0:
                     continue
-                failed = True
-                break
-            if failed: return None
+                return None
             if thenSp and not self.buf[self.bufPos+len(const)].isspace():
                 return None
             rc = self.buf[self.bufPos:self.bufPos+len(const)]
@@ -440,7 +445,7 @@ class InputFrame:
         while True:
             if self.bufLeft < self.bufSize>>2:
                 self.topOff()
-                if not self.bufLeft: return None    # TODO or raise SE?
+                if not self.bufLeft: return None  # TODO Raise SE on readToString fail?
             where = self.buf.find(ender, self.bufPos)
             if where < 0:  # Keep going
                 rbuf.extend(self.buf[self.bufPos:])
@@ -488,7 +493,7 @@ class InputFrame:
         \\z for unrecognized z just produces z.
         Does not yet support \\x{...}.
         """
-        # no ss as we've already seen the \\?
+        # no skipSpaces as we've already seen the \\?
         start = self.peek(2)
         if start is None or start[0] != "\\": return None
         if start not in InputFrame.hardBackslashes:
@@ -501,7 +506,7 @@ class InputFrame:
             hexString = self.consume(x)
             c = chr(int(hexString, 16))
         except (TypeError, ValueError) as e:
-            raise SyntaxError("Backslash hex code invalid.") from e
+            raise SyntaxError("Backslash hex code '{hexString}' invalid.") from e
         if not Rune.isXmlChars(c): raise SyntaxError(
             "Backslash encoded a non-XML character (0x%s)." % (hexString))
         return c
@@ -516,6 +521,9 @@ class InputFrame:
             base = 16
             self.consume(1)
         n = self.readInt(ss=False, signed=False, base=base)
+        if self.peek(1) != ";": raise SyntaxError(
+            "Missing semicolon for numeric character ref (n = 0x%x)." % (n))
+        self.consume(1)
         if n > sys.maxunicode: raise SyntaxError(
             "Numeric character ref (d%d, x%x) beyond Unicode range." % (n, n))
         return chr(n)
@@ -556,22 +564,25 @@ class InputFrame:
         # Now we're at the first digit -- skip any 0s and collect rest
         while self.peek() == "0":
             self.consume()
-        buf = ""
+        buf = "0"
         while self.peek() in okDigits:
             buf += self.consume()
         val = int(buf, base)
         return -val if negated else val
 
     def readFloat(self, ss:bool=True, signed:bool=True,
-        specialFloats:bool=False) -> float:
-        """TODO: exponential notation?
+        specialFloats:bool=False, exp:bool=False) -> float:
+        """Read floats, optionally including IEEE specials (ignoring case),
+         signs, and exponential notation.
         """
         if ss: self.skipSpaces()
-        if specialFloats:  # TODO specialFloats should ignore case
-            # TODO: Require non-alpha after specialFloat
-            if self.readConst("NaN"): return float("NaN")
-            if self.readConst("-Inf"): return float("-Inf")
-            if self.readConst("Inf"): return float("Inf")
+        if specialFloats:
+            if self.readConst("NaN", folder=CaseHandler.UPPER, thenSp=True):
+                return float("NaN")
+            if self.readConst("-Inf", folder=CaseHandler.UPPER, thenSp=True):
+                return float("-Inf")
+            if self.readConst("Inf", folder=CaseHandler.UPPER, thenSp=True):
+                return float("Inf")
         intVal = self.readInt(signed=signed, base=10)
         if intVal is None: return None
         if self.readConst(".") is None: return float(intVal)
@@ -579,15 +590,20 @@ class InputFrame:
         while c := self.peek():
             if not c.isdigit(): break
             fstr += self.consume()
+        if exp and self.peek(1) == "E":
+            self.consume()
+            expVal = self.readInt(signed=True, base=10) or 0
+            return float(fstr) * 10**expVal
         return float(fstr)
 
-    _firstDelims = "<&%]\\"
-    _allDelims = "<>[]\\/!?#|-+\u2014"  # & and % not ok in non-first pos.
+    firstDelims = "<&%]\\"
+    allDelims = "<>[]\\/!?#|-+\u2014"  # & and % not ok in non-first pos.
 
     def peekDelimPlus(self, ss:bool=True) -> (str, str):  # TODO To parser
         """Return initial punctuation marks, and following character.
-        TODO Maybe take % and & out of _allDelims?
+        TODO Maybe take % and & out of allDelims?
         TODO Maybe move up to Token level?
+        Don't trip over "</>", "<|>", etc.
         """
         if ss: self.skipSpaces()
         self.topOff(100)
@@ -596,14 +612,14 @@ class InputFrame:
         i = self.bufPos
 
         c = self.buf[i]
-        if c not in self._firstDelims: return None, None
+        if c not in self.firstDelims: return None, None
 
         delimString = ""
         while (True):
             delimString += c
             i += 1
             c = self.buf[i]
-            if c not in self._allDelims: break
+            if c not in self.allDelims: break
         return delimString, c
 
     def readName(self, ss:bool=True) -> str:
@@ -621,8 +637,8 @@ class InputFrame:
         return mat.group()
 
     def readEnumName(self, names:Iterable, ss:bool=True) -> str:
-        """See if the source starts with any of the names.
-        For an Enum, you could pass enumType.__members__.keys().
+        """See if the source starts with any of the strings.
+        For an actual Enum, pass enumType.__members__.keys().
         TODO option to require \\W after
         """
         if ss: self.skipSpaces()
@@ -636,6 +652,7 @@ class InputFrame:
         (so captures can be distinguished) and consume the matched text.
         If no match, return None and consume nothing.
         TODO Won't match across buffer topOffs or entities.
+        Used for QName, SGML embedded comments, declared content, repetition flags.
         """
         if ss: self.skipSpaces()
         self.topOff()
@@ -655,6 +672,8 @@ class StackReader:
     TODO Maybe make this a subclass of InputFrame, which just is the innermost
     one, with links to the others. Except when it pops, the ref has to change
     """
+    commExpr = r"^--([^-]|-[^-])+--"
+
     def __init__(self, encoding:str="utf-8",
         handlers:Dict=None, entDirs:List=None, bufSize:int=1024,
         options:Dict=None, path:str=None):
@@ -689,17 +708,14 @@ class StackReader:
 
         self.frames:List[InputFrame] = []
 
-    def EntE(self, msg:str) -> None:
-        raise SyntaxError(msg + " in stackreader.")
-
     def open(self, frame:InputFrame) -> InputFrame:
         self.frames.append(frame)
 
     def isEntityOpen(self, space:EntitySpace, name:NMTOKEN_t) -> bool:
-        eDef = self.spaces[space][name]
-        if eDef is None: return False
+        entDef = self.spaces[space][name]
+        if entDef is None: return False
         for frame in self.frames:
-            if frame.eDef is eDef: return True
+            if frame.entDef is entDef: return True
         return False
 
     def close(self) -> int:
@@ -726,16 +742,13 @@ class StackReader:
     def depth(self) -> int:
         return(len(self.frames))
 
-    def wholeLoc(self) -> str:
-        buf = ''.join(
-            "    %2d: Entity %-12s line %6d, file '%s'" %
-                (i,
-                self.frames[i].eDef.entName,
-                self.frames[i].lineNum,
-                self.frames[i].oeFilename)
-            for i in reversed(range(0, self.depth)))
+    def wholeLoc(self, sep:str="\n    ") -> str:
+        """Describe the entire entity stack context we're reading at.
+        """
+        buf = ""
+        for i in reversed(range(0, self.depth)):
+            buf += sep + self.frames[i].frameLoc()
         return(buf)
-
 
     ### Reading
     ###
@@ -802,7 +815,7 @@ class StackReader:
                 self.bufPos += 1
                 nFound += 1
             elif c == "-" and self.options.fragComments and allowComments:
-                mat = self.curFrame.readRegex(r"^--([^-]|-[^-])+--")
+                mat = self.curFrame.readRegex(StackReader.commExpr)
                 if not mat: return
                 self.bufPos += len(mat.group())
                 com = mat.group(1)

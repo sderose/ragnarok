@@ -109,14 +109,18 @@ class Handlers:
     def XmlDeclHandler(self, version, encoding, standalone) -> None:
         print("%s<?xml version='%s' encoding='%s' standalone='%s'?>"
             % ("    " * self.depth, version, encoding, standalone))
+
     def StartDoctypeDeclHandler(self, name, pubId, sysId, _hasSubset) -> None:
         print("%s<!DOCTYPE %s PUBLIC '%s' '%s' ["
             % ("    " * self.depth, name, pubId, sysId,))
+
     def EndDoctypeDeclHandler(self) -> None:
         print("%s]>" % ("    " * self.depth))
+
     def ElementDeclHandler(self, name:str, model:str="ANY") -> None:
         pmodel = decodeModel(model)
         print("%s<!ELEMENT %-8s %s>" % ("    " * self.depth, name, pmodel))
+
     def AttlistDeclHandler(self, ename:str, aname, atype, adft, req) -> None:
         print("%s<!ATTLIST %-8s %-8s %-8s %s %s>"
             % ("    " * self.depth, ename, aname, atype, adft if adft else "''",
@@ -124,21 +128,28 @@ class Handlers:
 
     def NotationDeclHandler(self, name:str, *args) -> None:
         print("%s<!NOTATION %s %s>" % ("    " * self.depth, name, args))
+
     def EntityDeclHandler(self, name:str, isParam,
-        literal, xxx, sysId="", pubId="", notation="") -> None:
+        literal, _xxx, sysId="", pubId="", notation="") -> None:
         if pubId is None: pubId = ""
         loc = f'"{literal}"' if literal else f'PUBLIC "{pubId}" "{sysId}"'
-        print("%s<!ENTITY%s %-8s %s>" % ("    " * self.depth, " %" if isParam else "",
-            name, loc))
+        ind = "    " * self.depth
+        pFlag = " %" if isParam else ""
+        ndata = f" NDATA {notation}" if notation else ""
+        msg = "%s<!ENTITY%s %-8s %s%s?" % (ind, pFlag, name, loc, ndata)
+        print(msg)
+
     def UnparsedEntityDeclHandler(self, name:str, isParam,
-        literal, xxx, sysId="", pubId="", notation="") -> None:
+        literal, _xxx, sysId="", pubId="", notation="") -> None:
         if pubId is None: pubId = ""
         loc = f'"{literal}"' if literal else f'PUBLIC "{pubId}" "{sysId}"'
         print("%s<!ENTITY%s %-8s %s NDATA %s>"
             % ("    " * self.depth, " %" if isParam else "",
             name, loc, notation))
+
     def ExternalEntityRefHandler(self, name:str, *args) -> None:
         print(f"ExternalEntityRefHandler '{name}' {args}")
+
     def SkippedEntityHandler(self, name:str, *args) -> None:
         print(f"SkippedEntityHandler: '{name}' {args}")
 

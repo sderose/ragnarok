@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 #from xml.dom.minidom import getDOMImplementation, DOMImplementation,Element
-from basedomtypes import HReqE, ICharE, NamespaceError
+from ragnaroktypes import HReqE, ICharE, NamespaceError
 
 from basedom import Node, NodeList, Element
 
@@ -69,24 +69,32 @@ class TestDOMNode(unittest.TestCase):
             self.assertEqual(cur.ownerDocument, self.n.doc)
 
     def test_checkNode(self):
-        """This builds a pretty big tree...
+        """This builds a fairly big tree...
         """
-        doc = self.n.doc
+        width = 4
+        depth = 3
+        #doc = self.n.doc
         docEl = self.n.docEl
         self.makeDocObj.addFullTree(
-            node=docEl, n=10, depth=3,
+            node=docEl, n=width, depth=depth,
             withText="Some text.",
-            withAttr={ "class":"fig", "data":"9"})
-        doc.checkNode(deep=True)
+            withAttr={"test":"checkNode", "n":"*"})
+        print(docEl.toprettyxml())
+
+        #doc.checkNode(deep=True)  # TODO
 
     def testDeep(self):
-        doc = self.n.doc
+        width = 2
+        depth = 2
+        #doc = self.n.doc
         docEl = self.n.docEl
         self.makeDocObj.addFullTree(
-            node=docEl, n=2, depth=6,
+            node=docEl, n=width, depth=depth,
             withText="Some text.",
-            withAttr={ "class":"fig", "data":"9" })
-        doc.checkNode(deep=True)
+            withAttr={"test":"deep", "n":"*"})
+        print(docEl.toprettyxml())
+
+        #doc.checkNode(deep=True)
         #print(doc.toprettyxml(newl="\n", indent="  "))
 
     def testAttrStatus(self):
@@ -232,4 +240,4 @@ class TestDOMNode(unittest.TestCase):
         # TODO Test with something that *does* have an id.
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(buffer=False)

@@ -5,7 +5,7 @@
 import unittest
 import logging
 
-#from basedomtypes import HReqE, ICharE, NamespaceError
+#from ragnaroktypes import HReqE, ICharE, NamespaceError
 
 import basedom
 from basedom import getDOMImplementation, SiblingImpl
@@ -85,25 +85,33 @@ class TestLINKS(unittest.TestCase):
 
         docEl.checkNode(deep=True)
 
-class TestChaning(unittest.TestCase):
+class TestChanging(unittest.TestCase):
     def setUp(self):
         madeDocObj = makeTestDoc0()
         self.n = madeDocObj.n
-        self.n.fan = 25
-        madeDocObj.addFullTree(self.n.docEl, n=self.n.fan, depth=3,
+        self.n.fan = 10
+        madeDocObj.addFullTree(self.n.docEl, n=self.n.fan, depth=2,
             withText="", withAttr={})  # Using default text/attrs
 
     def testChangingSiblingMethod(self):
+        print("precheck")
         doc = self.n.doc
         doc.checkNode(deep=True)
 
-        doc._updateChildSiblingImpl(which=SiblingImpl.PARENT)
+        print("to COUNT")
+        doc._updateChildSiblingImpl(which=SiblingImpl.COUNT)
         doc.checkNode(deep=True)
+
+        print("to CHNUM")
         doc._updateChildSiblingImpl(which=SiblingImpl.CHNUM)
         doc.checkNode(deep=True)
+
+        print("to LINKS")
         doc._updateChildSiblingImpl(which=SiblingImpl.LINKS)
         doc.checkNode(deep=True)
-        doc._updateChildSiblingImpl(which=SiblingImpl.PARENT)
+
+        print("to COUNT")
+        doc._updateChildSiblingImpl(which=SiblingImpl.COUNT)
         doc.checkNode(deep=True)
 
     #def testRemove(self):

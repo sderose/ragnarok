@@ -187,7 +187,7 @@ class DAT:
     p_name = "para"
     inline_name = 'i'
 
-    at_name = 'an_attr.name'
+    at_name = 'an_attribute.name'
     at_value = 'this is an attribute value'
     at_name2 = "class"
     at_value2 = "class1 class2"
@@ -244,10 +244,10 @@ class DAT_K(DAT):
     pi_data = """someData='foo' bar="baz" 12.1?"""
     com_data = "Comments are cool. Lots of potassium."
     cdata_data = "For example, in XML you say <p>foo</p> [[sometimes]]."
-    base_attr_name = "anAttrName"
+    base_att_name = "anAttrName"
     new_name = "newb"
-    attr1_name = "class"
-    attr1_value = "important"
+    attr_name = "class"
+    attr_value = "important"
     text1 = "aardvark"
     udk1_name = "myUDKey"
     udk1_value = "999"
@@ -287,7 +287,7 @@ class makeTestDoc0:
             "textNode1":   None,
             "mixedNode":   None,
 
-            "attrNode":    None,
+            "attNode":    None,
 
             "PiNode":      None,
             "CommNode":    None,
@@ -328,8 +328,11 @@ class makeTestDoc0:
         """Recursively create a subtree, adding 'depth' levels, with the tags
         for each level taken from 'types', and each node having 'n' children.
         If 'withText' is set, add a level for text nodes at the bottom.
-        If 'withAttrs' is set, also add attributes.
+        If 'withAttrs' is set, also add attributes from it. If any have value
+        "*", they'll be modified so they're not all the same.
         """
+        print(f"\nIn addFullTree(width={n}, depth={depth}, types={types}, "
+            f"withText='{withText}', withAttr={withAttr})")
         if not types: types = [ f"para{d}" for d in range(depth+1) ]
         makeTestDoc0.addChildren(
             node, n, types[0],
@@ -338,7 +341,7 @@ class makeTestDoc0:
         if depth > 0:
             for ch in node.childNodes:
                 assert ch.isElement
-                makeTestDoc0.addFullTree(ch, n, depth-1, types[1:],
+                makeTestDoc0.addFullTree(ch, n, depth=depth-1, types=types[1:],
                     withText=withText, withAttr=withAttr)
         return
 
@@ -346,25 +349,30 @@ class makeTestDoc0:
     def addChildren(node:Node, n:int=10, nodeName:str="p",
         withText:str=None, withAttr:Dict=None):
         """Add 'n' children to the node, of a given nodeName.
+
         If 'withText' is set, add text under each new node. Specific text can
-        be passed, or if it is "" (not None), default text is used.
-        Similarly, if 'withAttr' is set, add its members as attributes, or
-        if it is empty ({}, not None), default attrs are used.
+        be passed, or if it is "" (not None), default text is used. The child
+        number is appended to the text.
+
+        If 'withAttr' is set, add its members as attributes, or
+        if it is empty ({}, not None), default attributes are used.
+        Attribute values of "*" are replace so they're not always the same.
         """
         if not isinstance(node, Element):
             raise TypeError(f"addChildren requires an Element, not {type(node)}.")
         if withText == "":
             withText = "for the snark was a boojum"
         if withAttr == {}:
-            withAttr = { "speaker":"narr" }
+            withAttr = { "n":"*" }
         d = node.ownerDocument
 
-        for _i in range(n):
+        for i in range(n):
             newEl = d.createElement(nodeName)
             if withText:
-                newEl.appendChild(d.createTextNode(withText))
+                newEl.appendChild(d.createTextNode(f"{withText} ({i})"))
             if withAttr:
                 for k, v in withAttr.items():
+                    if v == "*": v = f"sys_{i}"
                     newEl.setAttribute(k, v)
             node.appendChild(newEl)
 
@@ -393,7 +401,7 @@ class makeTestDoc0:
                 node.appendChild(x)
 
     @staticmethod
-    def getAttrNames(n:int, baseName:str="anAttr", randomize:bool=False):
+    def getAttNames(n:int, baseName:str="anAttribute", randomize:bool=False):
         """Generate several attribute names, fixed or random.
         """
         names = []
@@ -425,7 +433,7 @@ class makeTestDoc2(makeTestDoc0):
         <?xml version="1.0" encoding="utf-8"?>
         <!DOCTYPE html []>
         <html xmlns:html="https://example.com/namespaces/foo">
-            <child0 an_attr.name="this is an attribute value"
+            <child0 an_att.name="this is an attribute value"
                 class="class1 class2" id="html_id_17">
                 Some text content.</child0>
             <child1>
@@ -484,7 +492,7 @@ class makeTestDoc2(makeTestDoc0):
 #
 class makeTestDocEachMethod(makeTestDoc0):
     """Make a common starting doc. Superclass makes just root element.
-    This adds 10 children, same type, @n numbered, and one more attr plus text.
+    This adds 10 children, same type, @n numbered, attributes, text.
     TODO: Move to makeTestDoc.
     """
     def __init__(self, dc:type=DAT, show:bool=False):
@@ -495,7 +503,7 @@ class makeTestDocEachMethod(makeTestDoc0):
 
         for i in range(10):
             p = self.n.doc.createElement(self.dc.p_name)
-            p.setAttribute(self.dc.attr1_name, self.dc.attr1_value)
+            p.setAttribute(self.dc.attr_name, self.dc.attr_value)
             p.setAttribute("n", i)
             t = self.n.doc.createTextNode(self.dc.text1)
             p.appendChild(t)

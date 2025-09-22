@@ -5,7 +5,7 @@
 from pudb.var_view import default_stringifier
 
 from basedom import Node, Attr
-from basedomtypes import NodeType
+from ragnaroktypes import NodeType
 
 descr = """
 Goals:
@@ -15,7 +15,7 @@ Goals:
 * Reduce Attr to just name/value
 * ? hide is... predicates
 * Show cseq for referenced nodes
-* Show attrs on element?
+* Show attributes on element?
 * Show address?
 """
 

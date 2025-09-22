@@ -8,12 +8,12 @@
 #pylint: disable=E1101
 #
 import re
-from typing import List, Iterable, Union
+from typing import List, Dict, Iterable, Union
 import logging
 
-from basedomtypes import InvalidCharacterError, NotSupportedError
+from ragnaroktypes import InvalidCharacterError, NotSupportedError
 from runeheim import NameTest  #XmlStrings as Rune, UNormHandler, CaseHandler
-lg = logging.getLogger("BaseDOM")
+lg = logging.getLogger("domadditions")
 
 # Provide synonym types for type-hints these common args
 #
@@ -22,11 +22,11 @@ NmToken = str
 
 __metadata__ = {
     "title"        : "domadditions",
-    "description"  : "Higher-level additions for basedom.",
+    "description"  : "Higher-level additions for Dominµs.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
-    "language"     : "Python 3.7",
+    "language"     : "Python 3.11",
     "created"      : "2016-02-06",
     "modified"     : "2024-10-08",
     "publisher"    : "http://github.com/sderose",
@@ -39,7 +39,7 @@ descr = """See BaseDom.md"""
 
 ###############################################################################
 #
-class EtAdditions:
+class ElementTreeAdditions:
     """elementtree compatibility
     Also: fromstring _setroot canonicalize(?) findtext
     Constructors: Comment, P19n, SubElement, QName, etc.
@@ -87,22 +87,69 @@ class EtAdditions:
                 if ch.localName == name: nodes.append(ch)
         return nodes
 
-    def set(self, aname:str, avalue:str) -> None:
-        return self.setAttribute(aname, avalue)
+    # TODO Add "Clark notation" support for NS
+    #
+    def set(self, attrName:str, attrValue:str) -> None:
+        return self.setAttribute(attrName, attrValue)
 
-    def get(self, aname:str) -> str:
-        return self.getAttribute(aname)
+    def get(self, attrName:str) -> str:
+        return self.getAttribute(attrName)
 
-    @property
+
+###############################################################################
+#
+class whatwgAdditions:
+    """These are largely HTML hard-wired.
+    Also:
+    createDocumentFragment
+    dataset -- just mirrors attributes starting with "data-"
+    add[remove]eventListener, MutationObserver,
+    closest(), matches(), and children.
+    createElement() and createElementNS()
+    template stuff
+    """
+
+    def getroottree(self) -> 'Node':
+        return self.ownerDocument
+
     def getroot(self) -> 'Node':
         return self.ownerDocument.documentElement
 
+    def getparent(self) -> 'Node':
+        return self.parentNode
+
+    def getchildren(self) -> list:
+        return self.childNodes
+
+    def getprevious(self) -> 'Node':
+        return self.previousSibling
+
+    def getnext(self) -> 'Node':
+        return self.nextSibling
+
+    ### Properties
+    #
     @property
     def tag(self) -> str:
         return self.nodeName  # localName?
 
-    def matches(self) -> bool:
-        raise NotSupportedError("Element.matches")
+    @property
+    def attrib(self) -> Dict:
+        return self.attributes
+
+    @property
+    def text(self) -> str:
+        if self.childNodes and self.childNodes[0].isText:
+            return self.childNodes[0].data
+        return None
+
+    @text.setter
+    def text(self, data:str) -> None:
+        if len(self) > 1 and self.childNodes[0].isText:
+            self.childNodes[0].data = data
+        else:
+            tnode = self.ownerdocument.createTextnode(data)
+            self.insert(0, tnode)
 
     @property
     def tail(self) -> str:
@@ -112,25 +159,16 @@ class EtAdditions:
             return self.nextSibling.data
         return None
 
-    @property
-    def text(self) -> str:
-        if self.childNodes and self.childNodes[0].isText:
-            return self.childNodes[0].data
-        return None
+    @tail.setter
+    def tail(self, data:str) -> None:
+        if self.nextSibling and self.nextSibling.isText:
+            self.nextSibling.data = data
+        else:
+            tnode = self.ownerdocument.createTextnode(data)
+            self.parentNode.insert(self.getChildIndex(), tnode)
 
-
-###############################################################################
-#
-class whatwgAdditions:
-    """These are largely HTML hard-wired.
-    Also:
-    createDocumentFragment
-    dataset -- just mirrors attrs starting with "data-"
-    add[remove]eventListener, MutationObserver,
-    closest(), matches(), and children.
-    createElement() and createElementNS()
-    template stuff
-    """
+    ### Finders
+    #
     def querySelector(self) -> 'Node':
         """Find first match to CSS selector
         """
@@ -279,36 +317,18 @@ class Synonyms:  # TODO: Implement Synonyms?
 #
 class OtherAdditions:
     """Add hypertext and ID extensions.
-        * Way to identify ID attrs via schema
+        * Way to identify ID attributes via schema
         * Way to just declare them via API
         * Add notions (are these all just scheme prefixes? a la XPointer?
             COID      Multiples must be on same element type. same att or sId/eId
-            STACKID   "/".join(x.attr[name] for x in reversed(ancestors)
-            SCOPEDID  Only needs to0 be unique within innermost anc of type T
+            STACKID   "/".join(reversed(x/ancestors:@name))
+            SCOPEDID  Only needs to0 be unique within innermost ancestor of type T
             NSID      Only unique in NS (delared somewhere)
-            COMPOUND  Value is cal by declared XPath.
+            COMPOUND  Value is calculated via a declared XPath.
         * Add XLink/XPointer support
         * Support HTML name vs. ID option
         *
     """
-
-    ### Whence?
-    ### TODO: Not element specifically, but support sel by type
-
-    @property
-    def nextElementSibling(self) -> 'Element':
-        cur = self.nextSibling
-        while (cur is not None):
-            if cur.isELement: return cur
-            cur = self.nextSibling
-        return None
-    @property
-    def previousElementSibling(self) -> 'Element':
-        cur = self.previousSibling
-        while (cur is not None):
-            if cur.isELement: return cur
-            cur = self.previousSibling
-        return None
 
     # Whence?
 
@@ -322,8 +342,8 @@ class OtherAdditions:
     def getIdAttribute(self) -> str:
         """This was apparently an old IE addition, now obsolete. But
         if you have a schema handy it can be pretty useful.... Should be doable
-        via attr datatyping.
-        called can set up a list by elname@atname with the doctype, by
+        via attribute datatyping.
+        called can set up a list by elemName@attrName with the doctype, by
         adding one or more entries like:
             *@id
             p@name
@@ -335,7 +355,7 @@ class OtherAdditions:
         if self.hasAttribute("xml:id"): return True
         if (self.ownerDocument.doctype is not None
             and self.ownerDocument.doctype.IDAttrs):
-            for k, _anode in self.attributes.items():
+            for k, _attrNode in self.attributes.items():
                 if ('*@'+k in self.ownerDocument.doctype.IDAttrs or
                     self.nodeName+'@'+k in self.ownerDocument.theDOM.doctype.IDAttrs):
                     return k

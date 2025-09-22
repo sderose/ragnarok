@@ -2,7 +2,6 @@
 #
 # JBook: Roundtrippable XML/JSON conversions.
 #
-#import sys
 import codecs
 import re
 from typing import Any, List, IO, Union
@@ -291,14 +290,14 @@ class Saver:
                 buf += '"#publicId":"%s",  "#systemId":"%s" }],\n' % (
                     dcl.publicId, dcl.systemId)
 
-        # TODO What about attrs for undeclared elements?, optional global attrs?
+        # TODO What about attributess for undeclared elements?, optional globals?
         for dcl in dt.elementDefs:
             buf += '[ { "#dcl":"ELEMENT", "#name":"%s", ' % (dcl.name)
             buf += '"#model":"%s" }],\n' % (dcl.model.tostring())
             if dcl.attributes:
                 buf += '[ { "#dcl":"ATTLIST", "#name":"%s" },\n' % (dcl.name)
                 for adcl in dcl.attributes: buf += (""
-                    '[ { "#dcl":"ATT", "#name":"%s", "#type":"%s", "#default":"%s" }],\n'
+                    '[ { "#dcl":"ATTR", "#name":"%s", "#type":"%s", "#default":"%s" }],\n'
                     % (adcl.name, adcl.type, adcl.default))
                 buf += "],\n"
 
@@ -309,9 +308,9 @@ class Saver:
         buf = '%s[ { "%s":"%s"' % (istr, JKeys.J_NAME_KEY, node.nodeName)
         if node.attributes:
             for k in node.attributes:
-                anode = node.getAttributeNode(k)
+                attrNode = node.getAttributeNode(k)
                 # If the values are actual int/float/bool/none, use JSON vals.
-                buf += ', ' + self.attrToJson(anode)
+                buf += ', ' + self.attributeToJson(attrNode)
         buf += " }"
         if node.childNodes is not None:
             for ch in node.childNodes:
@@ -347,27 +346,27 @@ class Saver:
         return ("""%s[ { "%s":"%s" }, "%s" ]"""
             % (istr, JKeys.J_NAME_KEY, JKeys.J_NN_ENTREF, escapeJsonStr(node.data)))
 
-    def attrToJson(self, anode:'Attr', listAttrs:bool=False) -> str:
+    def attributeToJson(self, attrNode:'Attr', listAttrs:bool=False) -> str:
         """This uses JSON non-string types iff the value is actually
-        of that type, or somebody declared the attr that way.
+        of that type, or somebody declared the attribute that way.
         Not if it's a string that just looks like it (say, "99").
         """
-        buf = f' "{anode.name}":'
-        avalue = anode.nodeValue
-        if isinstance(avalue, float): buf += "%f" % (avalue)
-        elif isinstance(avalue, int): buf += "%d" % (avalue)
-        elif avalue is True: buf += "true"
-        elif avalue is False: buf += "false"
-        elif avalue is None: buf += "nil"
-        elif isinstance(avalue, str): buf += f'"{escapeJsonStr(avalue)}"'
-        elif isinstance(avalue, list):  # Only for tokenized attrs
+        buf = f' "{attrNode.name}":'
+        attrValue = attrNode.nodeValue
+        if isinstance(attrValue, float): buf += "%f" % (attrValue)
+        elif isinstance(attrValue, int): buf += "%d" % (attrValue)
+        elif attrValue is True: buf += "true"
+        elif attrValue is False: buf += "false"
+        elif attrValue is None: buf += "nil"
+        elif isinstance(attrValue, str): buf += f'"{escapeJsonStr(attrValue)}"'
+        elif isinstance(attrValue, list):  # Only for tokenized attrs
             if listAttrs:
                 buf += "[ %s ]" % (
-                    ", ".join([  escapeJsonStr(str(x)) for x in avalue ]))
+                    ", ".join([  escapeJsonStr(str(x)) for x in attrValue ]))
             else:
                 buf += '"%s"' % (
-                    escapeJsonStr(" ".join([ str(x) for x in avalue ])))
+                    escapeJsonStr(" ".join([ str(x) for x in attrValue ])))
         else:
             raise SyntaxError(
-                f"attrToJson got unsupported type {type(avalue)}.")
+                f"attributeToJson got unsupported type {type(attrValue)}.")
         return buf

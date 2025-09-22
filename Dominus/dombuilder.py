@@ -14,7 +14,7 @@ import logging
 #from xml.parsers import expat
 #from xml.dom import minidom
 
-from basedomtypes import NMTOKEN_t, NCName_t, XMLParser_P, NodeType, DOMException
+from ragnaroktypes import NMTOKEN_t, NCName_t, XMLParser_P, NodeType, DOMException
 from domenums import RWord
 from runeheim import XmlStrings as Rune
 #import xsparser
@@ -27,7 +27,7 @@ __metadata__ = {
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
-    "language"     : "Python 3.7",
+    "language"     : "Python 3.11",
     "created"      : "2016-02-06",
     "modified"     : "2024-09",
     "publisher"    : "http://github.com/sderose",
@@ -348,21 +348,21 @@ class DomBuilder():
 
     ### Handlers ##############################################################
     #
-    def StartElementHandler(self, name:NMTOKEN_t, *args) -> None:
+    def StartElementHandler(self, elemName:NMTOKEN_t, *args) -> None:
         """Create a new element and append to the currently-open element.
         Attributes can be done 3 ways:
             * Pass a dict
             * Pass varargs with alternating names and values
             * Don't pass here at all, but generate a separate event for
-              each attribute, immediatey following this event (see AttrHandler).
+              each attribute, immediatey following this event (see AttributeHandler).
         The DOM Document itself, but no documentElement, must already be there.
         """
-        lg.info("StartElement for '%s' (depth %d).", name, len(self.nodeStack))
-        #el.startLoc = self.parser.CurrentByteIndex
+        lg.info("StartElement for '%s' (depth %d).", elemName, len(self.nodeStack))
+        #elemNode.startLoc = self.parser.CurrentByteIndex
 
-        if not Rune.isXmlQName(name): raise SyntaxError(
-            f"Parser returned non-QName element name '{name}'.")
-        el = self.domDoc.createElement(name)
+        if not Rune.isXmlQName(elemName): raise SyntaxError(
+            f"Parser returned non-QName element name '{elemName}'.")
+        elemNode = self.domDoc.createElement(elemName)
 
         if len(args) > 0:  # Deal with attributes
             if isinstance(args[0], dict):
@@ -375,46 +375,46 @@ class DomBuilder():
                     attrDict[args[i]] = args[i+1]
 
             nsp = RWord.NS_PREFIX+":"
-            for n, v in attrDict.items():
-                if n.startswith(nsp):
-                    if el.declaredNS is None: el.declaredNS = {}
-                    lName = n[len(nsp):]
-                    el.declaredNS[lName] = v
+            for attrName, attrValue in attrDict.items():
+                if attrName.startswith(nsp):
+                    if elemNode.declaredNS is None: elemNode.declaredNS = {}
+                    lName = attrName[len(nsp):]
+                    elemNode.declaredNS[lName] = attrValue
                     continue
-                assert Rune.isXmlName(n)
-                el.setAttribute(n, v)
+                assert Rune.isXmlName(attrName)
+                elemNode.setAttribute(attrName, attrValue)
 
         if self.domDoc.documentElement is None:
             if self.nodeStack: raise DOMException(
                 "No document element, but stack has [%s]." % (self.nodeStack))
-            self.domDoc.appendChild(el)
+            self.domDoc.appendChild(elemNode)
         else:
             if not self.nodeStack: raise DOMException(
                 f"Document element is '{self.domDoc.documentElement}', but no stack.")
-            self.nodeStack[-1].appendChild(el)
-        self.nodeStack.append(el)
+            self.nodeStack[-1].appendChild(elemNode)
+        self.nodeStack.append(elemNode)
 
         return
 
-    def AttrHandler(self, aname:NMTOKEN_t, avalue:str) -> None:
+    def AttributeHandler(self, attrName:NMTOKEN_t, attrValue:str) -> None:
         """Support option of parser returning attributes as separate events.
         SAX parsers generally bundle them in with start-tags, which means fewer
         events but an unbounded number of args per event. Take your pick.
         """
         curElement = self.nodeStack[-1]
-        if curElement.hasAttribute(aname):
-            raise SyntaxError(f"Duplicate attribute '{aname}'.")
-        curElement.setAttribute(aname, avalue)
+        if curElement.hasAttribute(attrName):
+            raise SyntaxError(f"Duplicate attribute '{attrName}'.")
+        curElement.setAttribute(attrName, attrValue)
 
-    def EndElementHandler(self, name:NMTOKEN_t) -> None:
-        lg.info("EndElement '%s'.", name)
+    def EndElementHandler(self, elemName:NMTOKEN_t) -> None:
+        lg.info("EndElement '%s'.", elemName)
         if not self.nodeStack: raise IndexError(
-            f"Endtag for element '{name}' but no elements open.")
-        if self.nodeStack[-1].nodeName != name:  # TODO use nodeNameMatches
+            f"Endtag for element '{elemName}' but no elements open.")
+        if self.nodeStack[-1].nodeName != elemName:  # TODO use nodeNameMatches
             # TODO Report where the current element started
             raise ValueError(
                 "Endtag for element '%s' but open element is '%s'" %
-                (name, self.nodeStack[-1].nodeName))
+                (elemName, self.nodeStack[-1].nodeName))
 
         self.nodeStack.pop()
         return
@@ -494,24 +494,24 @@ class DomBuilder():
     def EndDoctypeDeclHandler(self) -> None:
         pass
 
-    def ElementDeclHandler(self, name:NMTOKEN_t, model:str="ANY") -> None:
-        self.domDocumentType.ElementDef(name, aliasFor=None, model=model)
+    def ElementDeclHandler(self, elemName:NMTOKEN_t, model:str="ANY") -> None:
+        self.domDocumentType.ElementDef(elemName, aliasFor=None, model=model)
 
-    def AttlistDeclHandler(self, ename:NMTOKEN_t,
-        aname:NMTOKEN_t, atype:str, adefault:str) -> None:
-        self.domDocumentType.AttributeDef(ename, aname, atype, adefault)
+    def AttlistDeclHandler(self, elemName:NMTOKEN_t,
+        attrName:NMTOKEN_t, attrType:str, attrDefault:str) -> None:
+        self.domDocumentType.AttrDef(elemName, attrName, attrType, attrDefault)
 
-    def EntityDeclHandler(self, name:NMTOKEN_t,
+    def EntityDeclHandler(self, entName:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
-        self.domDocumentType.EntityDef(name, literal, publicId, systemId)
+        self.domDocumentType.EntityDef(entName, literal, publicId, systemId)
 
-    def UnparsedEntityDeclHandler(self, name:NMTOKEN_t,
+    def UnparsedEntityDeclHandler(self, entName:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
-        self.domDocumentType.EntityDef(name, literal, publicId, systemId)
+        self.domDocumentType.EntityDef(entName, literal, publicId, systemId)
 
-    def SDATAEntityDeclHandler(self, name:NMTOKEN_t, literal:str=None) -> None:
-        self.domDocumentType.EntityDef(name, literal)
+    def SDATAEntityDeclHandler(self, entName:NMTOKEN_t, literal:str=None) -> None:
+        self.domDocumentType.EntityDef(entName, literal)
 
-    def NotationDeclHandler(self, name:NMTOKEN_t,
+    def NotationDeclHandler(self, notationName:NMTOKEN_t,
         literal:str=None, publicId:str=None, systemId:str=None) -> None:
-        self.domDocumentType.NotationDef(name, literal, publicId, systemId)
+        self.domDocumentType.NotationDef(notationName, literal, publicId, systemId)

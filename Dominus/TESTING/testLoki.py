@@ -168,7 +168,7 @@ class TestLoki(unittest.TestCase):
             systemId=sampleEnt)
         frame = InputFrame()
         frame.addEntity(ch1)
-        thePath = frame.source.findLocalPath(eDef=ch1)
+        thePath = frame.source.findLocalPath(entDef=ch1)
         self.assertTrue(os.path.isfile(thePath))
 
         #data="<chap><ti>Hello</ti></chap>"
@@ -530,8 +530,8 @@ class TestXSPExtensions(unittest.TestCase):
     def testMisc(self):
         sr = StackReader()
 
-        edef = EntityDef("ent1", entSpace=EntitySpace.GENERAL, data="ent1 value")
-        self.assertEqual(edef.entName, "ent1")
+        entDef = EntityDef("ent1", entSpace=EntitySpace.GENERAL, data="ent1 value")
+        self.assertEqual(entDef.entName, "ent1")
 
         pedef = EntityDef("pent1", entSpace=EntitySpace.PARAMETER, data="xxx")
         self.assertEqual(pedef.entName, "pent1")

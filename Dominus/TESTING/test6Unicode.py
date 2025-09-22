@@ -5,7 +5,7 @@ import random
 import re
 import unicodedata
 
-#from basedomtypes import HReqE, ICharE, NSuppE  # NotFoundError
+#from ragnaroktypes import HReqE, ICharE, NSuppE  # NotFoundError
 from runeheim import XmlStrings as Rune
 from runeheim import NameTest, WSHandler, CaseHandler, UNormHandler, Normalizer
 from prettyxml import FormatOptions, FormatXml
@@ -218,9 +218,6 @@ class testByMethod(unittest.TestCase):
         self.assertFalse(Rune.isXmlNumber("{45}"))
 
     def testRuneOther(self):
-        allNS = Rune.allNameStartChars()
-        allNCA = Rune.allNameCharAddls()
-        allNC = Rune.allNameChars()
         self.assertEqual(Rune.dropNonXmlChars("abc\x05d\x1Ee\x02f"), "abcdef")
         self.assertEqual(Rune.unescapeXml("a&#65;-&bull;-&lt;.&#x2022;"), "aA-•-<.•")
         with self.assertRaises(ValueError):
@@ -249,48 +246,6 @@ class testByMethod(unittest.TestCase):
             "  \u2007a   b\t\u2002\n\u2003\u2004\u2005 c\rd  \u2006\u2008\u2009\u200A",
             allUnicode=True),
             "a   b\t\u2002\n\u2003\u2004\u2005 c\rd")
-
-        # TODO Make these handle attribute re-ordering.
-        self.assertEqual(FormatXml.makeStartTag(
-            "spline", attrs="", empty=False, sort=False), "<spline>")
-        self.assertEqual(FormatXml.makeStartTag(
-            "spline", attrs={"id":"A1", "class":"foo"}, empty=True, sort=False),
-            '<spline id="A1" class="foo"/>')
-        self.assertEqual(FormatXml.makeStartTag(
-            "spline", attrs={"id":"A1", "class":"foo&bar"}, empty=True, sort=True),
-            '<spline class="foo&amp;bar" id="A1"/>')
-        self.assertEqual(FormatXml.makeStartTag(
-            "spline", attrs='id="A1" class="foo and bar"', empty=True, sort=True),
-            '<spline id="A1" class="foo and bar"/>')
-        self.assertEqual(FormatXml.dictToAttrs(
-            { "id":"foo", "border":"border<1 " }, sort=True, normValues=False),
-            ' border="border&lt;1 " id="foo"')
-        self.assertEqual(FormatXml.makeEndTag("DiV"), "</DiV>")
-
-        self.assertEqual(Rune.getLocalPart("foo:bar"), "bar")
-        self.assertEqual(Rune.getPrefixPart("foo:bar"), "foo")
-
-        failed = []
-        for c in allNS:
-            if (not Rune.isXmlName(c+"restOfName")):
-                failed.append("U+%04x" % (ord(c)))
-        if (failed):
-            self.assertFalse(
-                print("Chars should be namestart but aren't: [ %s ]"
-                    % (" ".join(failed))))
-
-        failed = []
-        for c in allNCA:
-            if (Rune.isXmlName(c+"restOfName")):
-                failed.append("U+%04x" % (ord(c)))
-        if (failed):
-            self.assertFalse(
-                print("Chars should not be namestart but are: [ %s ]"
-                    % (" ".join(failed))))
-
-        self.assertTrue(Rune.isXmlName(allNS*2))
-
-        self.assertTrue(Rune.isXmlName("A"+allNC))
 
     def testEscapers(self):
         self.assertEqual(FormatXml.escapeAttribute(
@@ -354,6 +309,75 @@ class testByMethod(unittest.TestCase):
             fo=FormatOptions(charPad=6, charBase=10, htmlChars=False)),
             "abc&#008226;xyz.&#010126;.")
 
+    def testParts(self):
+        self.assertEqual(Rune.getLocalPart("foo:bar"), "bar")
+        self.assertEqual(Rune.getPrefixPart("foo:bar"), "foo")
+
+        allNS = Rune.allNameStartChars()
+        allNCA = Rune.allNameCharAddls()
+        allNC = Rune.allNameChars()
+
+        failed = []
+        for c in allNS:
+            if (not Rune.isXmlName(c+"restOfName")):
+                failed.append("U+%04x" % (ord(c)))
+        if (failed):
+            self.assertFalse(
+                print("Chars should be namestart but aren't: [ %s ]"
+                    % (" ".join(failed))))
+
+        failed = []
+        for c in allNCA:
+            if (Rune.isXmlName(c+"restOfName")):
+                failed.append("U+%04x" % (ord(c)))
+        if (failed):
+            self.assertFalse(
+                print("Chars should not be namestart but are: [ %s ]"
+                    % (" ".join(failed))))
+
+        self.assertTrue(Rune.isXmlName(allNS*2))
+
+        self.assertTrue(Rune.isXmlName("A"+allNC))
+
+
+class testFormatXmlBasics(unittest.TestCase):
+    def setup(self):
+        makeDocObj = makeTestDoc2()
+        self.n = makeDocObj.n
+
+    def testFormatXmlBasics(self):
+        # TODO Test attribute re-ordering.
+        e = self.n.doc.createElement(
+            tagName="spline", attributes={})
+        self.assertEqual(
+            FormatXml.startTag(e, fo=FormatOptions(empty=False, sort=False)),
+            "<spline>")
+
+        e = self.n.doc.createElement(
+            tagName="spline", attributes={"id":"A1", "class":"foo"})
+        self.assertEqual(
+            FormatXml.startTag(e, fo=FormatOptions(empty=True, sort=False)),
+            '<spline id="A1" class="foo"/>')
+
+        e = self.n.doc.createElement(
+            tagName="spline", attributes={"id":"A1", "class":"foo&bar"})
+        self.assertEqual(FormatXml.startTag(e, fo=FormatOptions(empty=True, sort=True)),
+            '<spline class="foo&amp;bar" id="A1"/>')
+
+        e = self.n.doc.createElement(
+            tagName="spline", attributes={"id":"A1", "class":"foo and bar"})
+        self.assertEqual(FormatXml.startTag(e, fo=FormatOptions(empty=True, sort=True)),
+            '<spline id="A1" class="foo and bar"/>')
+
+        e = self.n.doc.createElement(
+            tagName="spline", attributes={"id":"foo", "border":"border<1 "})
+        self.assertEqual(FormatXml.formatAttributes(
+            e, fo=FormatOptions(sort=True, normValues=False)),
+            ' border="border&lt;1 " id="foo"')
+
+        e = self.n.doc.createElement(
+            tagName="DiV", attributes={"id":"A1", "class":"foo"})
+        self.assertEqual(FormatXml.endTag(e), "</DiV>")
 
 if __name__ == '__main__':
     unittest.main()

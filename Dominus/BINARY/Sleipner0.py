@@ -9,17 +9,20 @@ import codecs
 #import array
 from typing import Union, Dict
 
+from xml.parsers import expat
+from xml.dom import minidom
+
 from EDir import EDir, EDirRec, HeaderInfo
 
-from xmlstrings import XmlStrings as XStr
+from ragnaroktypes import NodeType
+from runeheim import XmlStrings as Rune
 import basedom
-from nodetype import NodeType
 from dombuilder import DomBuilder
 
 NmToken = str
 
 __metadata__ = {
-    "title"        : "Dominus",
+    "title"        : "Sleipner0",
     "description"  : "A disk-resident DOM implementation, similar to DynaText's.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
@@ -337,7 +340,7 @@ class TextishPieces(TextPieces):
         buf = self.readStringAt(offset)
         for mat in re.finditer(TextishPieces.ATTR, buf):
             avalue = mat.group(2)[1:-1]
-            attrs[mat.group(1)] = XStr.unescapeXml(avalue)
+            attrs[mat.group(1)] = Rune.unescapeXml(avalue)
         return attrs
 
     def setAttrAt(self, offset, aname, avalue):
@@ -354,7 +357,7 @@ class TextishPieces(TextPieces):
     def encodeAttrs(self, attrs):
         buf = ""
         for k, v in attrs.items():
-            buf += " %s=\"%s\"" % (k, XStr.escapeAttribute(v))
+            buf += " %s=\"%s\"" % (k, Rune.escapeAttribute(v))
         return buf
 
 
@@ -381,7 +384,7 @@ class Node(basedom.Node):
     ones that aren't loaded yet?
     """
 
-    def __init__(self, nodeType:Union[int, NodeTypes],
+    def __init__(self, nodeType:Union[int, NodeType],
         ownerDocument:'Document'=None, nodeName:NmToken=None):
         super(Node, self).__init__(nodeType=nodeType,
             ownerDocument=ownerDocument, nodeName=nodeName)
@@ -627,7 +630,7 @@ class Document(basedom.Document):
 ###############################################################################
 #
 class Element(basedom.Element):
-    _Dominus = True
+    _Sleipner0 = True
 
     def find(self):
         pass
@@ -635,7 +638,7 @@ class Element(basedom.Element):
     def findAll(self):
         pass
 
-    def getAttributeNodeNS(self, ns, an):
+    def getAttributeNodeNS(self, ns, aname):
         pass
 
     def insertAdjacentHTML(self, html):
@@ -660,27 +663,27 @@ class Element(basedom.Element):
         pass
 
 class Text(basedom.Text):
-    _Dominus = True
+    _Sleipner0 = True
 
 class CDATASection(basedom.CDATASection):  # data
-    _Dominus = True
+    _Sleipner0 = True
 
 class ProcessingInstruction(basedom.ProcessingInstruction):
-    _Dominus = True
+    _Sleipner0 = True
 
 class Comment(basedom.Comment):
-    _Dominus = True
+    _Sleipner0 = True
 
 class EntityReference(basedom.EntityReference):
-    _Dominus = True
+    _Sleipner0 = True
 
 class Notation(basedom.Notation):
-    _Dominus = True
+    _Sleipner0 = True
 
 
 ###############################################################################
 #
-class Dominus():
+class Sleipner0():
     """The DOM implementation itself, which works with persistent disk data.
     Nodes (not including attribute/namespace) are numbered from *1*,
     (leaving 0 to represent NULL). They are kept in a fixed-size-record file.
@@ -725,7 +728,7 @@ class Dominus():
         print(m)
 
     def getDOMImplementation(self):
-        return Dominus(args.dirPath)
+        return Sleipner0(args.dirPath)
 
     def createDocument(self, name:str):
         self.theDoc = Document(name)
@@ -734,7 +737,12 @@ class Dominus():
     ##############################################################################
     #
     def loadXML(self, path:str):
-        self.theDoc = DomBuilder.DomBuilder(path)
+        self.theDoc = DomBuilder(
+            parserClass=expat,
+            domImpl=minidom,
+            wsn=True,
+            verbose=False)
+        theDom.parse(path)
 
 
 ###############################################################################
@@ -796,8 +804,11 @@ if __name__ == "__main__":
             print("No file at '%s'." % (thePath))
             continue
         print("Building the DOM for '%s'." % (thePath))
-        theDom = DomBuilder.DomBuilder(
-            #thePath, domImpl=xml.dom.minidom, verbose=args.verbose)
-            thePath, verbose=args.verbose)
+        theDom = DomBuilder(
+            parserClass=expat,
+            domImpl=minidom,
+            wsn=True,
+            verbose=args.verbose)
+        theDom.parse(thePath)
         print("\nResults:")
         print(theDom.tostring())

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 #
+from typing import Callable
 import time
 import random
 import statistics
@@ -10,7 +11,7 @@ PUNCT_FROZEN = frozenset(PUNCTS)
 PUNCT_LIST = list(PUNCTS)
 PUNCT_DICT = dict.fromkeys(PUNCTS)
 
-def gen_test_string(length, punct_ratio=0.1):
+def gen_test_string(length:int, punct_ratio:float=0.1):
     """Generate test string with given ratio of punctuation"""
     chars = []
     for _ in range(length):
@@ -20,7 +21,7 @@ def gen_test_string(length, punct_ratio=0.1):
             chars.append(chr(random.randint(65, 90)))  # A-Z
     return chars
 
-def get_punct_str(chars, start_idx):
+def get_punct_str(chars:str, start_idx:int):
     i = start_idx
     result = []
     while i < len(chars) and chars[i] in PUNCTS:
@@ -28,7 +29,7 @@ def get_punct_str(chars, start_idx):
         i += 1
     return ''.join(result)
 
-def get_punct_set(chars, start_idx):
+def get_punct_set(chars:str, start_idx:int):
     i = start_idx
     result = []
     while i < len(chars) and chars[i] in PUNCT_SET:
@@ -36,7 +37,7 @@ def get_punct_set(chars, start_idx):
         i += 1
     return ''.join(result)
 
-def get_punct_frozen(chars, start_idx):
+def get_punct_frozen(chars:str, start_idx:int):
     i = start_idx
     result = []
     while i < len(chars) and chars[i] in PUNCT_FROZEN:
@@ -44,7 +45,7 @@ def get_punct_frozen(chars, start_idx):
         i += 1
     return ''.join(result)
 
-def get_punct_list(chars, start_idx):
+def get_punct_list(chars:str, start_idx:int):
     i = start_idx
     result = []
     while i < len(chars) and chars[i] in PUNCT_LIST:
@@ -52,7 +53,7 @@ def get_punct_list(chars, start_idx):
         i += 1
     return ''.join(result)
 
-def get_punct_dict(chars, start_idx):
+def get_punct_dict(chars:str, start_idx:int):
     i = start_idx
     result = []
     while i < len(chars) and chars[i] in PUNCT_DICT:
@@ -60,13 +61,13 @@ def get_punct_dict(chars, start_idx):
         i += 1
     return ''.join(result)
 
-def benchmark(func, test_chars, repeats=1000):
+def benchmark(fn:Callable, tchars:str, repeats:int=1000) -> (float, float):
     """Time the function over multiple repeats"""
     times = []
     for _ in range(repeats):
-        start_idx = random.randint(0, len(test_chars) - 1)
+        start_idx = random.randint(0, len(tchars) - 1)
         start = time.perf_counter_ns()
-        func(test_chars, start_idx)
+        fn(tchars, start_idx)
         end = time.perf_counter_ns()
         times.append(end - start)
     return statistics.mean(times), statistics.stdev(times)

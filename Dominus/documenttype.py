@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
+#
 # DocementType class: split from basedom 2024-06-28 sjd.
 #
-#
 import os
-#import codecs
 from collections import defaultdict, namedtuple
 from typing import List, Set, Dict, Union  # Any,
 import logging
+import re
 
-from basedomtypes import (NMTOKEN_t, QName_t, FlexibleEnum,
+from ragnaroktypes import (NMTOKEN_t, QName_t, FlexibleEnum,
     NSuppE, DOMException, ICharE)  # NodeType
 from domenums import RWord
 from runeheim import XmlStrings as Rune, CaseHandler #, UNormHandler, WSHandler
@@ -18,91 +18,193 @@ from prettyxml import FormatXml
 
 lg = logging.getLogger("documenttype")
 
-descr = """
-This library provides a basic interface to schema information, whether created
-via the API, an XML (or perhaps SGML) DTD, an XML Schems, or (eventually) a Relax-NG schema (I'm less
-familiar with those, so that may be a while). The idea here is to get any
-schema into a common API that parsers and validators can talk to.
-
-There are a lot of classes, but most are quite small and correspond closely
-to SGML/HTML/XML/XSD notions. Enums in here generally include the union
-of possibilities (for example, #CURRENT has a defined name even though
-it is only used in SGML).
-Unnamed options such as having NO repetition or no seq operator (as for
-singleton model groups) have corresponding enum values for expliciteness.
-
-
-* SimpleType/attribute stuff (perhaps split to separate file?)
-
-    ** DerivationLimits(FlexibleEnum): Ways to derive types
-    (extension, etc)
-
-    ** SimpleType(dict): Basicallly like XSD, a name, base type
-    (plus corresponding Python type if any), and selected facets
-
-    ** XsdType(dict): The set of built-in XSD datatypes, with their facets
-
-    ** DateTimeFrag: Support for fragmentary dates/times per XSD
-
-    ** XsdFacet(Enum): The set of known XSD facets
-
-    ** AttributeDef: A single attribute with name/type/default
-
-    ** AttlistDef(dict): A bundle of attributes. These must be attached to
-the Doctype, and to their element(s)
+__metadata__ = {
+    "title"        : "documenttype",
+    "description"  : "Support for DTD, XML Schema, etc.",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.11",
+    "created"      : "2024-06-28",
+    "modified"     : "2025-05-26",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
+}
+__version__ = __metadata__['modified']
 
 
-* ComplexType(SimpleType): Basically like XSD or SGML Element
+EOF = -1
 
-    ** ContentType(FlexibleEnum): ANY, EMPTY, etc., or X_MODEL
-
-    ** DclType(FlexibleEnum):  Attribute declared types (cf XsdType)
-
-    ** DftType(FlexibleEnum):  Attribute defaults (#IMPLIED etc., or X_LITERAL)
-
-    ** SeqType(FlexibleEnum):  OR vs. SEQ vs. the late AND
-
-    ** RepType(FlexibleEnum):  *?+ or {} like XSD min/maxOccurs
-
-    ** ModelItem: A token + RepType in a content model
-
-    ** ModelGroup: A group in a content model
-
-    ** Model(ModelGroup): An *entire* content model or declared content value
-
-    ** ElementDef(ComplexType): An element declaration (name(s?) plus Model)
-    Cf ComplexType
-
-
-* Entity stuff
-
-    ** EntitySpace(FlexibleEnum): What kinds of entities we got?
-    parameter, general, ndata, maybe sdata
-
-    ** EntityParsing(FlexibleEnum): Parsing constraint on entity
-
-    ** EntityDef: An entity declaration
-
-
-* Notation stuff (treated as a quasi-entity)
-
-    ** Notation: A notation declaration: name, publicID, systemID(s)
-
-* Document stuff
-
-    ** DocumentType(Node):
-"""
+UNLIMITED = -1  # (or None?)
 
 
 ###########################################################################
 #
 class DerivationLimits(FlexibleEnum):
-    """for XSD .block and .final
+    """For XSD .block and .final.
     """
     NONE = "NONE"
     EXTENSION = "EXTENSION"
     RESTRICTION = "RESTRICTION"
     ALL = "ALL"
+
+
+###########################################################################
+#
+class DclType(FlexibleEnum):
+    """For attribute declared values.
+    """
+    CDATA     = "CDATA"
+    NDATA     = "NDATA"
+    RCDATA    = "RCDATA"      # In case of SGML
+    SDATA     = "SDATA"       # In case of SGML
+
+
+###########################################################################
+#
+class DftType(FlexibleEnum):
+    """For attribute default values.
+    """
+    REQUIRED  = "#REQUIRED"
+    IMPLIED   = "#IMPLIED"
+    FIXED     = "#FIXED"
+    X_VALUE   = "X_VALUE"     # Set when there's a literal default value
+    CONREF    = "#CONREF"     # In case of SGML
+    CURRENT   = "#CURRENT"    # In case of SGML
+
+
+###########################################################################
+# An AttrKey is what is needed to identify a specific attribute in the
+# context of a schema For example, different elements may have same-named
+# attributes, which are distinct. And both attributes and elements can
+# exhibit duplicate names in different namespaces.
+#
+# Otoh, it is common for the "same" conceptual attribute to occur, with the
+# same name, type, and default, on multiple elements ("id ID #IMPLIED" being
+# an obvious case).
+#
+# In Loki and Schemera, there are also specialized ID-like attributes,
+# with various special semantics. See loki.py and xsdtypes.py.
+#
+# We can identify a particular (conceptual) attribute by combining
+#   * the attribute name
+#   * the attribute namespace URI
+#   * the element name on which it was declared/present
+#   * the element's namespace URI
+#
+# TODO: Should AttrKey be a class instead of a namedtuple?
+#
+AttrKey = namedtuple("AttrKey", [ "elemNS", "elemName", "attrNS", "attrName" ])
+
+
+###########################################################################
+class AttrDef:
+    """Define an Attribute. This can be handed information from parsing
+    a schema, or just be called on the fly. There does not have to be
+    an element of the given name defined (either now or later).
+
+    This does NOT save/attach the definition anywhere. Caller must do that.
+    """
+    def __init__(self,
+        elemNS:NMTOKEN_t, elemName:NMTOKEN_t,
+        attrNS:NMTOKEN_t, attrName:NMTOKEN_t,
+        attrType:NMTOKEN_t, attrDft:DftType, literal:str=None,
+        ownerSchema:'DocumentType'=None, readOrder:int=0):
+        self.elemNS = elemNS
+        self.elemName = elemName  # TODO Provide for element name lists? What about NS?
+        self.attrNS = attrNS
+        self.attrName = attrName
+        self.attrType = attrType   # TODO string or a type object?
+        self.attrDft = attrDft
+        self.literal = literal
+        self.ownerSchema = ownerSchema
+        self.readOrder = readOrder
+
+        self.caseTx = "NONE"
+        self.enumValues:dict = None
+
+        if not Rune.isXmlQName(attrName): raise ICharE(
+             f"Bad name '{attrName}' for attribute.")
+        if attrType not in XSDDatatypes and not isinstance(attrType, type): raise TypeError(
+            f"Unrecognized type '{attrType}' for attribute '{attrName}' for '{self.elemName}'.")
+        if attrDft is not None:
+            pass  # TODO
+
+    def enumSpec(self) -> str:
+        if self.enumValues: return " (%s)" % (" | ".join(self.enumValues))
+        return None
+
+    def getKey(self) -> str:
+        """Return a hashable key for this attribute.
+
+        TODO: Problem: elemName can be for multiple at once....
+        """
+        return AttrKey(self.elemNS, self.elemName, self.attrNS, self.attrName)
+
+
+###########################################################################
+class AttlistDef(dict):
+    """Represent an entire ATTLIST declaration.
+    I want to be able to re-use ATTLISTs (sets of AttrDefs). That's not
+    directly possible in XML DTDs, but SGML has it, it's conceptually sensible,
+    and there's no reason another schema language shouldn't do it.
+
+    So this is the class that represents an ATTLIST, as a bundle of AttrDefs,
+    and a set of elements to which it applies (in pure XML, just one element).
+
+    So during parsing we need to:
+        * Create the AttlistDef object
+        * Make and add all the individual AttrDef objects
+        * Create a dummy ElementDef object(s) if needed
+        * Distribute the AttlistDef and/or AttrDefs onto the ElementDefs(s).
+
+    """
+    def __init__(self, elemNames:Union[str, List[str]],
+        ownerSchema:'DocumentType'=None, readOrder:int=0):
+        """Add the individual attributes via __setitem__.
+        The AttlistDef crosses a set of elements with a set of attributes.
+        readOrder matters b/c with duplicate names, the first applies.
+        """
+        self.elemNames = list(elemNames)
+        bads = []
+        for elemName in self.elemNames:
+            if not Rune.isXmlQName(elemName): bads.append(elemName)
+        if bads: raise ICharE(
+            f"Bad element name(s) '{bads}' in ATTLIST.")
+        self.ownerSchema = ownerSchema
+        self.readOrder = readOrder
+        self.attributes = {}
+
+    def __setitem__(self, attrName:NMTOKEN_t, attrType:str, attrDft:DftType=None) -> AttrDef:
+        """Just makes an attribute; caller must attach to element, doctype.  TODO Check
+        """
+        if attrName in self.attributes:
+            raise KeyError(f"Attribute '{attrName}' already defined for '{self.elemNames}'.")
+        attrDef = AttrDef(elemNS=None, elemName=None, attrNS=RWord.NS_ANY, attrName=attrName,
+            attrType=attrType, attrDft=attrDft, readOrder=len(self.attributes))
+        self.addAttrDef(attrDef=attrDef)
+        return attrDef
+
+    def addAttrDef(self, attrDef:AttrDef) -> bool:
+        """Add a pre-constructed AttrDef to this ATTLIST.
+        """
+        assert attrDef.attrName not in self.attributes  # TODO NS?
+        self.attributes[RWord.NS_ANY, attrDef.attrName] = attrDef
+        return True
+
+    def tostring(self) -> str:
+        buf = "<!ATTLIST (%s) " % (", ".join(self.elemNames))
+        for attrName, aobj in self.items():
+            buf += "\n    %16s %16s %s" % (attrName, aobj.enumSpec(), aobj.attrDft)
+        buf += ">\n"
+        return buf
+
+    def attachAttlistToElements(self):
+        for e in self.elemNames:
+            if e not in self.ownerSchema.elements:
+                self.ownerSchema.elements[e] = ElementDef(e, model=None)
+            eDef = self.ownerSchema.elements[e]
+            eDef.attrList = self
 
 
 ###########################################################################
@@ -116,119 +218,6 @@ class SimpleType(dict):
         self.caseTx = CaseHandler.NONE
 
 
-###########################################################################
-#
-class DclType(FlexibleEnum):  # For attributes
-    CDATA     = "CDATA"
-    NDATA     = "NDATA"
-    RCDATA    = "RCDATA"      # In case of SGML
-    SDATA     = "SDATA"       # In case of SGML
-
-
-###########################################################################
-#
-class DftType(FlexibleEnum):  # For attributes
-    REQUIRED  = "#REQUIRED"
-    IMPLIED   = "#IMPLIED"
-    FIXED     = "#FIXED"
-    X_VALUE   = "X_VALUE"     # Set when there's a literal default value
-    CONREF    = "#CONREF"     # In case of SGML
-    CURRENT   = "#CURRENT"    # In case of SGML
-
-
-###########################################################################
-# An AttrKey is what attributes are index by in a Doctype. Elements also
-# have their own list of attributes, which should probably point via one of
-# these, though one of these could apply to many elements. Is an attribute
-# identified by
-#   * the attribute name, in a given namespace
-#   * the attribute name and a single element (q)name (on which it occurs)
-#   * the attribute name and the element (q)name(s) from the same ATTLIST dcl
-#   * the attribute name, regardless
-#   ...
-#
-AttrKey = namedtuple("AttrKey", [ "ens", "ename", "ans", "aname" ])
-
-class AttributeDef:
-    """Define an Attribute. This can be handed information from parsing
-    a schema, or just be called on the fly. There does not have to be
-    an element of the given name defined (either now or later).
-
-    This does NOT save/attach the definition anywhere. Caller must do that.
-    """
-    def __init__(self,
-        ens:NMTOKEN_t, ename:NMTOKEN_t,
-        ans:NMTOKEN_t, aname:NMTOKEN_t,
-        atype:NMTOKEN_t, adfttype:DftType,
-        literal:str=None, readOrder:int=0):
-        self.ens = ens
-        self.ename = ename  # TODO Provide for element name lists? What about NS?
-        self.ans = ans
-        self.aname = aname
-        self.atype = atype   # TODO string or a type object?
-        self.adfttype = adfttype
-        self.literal = literal
-        self.readOrder = readOrder
-
-        self.caseTx = "NONE"
-        self.enumValues:dict = None
-
-        if not Rune.isXmlQName(aname): raise ICharE(
-             "Bad name '{aname}' for attribute.")
-        if atype not in XSDDatatypes and not isinstance(atype, type): raise TypeError(
-            "Unrecognized type for attribute {aname} for {self.name}.")
-        if adfttype is not None:
-            pass  # TODO
-
-    def enumSpec(self) -> str:
-        if self.enumValues: return " (%s)" % (" | ".join(self.enumValues))
-        return None
-
-    def getKey(self) -> str:
-        """Return a hashable key for this attribute.
-        """
-        return AttrKey(self.ens, self.ename, self.ans, self.aname)
-
-class AttlistDef(dict):
-    """Represent an entire ATTLIST declaration.
-    But how are attributes attached? A copy to each element? Or one object
-    per ATTLIST and pointers from elements? And do the attributes identify
-    their owner element(s), or just via their ATTLIST?
-    Who creates/attaches the element if it's not already there?  TODO
-    """
-    def __init__(self, enames:Union[str, List[str]], readOrder:int=0):
-        """Add the individual attrs with __setitem__. The AttlistDef crosses
-        a set of elements, with a set of attributes. We actually *need* readOrder
-        because in case of duplicates attr names for a single elements, 1st applies.
-        Eventually
-        """
-        self.enames = enames if isinstance(enames, list) else [ enames ]
-        bads = []
-        for ename in self.enames:
-            if not Rune.isXmlQName(ename): bads.append(ename)
-        if bads: raise ICharE(
-            "Bad element name(s) {bads} in ATTLIST.")
-        self.readOrder = readOrder
-        self.attributes = {}
-
-    def __setitem__(self, aname:NMTOKEN_t, atype:str, adfttype:DftType=None) -> AttributeDef:
-        """Just makes an attribute; caller must attach to element, doctype.
-        """
-        if aname in self.attributes:
-            raise KeyError("Attribute {aname} already defined for {self.name}.")
-        adef = AttributeDef(ens=None, ename=None, ans=RWord.NS_ANY, aname=aname,
-            atype=atype, adfttype=adfttype, readOrder=len(self.attributes))
-        self.attributes[(RWord.NS_ANY, aname)] = adef
-        return adef
-
-    def tostring(self) -> str:
-        buf = "<!ATTLIST (%s) " % (", ".join(self.enames))
-        for aname, aobj in self.items():
-            buf += "\n    %16s %16s %s" % (aname, aobj.enumSpec(), aobj.adfttype)
-        buf += ">\n"
-        return buf
-
-
 ###############################################################################
 # ELEMENT / ComplexType Stuff
 #
@@ -238,7 +227,7 @@ class ComplexType(SimpleType):
         self.abstract = False
         self.final = None
         self.block = None
-        self.attributeDefs:Dict[AttrKey, 'AttributeDef'] = {}
+        self.attrDefs:Dict[AttrKey, 'AttrDef'] = {}
         self.contentType = None
         self.model = model
 
@@ -255,8 +244,6 @@ class SeqType(FlexibleEnum):  # For ModelGroups
     SEQUENCE  = ","
     CHOICE    = "|"
     ALL       = "&"
-
-UNLIMITED = -1  # (or None?)
 
 class RepType(FlexibleEnum):  # For ModelItems and ModelGroups
     # TODO Figure out best way to deal with {} case
@@ -387,16 +374,16 @@ class Model(ModelGroup):
         # Model, not declared content
         #
         if not isinstance(tokens, list): raise TypeError(
-            f"token list is a {type(tokens)}, not list.")
+            f"token list is a '{type(tokens)}', not list.")
         if self.contentType != ContentType.X_MODEL: raise TypeError(
             f"Token list incompatible w/ dcl content '{self.contentType}'.")
 
         if seq or rep: raise DOMException(
             "Don't pass seq or rep to Model, only to ModelGroup or ModelItem.")
         if self.contentType != ContentType.X_MODEL: raise SyntaxError(
-            f"Expected contentType X_MODEL (not {self.contentType}) with tokens = {tokens}")
+            f"Expected contentType X_MODEL (not '{self.contentType}') with tokens = '{tokens}'.")
         if not isinstance(tokens, list): raise SyntaxError(
-            f"Model tokens arg is not list, but {type(tokens)}.")
+            f"Model tokens arg is not list, but '{type(tokens)}'.")
 
         # Make a proper AST from the model tokens
         #   TODO What does tokens get for {1:2}?
@@ -449,17 +436,20 @@ class ElementDef(ComplexType):
     def __init__(self, name:NMTOKEN_t, model:Model,
         ownerSchema:'DocumentType'=None, readOrder:int=0):
         super().__init__(name, model)
-        self.ownerSchema = ownerSchema
-        self.readOrder = readOrder
-        self.attributeDefs:Dict[AttrKey, 'AttributeDef'] = {}
+        self.ownerSchema:'DocumentType' = ownerSchema
+        self.readOrder:int = readOrder
+        self.attrDefs:Dict = None
         self.allowText:bool = True
         self.inclusions = None
         self.exclusions = None
 
-    def attachAttr(self, attrDef:AttributeDef) -> None:
-        akey = attrDef.getKey()
-        if akey not in self.attributeDefs:
-            self.attributeDefs[akey] = attrDef
+    def attachAttr(self, attrDef:AttrDef) -> None:
+        if attrDef.attrName not in self.attrDefs:
+            self.attrDefs[attrDef.attrName] = attrDef
+        else:
+            raise DOMException(
+                f"Attempt to attach duplicate attribute {attrDef.attrName} to {self.name}.")
+        # TODO Issue Error?
 
     def tostring(self) -> str:
         buf = "<!ELEMEMT %-12s %s" % (self.name, self.model.tostring())
@@ -490,8 +480,8 @@ class SourceThing:
     def hasId(self) -> bool:
         return self.publicId or self.systemId
 
-    def findLocalPath(self, eDef:'EntityDef', dirs:List[str]=None, trace:bool=1) -> str:
-        """Resolve a set of publicID/systemID to an actual absolute path.
+    def findLocalPath(self, entDef:'EntityDef', dirs:List[str]=None, trace:bool=1) -> str:
+        """Resolve a set of publicId/systemId to an actual absolute path.
         TODO: Pulled from xsparser, finish integrating
         Who holds the catalog, pwd, whatever?
         """
@@ -499,11 +489,11 @@ class SourceThing:
         if (trace): lg.setLevel(logging.INFO)
 
         if not self.systemId:
-            raise IOError("No system ID for %s." % (eDef.entName))
+            raise IOError("No system ID for %s." % (entDef.entName))
         # TODO Condition on option
         systemIds = self.splitSystemId(self.systemId)
 
-        lg.info("Seeking entity '%s':", eDef.entName)
+        lg.info("Seeking entity '%s':", entDef.entName)
         for systemId in systemIds:
             lg.info("  System id '%s'", systemId)
             if os.path.isfile(systemId):
@@ -519,12 +509,16 @@ class SourceThing:
                         lg.setLevel(old_level)
                         return cand
         raise OSError("No file found for %s (systemIds %s)."
-            % (eDef.entName, systemIds))
+            % (entDef.entName, systemIds))
 
     def splitSystemId(self, s:str) -> List:
         return re.split(r"\s*\r\s*", s)
 
     def tostring(self) -> str:
+        """A qlit in a declaration does not need everything escaped; basically
+        just quotes.
+        TODO: Fix, it seems to escape < and &.
+        """
         if (self.literal):
             return FormatXml.escapeAttribute(self.literal, addQuotes=True)
         if self.publicId:
@@ -540,8 +534,6 @@ class SourceThing:
 
 ###############################################################################
 #
-EOF = -1
-
 class EntitySpace(FlexibleEnum):
     """Where/how the entity can be referenced.
     Yeah, notations aren't technically entities.
@@ -650,7 +642,7 @@ class DocumentType(Node):
         self.htmlEntities = htmlEntities
 
         self.elementDefs:dict[NMTOKEN_t, 'ElementDef'] = {}
-        self.attributeDefs:dict[NMTOKEN_t, AttributeDef] = {}  # NamedNodeMap()?
+        self.attrDefs:dict[NMTOKEN_t, AttrDef] = {}  # NamedNodeMap()?
         self.attlistDefs:list[AttlistDef] = []
 
         # These are all considered subtypes of entity here:
@@ -671,15 +663,15 @@ class DocumentType(Node):
         TODO Should we create dummy element defs?
         TODO What about * and ##any?
         """
-        if not self.attributeDefs: return
-        for attributeDef in self.attributeDefs.items():
-            if attributeDef.ename not in self.elementDefs: continue
-            edef = self.elementDefs[attributeDef.ename]
-            if attributeDef.aname not in edef.attributeDefs:
-                edef.attributeDefs[attributeDef.aname] = attributeDef
+        if not self.attrDefs: return
+        for attrDef in self.attrDefs.items():
+            if attrDef.elemName not in self.elementDefs: continue
+            elemDef = self.elementDefs[attrDef.elemName]
+            if attrDef.attrName not in elemDef.attrDefs:
+                elemDef.attrDefs[attrDef.attrName] = attrDef
 
     def applyDefaults(self, elDcl:ElementDef, attrs:Dict) -> Dict:
-        raise NotImplementedError("TODO attr defaults")
+        raise NotImplementedError("TODO attribute defaults!")
 
     @property
     def nodeValue(self) -> str:
@@ -716,27 +708,6 @@ class DocumentType(Node):
         """
         raise NSuppE
 
-    ####### EXTENSIONS
-
-    def reindex(self) -> None:
-        self.elementDefs = {}
-        self.attlistDefs = []
-        self.attributeDefs = {}
-        self.entityDefs = {}
-        self.pentityDefs = {}
-        self.notationDefs = {}
-        self.nameSetDefs = {}
-
-        for ch in self.childNodes:
-            if isinstance(ch, ElementDef): self.elementDefs[ch.name] = ch
-            elif isinstance(ch, AttributeDef): self.attributeDefs[ch.name] = ch
-            elif isinstance(ch, EntityDef):
-                self.entityDefs[ch.entSpace][ch.name] = ch
-            else:
-                assert False, "Unknown declaration type %s." % (type(ch))
-        return
-
-    # ELEMENT
     def getElementDef(self, name:NMTOKEN_t) -> ElementDef:
         return self.elementDefs[name] if name in self.elementDefs else None
 
@@ -744,22 +715,20 @@ class DocumentType(Node):
         assert name not in self.elementDefs
         self.elementDefs[name] = modelInfo
 
-    # Attribute
-    def getAttributeDef(self, ename:NMTOKEN_t, aname:NMTOKEN_t) -> AttributeDef:
-        if ename not in self.elementDefs: return None
-        edef = self.elementDefs[ename]
-        if aname in edef.attributeDefs: return edef.attributeDefs[aname]
+    def getAttrDef(self, elemName:NMTOKEN_t, attrName:NMTOKEN_t) -> AttrDef:
+        if elemName not in self.elementDefs: return None
+        elemDef = self.elementDefs[elemName]
+        if attrName in elemDef.attrDefs: return elemDef.attrDefs[attrName]
         return None
 
-    def defineAttribute(self, ename:NMTOKEN_t, aname:NMTOKEN_t,
-        atype:NMTOKEN_t="CDATA", adfttype:DftType=DftType.IMPLIED,
+    def defineAttribute(self, elemName:NMTOKEN_t, attrName:NMTOKEN_t,
+        attrType:NMTOKEN_t="CDATA", attrDft:DftType=DftType.IMPLIED,
         literal:str=None) -> None:
-        assert aname not in self.attributeDefs
-        self.elementDefs[(ename)].attributeDefs[aname] = AttributeDef(
-            ens=None, ename=ename, ans=None, aname=aname,
-            atype=atype, adfttype=adfttype, literal=literal, readOrder=None)
+        assert attrName not in self.attrDefs
+        self.elementDefs[(elemName)].attrDefs[attrName] = AttrDef(
+            elemNS=None, elemName=elemName, attrNS=None, attrName=attrName,
+            attrType=attrType, attrDft=attrDft, literal=literal, readOrder=None)
 
-    # Entity (subtypes for General, Parameter, Notation, and NameSet)
     def getEntityDef(self, name:NMTOKEN_t) -> EntityDef:
         return self.entityDefs[name] if name in self.entityDefs else None
 
@@ -836,16 +805,16 @@ class DocumentType(Node):
         for ent in sorted(self.entityDefs):
             buf += ent.toprettyxml()
 
-        attrsDone = defaultdict(int)
+        attrDone = defaultdict(int)
         for elem in sorted(self.elementDefs):
             buf += elem.toprettyxml()
-            if elem.name in self.attributeDefs:
-                buf += self.attributeDefs[elem.name].toprettyxml()
-                attrsDone[elem.name] = True
+            if elem.name in self.attrDefs:
+                buf += self.attrDefs[elem.name].toprettyxml()
+                attrDone[elem.name] = True
 
-        for attr in self.attributeDefs:
-            if attr.name in attrsDone: continue
-            buf += self.attributeDefs[attr.name].toprettyxml()
+        for attrDef in self.attrDefs:
+            if attrDef.name in attrDone: continue
+            buf += self.attrDefs[attrDef.name].toprettyxml()
 
         buf += "]>\n"
         return buf

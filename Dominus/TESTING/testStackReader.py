@@ -3,8 +3,9 @@
 #pylint: disable=W0201, C2801, W0401, W0614, W0212
 #
 import unittest
+from math import isnan
 
-from basedomtypes import *
+from ragnaroktypes import *
 
 from stackreader import InputFrame, StackReader
 
@@ -119,27 +120,30 @@ class TestInputFrame(unittest.TestCase):
         fr.pushBack("\\U0001f92d")
         self.assertEqual(fr.readBackslashChar(), chr(0x1f92d))
 
-        fr.pushBack("&#65;&#000000000066;&#x4d;&#X04E;&#x4e;")
+        numRefs = "&#65;&#000000000066;&#x4d;&#X04E;&#x4e;"
+        fr.pushBack(numRefs)
+        self.assertEqual(fr.peek(len(numRefs)), numRefs)
+
         self.assertEqual(fr.readNumericChar(ss=True), "A")
         self.assertEqual(fr.readNumericChar(ss=True), "B")
         self.assertEqual(fr.readNumericChar(ss=True), "M")
         self.assertEqual(fr.readNumericChar(ss=True), "N")
-        self.assertEqual(fr.readNumericChar(ss=True), "O")
+        self.assertEqual(fr.readNumericChar(ss=True), "N")
 
         fr.pushBack("     256    -257   +258  ")
-        self.assertEqual(fr.readInt(ss=True), 256)
-        self.assertEqual(fr.readInt(ss=True), 257)
-        self.assertEqual(fr.readInt(ss=True), 258)
+        self.assertEqual(fr.readInt(ss=True),  256)
+        self.assertEqual(fr.readInt(ss=True), -257)
+        self.assertEqual(fr.readInt(ss=True),  258)
         fr.skipSpaces()
 
         fr.pushBack("     0x100    ")
         self.assertEqual(fr.readBaseInt(ss=True), 256)
         fr.skipSpaces()
 
-        fr.pushBack(" \t\r -3.14156  NaN")
+        fr.pushBack(" \t\r -3.14156  NaN NaN")
         self.assertEqual(fr.readFloat(ss=True, signed=True,specialFloats=True), -3.14156)
-        self.assertEqual(fr.readFloat(ss=True, specialFloats=False), None)
-        self.assertEqual(fr.readFloat(ss=True, specialFloats=True), float("NaN"))
+        self.assertTrue(isnan(fr.readFloat(ss=True, specialFloats=True)))
+        self.assertIsNone(fr.readFloat(ss=True, specialFloats=False))
         fr.skipSpaces()
 
         fr.pushBack(" para   P_1.3_  svg:g <>")

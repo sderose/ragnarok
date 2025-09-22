@@ -136,7 +136,7 @@ class FlexibleEnum(Enum):
         E("XYZ")    -- a string that matches a member name,
         E(1)        -- a value of a member.
 
-    Of course it can't work fromE.XXX if XXX is not a legit identifier.
+    Of course it can't work from E.XXX if XXX is not a legit identifier.
 
     "The necessity of an enumeration of Existences, as the basis of Logic, did
     not escape the attention of the schoolmen, and of their master Aristotle."
@@ -178,7 +178,7 @@ class OpenEnum(Enum):
 
     @classmethod
     def _missing_(cls, value: Any):
-        """Handle cases where the value isn't a proper instance already.
+        """Handle cases where the value isn't known.
         """
         if isinstance(value, str):
             try:
@@ -207,6 +207,20 @@ class NodeType(IntEnum):
     DOCUMENT_TYPE_NODE           = 10
     DOCUMENT_FRAGMENT_NODE       = 11
     NOTATION_NODE                = 12 # Not in current DOM
+
+    # Aliases (cf SAX, nodeNames, method names, ...)
+    ELEMENT     = 1
+    ATTRIBUTE   = 2
+    TEXT        = 3
+    CDATA       = 4
+    ENTREF      = 5
+    ENT         = 6
+    PI          = 7
+    COMMENT     = 8
+    DOC         = 9
+    DOCTYPE     = 10
+    DOCFRAG     = 11
+    NOTATION    = 12
 
     @staticmethod
     def okNodeType(nt:Union[int, 'NodeType'], die:bool=True) -> 'NodeType':
@@ -286,7 +300,7 @@ class SepChar:  #(StrEnum):  # TODO ?
     LARCLT   = "\U00002993"    #   ⦓  LEFT ARC LESS-THAN BRACKET
     RARCLT   = "\U00002994"    #   ⦔  RIGHT ARC GREATER-THAN BRACKET
 
-    # Choose from the above by changing costs below
+    # Choose from the above by changing consts below
     #
     _left = MLWTSB
     _mid = ALIEN
@@ -372,7 +386,7 @@ ENTITIES_t           = NewType("ENTITIES_t", str)   # [str]
 
 
 ###############################################################################
-# Protocols for pluggable classes
+# Protocols for pluggable classes (TODO Are these actually useful?)
 #
 class XMLParser_P(Protocol):
     def Parse(self, data: str) -> None: ...

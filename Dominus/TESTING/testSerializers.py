@@ -49,7 +49,7 @@ def packXml(s:str) -> str:
 
 def countStuff(doc) -> dict:
     counts = defaultdict(int)
-    for n in doc.eachNode(separateAttributes=True):
+    for n in doc.descendants(separateAttributes=True):
         if n.isAttribute:
             counts["@"+n.nodeName] += 1
         elif n.isPI:
@@ -73,6 +73,7 @@ class TestSerializers(unittest.TestCase):
 
     def testDefault(self):
         xmlText2 = self.doc.toxml()
+        print(f"\n\n#####{xmlText2}#####\n")
         doc2 = self.db.parse_string(xmlText2)
         xmlText3 = doc2.toxml()
         self.assertEqual(xmlText2, xmlText3)
@@ -97,33 +98,33 @@ class TestSerializers(unittest.TestCase):
 
         fo = basedom.FormatOptions(
             # Whitespace insertion
-            newl = "\r\n",        # String for line-breaks
-            indent = "  ",        # String to repeat for indent
-            wrapTextAt = 80,      # Wrap text near this interval NOTYET
-            dropWS = True,        # Drop ws-only text nodes
-            breakBB = True,       # Newline before start tags
-            breakAB = True,       # Newline after start tags
-            breakAttrs = True,    # Newline before each attribute
-            breakBE = True,       # Newline before end tags
-            breakAE = True,       # Newline after end tags
+            newl = "\r\n",          # String for line-breaks
+            indent = "  ",          # String to repeat for indent
+            wrapTextAt = 80,        # Wrap text near this interval NOTYET
+            dropWS = True,          # Drop ws-only text nodes
+            breakBB = True,         # Newline before start tags
+            breakAB = True,         # Newline after start tags
+            breakAttributes = True, # Newline before each attribute
+            breakBE = True,         # Newline before end tags
+            breakAE = True,         # Newline after end tags
 
             # Syntax alternatives
-            canonical = False,    # Use canonical XML syntax? NOTYET
-            encoding = "utf-8",   # utf-8. Just utf-8.
+            canonical = False,      # Use canonical XML syntax? NOTYET
+            encoding = "utf-8",     # utf-8. Just utf-8.
             includeXmlDcl = False,
             includeDoctype = False,
-            useEmpty   = False,   # Use XML empty-element syntax
-            emptySpace = False,   # Include a space before the /
-            quoteChar = "'",      # Char to quote attributes NOTYET
-            sortAttrs = True,     # Alphabetical order for attributes
-            normAttrs = True,
+            useEmpty   = False,     # Use XML empty-element syntax
+            emptySpace = False,     # Include a space before the /
+            quoteChar = "'",        # Char to quote attributes NOTYET
+            sortAttributes = True,  # Alphabetical order for attributes
+            normAttributes = True,
 
             # Escaping
-            escapeGT = True,      # Escape > in content NOTYET
-            ASCII = True,         # Escape all non-ASCII NOTYET
-            charBase = 10,        # Numeric char refs in decimal or hex? NOTYET
-            charPad = 1,          # Min width for numeric char refs
-            htmlChars = False,    # Use HTML named special characters
+            escapeGT = True,        # Escape > in content NOTYET
+            ASCII = True,           # Escape all non-ASCII NOTYET
+            charBase = 10,          # Numeric char refs in decimal or hex? NOTYET
+            charPad = 1,            # Min width for numeric char refs
+            htmlChars = False,      # Use HTML named special characters
             translateTable = { "A": "&#x41;", "e": None}
         )
         fo.setInlines("i b tt sup sub span")
@@ -156,7 +157,7 @@ class TestFO(unittest.TestCase):
             dropWS          = True,
             breakBB         = True,
             breakAB         = True,
-            breakAttrs      = True,
+            breakAttributes = True,
             breakBText      = True,
             breakBE         = True,
             breakAE         = True,
@@ -170,8 +171,8 @@ class TestFO(unittest.TestCase):
             useEmpty        = True,
             emptySpace      = False,
             quoteChar       = "'",
-            sortAttrs       = True,
-            normAttrs       =  True,
+            sortAttributes  = True,
+            normAttributes  =  True,
 
             # Escaping
             escapeGT        = True,

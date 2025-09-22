@@ -53,7 +53,7 @@ expectedCts = {
 
 def countStuff(doc) -> dict:
     counts = defaultdict(int)
-    for n in doc.eachNode(separateAttributes=True):
+    for n in doc.descendants(separateAttributes=True):
         if n.isAttribute:
             counts["@"+n.nodeName] += 1
         elif n.isPI:
