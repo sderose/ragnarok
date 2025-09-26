@@ -42,7 +42,7 @@ class FormatOptions:
 
     TODO: Add options for what to do with "?>?" "--". "]]>"
 
-    See XSParser for options applicable to DTD and document syntax.
+    See Thor for options applicable to DTD and document syntax.
     """
     def __init__(self, **kwargs):
         self.depth = 0                  # (changes during traversals)

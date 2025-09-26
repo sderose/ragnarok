@@ -18,7 +18,7 @@ from basedom import DOMImplementation, FormatOptions
 from basedom import Yggdrasil, Node, Document, Element, Attr
 from basedom import CharacterData, Text, NamedNodeMap, NodeList
 
-from documenttype import DocumentType
+from schemera import DocumentType
 
 from makeTestDoc import makeTestDoc0, makeTestDoc2, DAT, DBG
 

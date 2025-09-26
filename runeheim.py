@@ -502,7 +502,7 @@ class XmlStrings:
     isXmlChars_cre = re.compile(r"[%s]" % (_nonXml_rangespec))
 
     # One typically tests whether an ENTIRE string is of the specified type,
-    # so use re.fullmatch. But xsparser has at least one exception.
+    # so use re.fullmatch. But Thor has at least one exception.
     #
     isXmlName_cre:Final = re.compile(NCName_re)
     isXmlQName_cre:Final = re.compile(QName_re)

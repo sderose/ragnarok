@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Any, Union, Tuple
 import logging
 from collections import defaultdict
 
-from documenttype import (
+from schemera import (
     DocumentType, ElementDef, AttrDef, SimpleType, ComplexType,
     Model, ModelGroup, ModelItem, ContentType, SeqType, RepType,
     DftType, AttrKey #, SourceThing

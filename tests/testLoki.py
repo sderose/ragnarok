@@ -11,7 +11,7 @@ from collections import defaultdict
 
 from xml.parsers import expat
 
-from documenttype import EntityDef, EntitySpace, EntityParsing
+from schemera import EntityDef, EntitySpace, EntityParsing
 import loki
 from loki import Loki
 from stackreader import InputFrame, StackReader
@@ -24,11 +24,11 @@ logging.basicConfig(level=logging.INFO)
 
 nsURI = "https://example.com/namespaces/foo"
 
-sampleDoc = "../DATA/sampleHTML.xml"
-sampleGE = "../DATA/sampleGE.xml"
-sampleDTD = "../DATA/sampleHTML.dtd"
-sampleBoth = "../DATA/sampleHTMLWithDTD.xml"
-sampleEnt = "../DATA/sampleExtEntity.xml"
+sampleDoc = "sampleData/sampleHTML.xml"
+sampleGE = "sampleData/sampleGE.xml"
+sampleDTD = "sampleData/sampleHTML.dtd"
+sampleBoth = "sampleData/sampleHTMLWithDTD.xml"
+sampleEnt = "sampleData/sampleExtEntity.xml"
 
 # Internal sample document
 #

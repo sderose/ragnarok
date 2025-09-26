@@ -23,7 +23,7 @@ from html.entities import name2codepoint  # codepoint2name
 from runeheim import XmlStrings as Rune  #CaseHandler, UNormHandler, WSHandler, Normalizer
 from saxplayer import SaxEvent
 from ragnaroktypes import NSuppE, DOMException, NMTOKEN_t, QName_t
-from documenttype import (
+from schemera import (
     # (DocumentType is owned by StackReader)
     ElementDef, Model,  RepType, ContentType,  # ModelGroup
     AttrDef,  AttlistDef, EntitySpace, EntityDef, EntityParsing, NotationDef

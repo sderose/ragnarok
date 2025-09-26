@@ -870,7 +870,7 @@ XSDDatatypes = {
 }  # XSDDatatypes
 
 # "CDATA" is the only XML attribute type not copied in XSD.
-# For convenience mostly in xsparser, add it:
+# For convenience mostly in Thor, add it:
 XSDDatatypes["CDATA"] = XsdType({
     "pybase": str,
     "base": "string",

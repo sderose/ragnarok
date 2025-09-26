@@ -64,7 +64,7 @@ def countStuff(doc) -> dict:
 class TestSerializers(unittest.TestCase):
     def setUp(self):
         self.maxDiff = 9999
-        with codecs.open("../DATA/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
+        with codecs.open("sampleData/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
         di = basedom.getDOMImplementation()
         self.db = dombuilder.DomBuilder(parserClass=expat, domImpl=di)
@@ -141,7 +141,7 @@ class TestSerializers(unittest.TestCase):
 class TestFO(unittest.TestCase):
     def setUp(self):
         self.maxDiff = 9999
-        with codecs.open("../DATA/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
+        with codecs.open("sampleData/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
         di = basedom.getDOMImplementation()
         self.db = dombuilder.DomBuilder(parserClass=expat, domImpl=di)
@@ -185,7 +185,7 @@ class TestFO(unittest.TestCase):
 
         fo.setInlines("i b u tt mono a br")
         fo.setTagInfos({ "i":"inline" })
-        with codecs.open("../DATA/HTML.taginfo", "rb", encoding="utf-8") as ifh:
+        with codecs.open("sampleData/HTML.taginfo", "rb", encoding="utf-8") as ifh:
             fo.setTagInfos(ifh)
 
         x = self.doc.toprettyxml(fo=fo)

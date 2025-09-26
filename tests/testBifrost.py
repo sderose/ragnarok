@@ -19,8 +19,8 @@ from test4 import DAT_K
 
 lg = logging.getLogger("testBifrost.py")
 
-sampleJ = "../DATA/jsample.jsonx"
-sampleX = "../DATA/jsample.xml"
+sampleJ = "sampleData/jsample.jsonx"
+sampleX = "sampleData/jsample.xml"
 
 nodeCounts = defaultdict(int)
 

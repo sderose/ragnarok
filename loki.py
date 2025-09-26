@@ -8,7 +8,7 @@ from typing import Dict
 import logging
 
 from runeheim import CaseHandler, WSHandler, Normalizer  #, UNormHandler
-from xsparser import XSParser, XSPOptions
+from thor import XSParser, XSPOptions
 from xsdtypes import XSDDatatypes
 
 lg = logging.getLogger("loki")
@@ -30,7 +30,7 @@ __version__ = __metadata__['modified']
 
 ###############################################################################
 # NOTE: These defaults must all be falsish (False, "", 0, None),
-# because xsparser.XSPOptions returns None if it tries to dereference
+# because thor.XSPOptions returns None if it tries to dereference
 # an option it hasn't heard of.
 #
 CASE = CaseHandler

@@ -5,15 +5,15 @@ import os
 #import codecs
 import unittest
 import logging
-from typing import Dict, Union, Any
+from typing import Dict, Any
 from types import ModuleType
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 
 from xml.parsers import expat
 
-from documenttype import EntityDef, EntitySpace, EntityParsing
-import xsparser
-from xsparser import XSParser
+from schemera import EntityDef, EntitySpace, EntityParsing
+import thor
+from thor import XSParser
 from stackreader import InputFrame  #, StackReader
 from runeheim import CaseHandler
 from saxplayer import SaxEvent
@@ -24,11 +24,11 @@ logging.basicConfig(level=logging.INFO)
 
 nsURI = "https://example.com/namespaces/foo"
 
-sampleDoc = "../DATA/sampleHTML.xml"
-sampleGE = "../DATA/sampleGE.xml"
-sampleDTD = "../DATA/sampleHTML.dtd"
-sampleBoth = "../DATA/sampleHTMLWithDTD.xml"
-sampleEnt = "../DATA/sampleExtEntity.xml"
+sampleDoc = "sampleData/sampleHTML.xml"
+sampleGE = "sampleData/sampleGE.xml"
+sampleDTD = "sampleData/sampleHTML.dtd"
+sampleBoth = "sampleData/sampleHTMLWithDTD.xml"
+sampleEnt = "sampleData/sampleExtEntity.xml"
 
 # Internal sample document
 #
@@ -91,7 +91,7 @@ def StartDoctypeDecl(doctypeName:str, systemId="", publicId="",
 def EndDoctypeDecl() -> None:
     common(SaxEvent.DOCTYPEEND, None)
 
-def Default(data:str="", *args) -> None:
+def Default(data:str, *args) -> None:
     common(SaxEvent.DEFAULT, f"'{data}'")
 
 def ElementDecl(name:str, model:str="") -> None:
@@ -240,15 +240,15 @@ class TestXSPDocs(unittest.TestCase):
         print("In TestXSP")
 
     def testXSP(self):
-        runParser(xsparser, string=tdoc)
+        runParser(thor, string=tdoc)
 
-        runParser(xsparser, path=sampleGE)
+        runParser(thor, path=sampleGE)
 
-        runParser(xsparser, path=sampleDoc)
+        runParser(thor, path=sampleDoc)
 
-        runParser(xsparser, path=sampleDTD)
+        runParser(thor, path=sampleDTD)
 
-        runParser(xsparser, path=sampleBoth)
+        runParser(thor, path=sampleBoth)
 
         xml = """<?xml encoding="utf-8"?>
 <html>

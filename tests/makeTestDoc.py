@@ -176,7 +176,7 @@ class DBG:
 class DAT:
     """Element names and other consts used in the sample document.
     """
-    sampleXmlPath = "../DATA/sampleHTML.xml"
+    sampleXmlPath = "sampleData/sampleHTML.xml"
     ns_uri = "https://example.com/namespaces/foo"
 
     root_name = 'html'
@@ -331,7 +331,7 @@ class makeTestDoc0:
         If 'withAttrs' is set, also add attributes from it. If any have value
         "*", they'll be modified so they're not all the same.
         """
-        print(f"\nIn addFullTree(width={n}, depth={depth}, types={types}, "
+        if (0): print(f"\nIn addFullTree(width={n}, depth={depth}, types={types}, "
             f"withText='{withText}', withAttr={withAttr})")
         if not types: types = [ f"para{d}" for d in range(depth+1) ]
         makeTestDoc0.addChildren(

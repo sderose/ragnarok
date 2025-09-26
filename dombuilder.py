@@ -17,7 +17,7 @@ import logging
 from ragnaroktypes import NMTOKEN_t, NCName_t, XMLParser_P, NodeType, DOMException
 from domenums import RWord
 from runeheim import XmlStrings as Rune
-#import xsparser
+#import thor
 
 lg = logging.getLogger("dombuilder")
 #logging.basicConfig(level=logging.INFO)

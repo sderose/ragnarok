@@ -15,7 +15,7 @@ import inspect
 
 from runeheim import XmlStrings as Rune, CaseHandler, Normalizer  #, UNormHandler, WSHandler
 from ragnaroktypes import NSuppE, ICharE , NMTOKEN_t, SepChar #, DOMException,
-from documenttype import (
+from schemera import (
     EntityDef , EntitySpace,  # EntityParsing
     # ElementDef, ContentType, ModelGroup, Model, RepType,
     DocumentType)

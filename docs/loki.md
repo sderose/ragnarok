@@ -1,21 +1,27 @@
-=Description=
+==Information on Loki==
 
-A pure Python parser and schema tool for XML. It's mainly meant for parsing
-a DTD and creating a simple representation of it (see doctype.py).
-But that includes doing nearly everything a regular XML WF parse needs, so I
-added those and you can use this as an XML parser as well.
+In this library, Loki is a subclass of Thor, not his brother.
 
-It also supports a bunch of extensions, but all are off by default. Afaict,
-it's a fully conforming XML parser if you leave the extensions turned off.
+Loki is not an XML parser. In fact it can parse XML, and for any well-formed
+XML document it will produce the same thing an XML parser (such as Thor) would
+so long as you don't turn on any Loki options.
 
-=Usage=
+However, Loki is, like its namesake, a shape-changer. There are many, many
+options you can set, giving special behaviors.
 
-    from xsparser import XSParser
-    xsp = XSParser()
-    xsp.readDtd("someDTD.dtd")
-    xsp.openEntity("someDocument.xml")
-    ...
+===Usage===
 
+You use Loki just like you'd use Thor, but you'll probably only do that if
+you want some options. In that case, you need to turn the options on,
+either like this:
+
+    from loki import Loki
+
+    parser = loki.parserCreate()
+
+The simplest, perhaps, is turning on recognition of the usual SGML/HTML
+named characters. These are not known by default in XML, and defining them
+takes a large number of
 
 ==Extensions==
 
@@ -41,6 +47,8 @@ regular XML parser. If you have data that uses the XSParser extensions and
 want to transform it to regular XML, just load it with XSParser into a DOM
 implementation of your choice (such as minidom or basedom), and then export
 XML in the usual way.
+
+THe definitive list of options is the LokiOptions class in loki.py.
 
 ==DTD extensions==
 
@@ -106,7 +114,8 @@ for float types. For example:
     <foo x="1.2" y="-Inf">
 
 * "unQuotedAttr": False
-The value must be an XML NAME or NUMBER token:
+This allows omitting quotation marks around an attribute value when
+the value is an XML NAME or NUMBER token:
     <p x=foo>
 
 * "curlyQuotes" : False
@@ -169,65 +178,3 @@ Expected to include: justone, global, noredef, regular.
 * "multiPath": False
 Allows multiple SYSTEM IDs in declarations (tried in order):
     <!ENITY foo SYSTEM "c:\\myDocs\\chap1.xml" "/Users/abc/Documents/XML/chap1.xml"?>
-
-
-* "namespaceSep" : ":"
-Colon replacement.
-
-
-=To Do=
-
-I may add a validator, too.
-
-
-* Rename
-* See if https://pypi.org/project/fastenum/ would be useful.
-* Add global option(s) to control extensions.
-* Maybe add a compact SDATA-like thing, and/or a switch to enable HTML char ents.
-* Option to require something in XML DCL to enable extensions.
-* Case-ignoring
-
-
-=Known bugs and limitations=
-
-* A few constructs (like QLit) do a regex match against the buffer, which will
-fail if the target is longer than bufSize.
-* A few context don't recognize PE refs where they should. Let me know if you
-hit one (in most (all?) cases it should merely require a call to allowPE(),
-or setting the allowParams options to skipSpaces().
-
-
-=Related commands=
-
-
-=History=
-
-* 2011-03-11 `multiXml` written by Steven J. DeRose.
-* 2013-02-25: EntityManager broken out from `multiXML.py`.
-* 2015-09-19: Close to real, syntax ok, talks to `multiXML.py`.
-* 2020-08-27: New layout.
-* 2022-03-11: Lint. Update logging.
-* 2024-08-09: Split Manager from Reader. Use for dtdParser.
-* 2024-10: Finish parsing infrastructure, DTD and extensions.
-Add generally-useful non-terminals (attribute, int, float, tags,...)
-
-
-=To do=
-
-* Finish.
-* Check the specific attributes in the XML DCL
-* Add document parsing -- mainly gen ent support
-
-
-=Rights=
-
-Copyright 2011-03-11 by Steven J. DeRose. This work is licensed under a
-Creative Commons Attribution-Share-alike 3.0 unported license.
-For further information on this license, see
-[https://creativecommons.org/licenses/by-sa/3.0].
-
-For the most recent version, see [http://www.derose.net/steve/utilities]
-or [https://github.com/sderose].
-
-
-=Options

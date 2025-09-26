@@ -128,7 +128,7 @@ class DOMImplementation(DOMImplementation_P):
         """Create a schema object, which can they be loaded up by parsing or
         by API.
         """
-        from documenttype import DocumentType
+        from schemera import DocumentType
         return DocumentType(qualifiedName, publicId, systemId, htmlEntities)
 
     def registerDOMImplementation(self, name:str, factory) -> None:
@@ -2225,8 +2225,8 @@ class Document(Branchable, Node):
 
             # TODO Merge w/ Loki options
             "elementFold":    None,  # None, CaseHandler, Normalizer
-            "attributeFold":       None,  #                                # TODO
-            "entityFold":     None,  # (to xsparser?)                 # TODO
+            "attributeFold":  None,  #                                # TODO
+            "entityFold":     None,  # (to Thor?)                     # TODO
             "idFold":         None,  # (pass to idhandler calls)      # TODO
             "xsdFold":        None,  # (true, nan, ...) to xsdtypes   # TODO
 
@@ -3186,7 +3186,7 @@ class Attr(Node):
         * They have methods to retrieve either the value, or the Attr object.
           (which is a Dict, not a Node), which then owns the Attr objects.
     TODO namespace support
-    TODO way to tunnel defaulting info from xsparser.
+    TODO way to tunnel defaulting info from Thor.
     TODO Possibly do casefolding (when requested) only on the key for
     Element.attributes, not on Attr.node/name?
     TODO If options.attributeTypes is set, just when should casting happen?

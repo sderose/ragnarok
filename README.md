@@ -15,7 +15,7 @@ Markup Conference 2025. Balisage Series on Markup Technologies, vol. 30 (2025). 
 The main components are listed below. The names are mainly from Norse mythology, and
 make some sense if you think about them:
 
-* **Thor** (Tag Hierarchy Object Retriever, nee xsparser):
+* **Thor** (Text Hierarchy Object Reader, nee xsparser):
 Thor is a normal XML parser, with entity-stack and DTD support.
 It is in pure Python, with the attendant advantages for Python devs.
 The interface is like expat (the parser typically under minidom).
@@ -80,8 +80,16 @@ compatible. One difference is that Thhor does not break text into separate
 SAX events at very entity reference and newline (but ythere's an option to turn
 that back on if you want to).
 
+The SAX events are listed in saxplayer.py,
+and are like expat (Python's xml.parsers.expat):
 
-###More on Yggdrasil / Dominµs###
+Main documentation: See docs/thor.md.
+
+Simple example: See examples/ThorDriver.py.
+
+
+
+###Yggdrasil / Dominµs###
 
 The DOM implementation is named Yggdrasil, after the great world tree.
 But it can also be called Dominµs.
@@ -92,6 +100,9 @@ and the name is called "DOM in muse"; it actually *is* "DOM in microseconds"
 Just go with Yggdrasil.
 My profiling shows it about 40% faster than minidom, but I expect that will
 vary greatly depending on document size and what you're actually doing.
+
+An simple example loading Yggdrasil via expat or Thor and then doing some simple
+processing, is in examples/YggdrasilDriver.py.
 
 All the normal DOM calls (DOM 3 Core) should work, but many Python developers
 may want to use the extensions. Among which:

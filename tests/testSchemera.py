@@ -8,11 +8,11 @@ import datetime
 
 from runeheim import CaseHandler
 from xsdtypes import facetCheck, XsdFacet, DateTimeFrag, Duration
-from documenttype import (
+from schemera import (
     DocumentType, SimpleType, ComplexType, SeqType,
     ElementDef, RepType, ModelGroup, ModelItem, Model,
     AttrDef, DftType, EntityDef, EntitySpace, EntityParsing)
-import xsparser
+import thor
 #from ragnaroktypes import HierarchyRequestError
 #from ragnaroktypes import NotFoundError
 

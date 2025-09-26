@@ -5,12 +5,12 @@ import logging
 
 #from xml.parsers import expat
 
-#from documenttype import EntityDef, EntitySpace, EntityParsing
-#import xsparser
+#from schemera import EntityDef, EntitySpace, EntityParsing
+#import thor
 #from runeheim import CaseHandler
 #from saxplayer import SaxEvent
 
-from xsparser import StackReader  #, EntityFrame, XSParser
+from thor import StackReader  #, EntityFrame, XSParser
 import dombuilder
 import basedom
 

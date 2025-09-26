@@ -89,7 +89,7 @@ def roundTrip(s1:str, domImpl) -> bool:
 class TestDomBuilderM(unittest.TestCase):  # using minidom
     def setUp(self):
         self.maxDiff = 9999
-        with codecs.open("../DATA/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
+        with codecs.open("sampleData/sampleHTML.xml", "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
 
     def testTiny(self):
@@ -118,7 +118,7 @@ class TestDomBuilderM(unittest.TestCase):  # using minidom
 #
 class TestDomBuilderB(unittest.TestCase):
     def setUp(self):
-        self.testPath = "../DATA/sampleHTML.xml"
+        self.testPath = "sampleData/sampleHTML.xml"
         with codecs.open(self.testPath, "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
 
@@ -145,7 +145,7 @@ class TestDomBuilderB(unittest.TestCase):
 
 class TestSelectors(unittest.TestCase):
     def setUp(self):
-        self.testPath = "../DATA/sampleHTML.xml"
+        self.testPath = "sampleData/sampleHTML.xml"
         with codecs.open(self.testPath, "rb", encoding="utf-8") as ifh:
             self.xmlText = ifh.read()
 
