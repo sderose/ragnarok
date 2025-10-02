@@ -237,7 +237,7 @@ class TestExpat(unittest.TestCase):
 #
 class TestXSPDocs(unittest.TestCase):
     def setup(self):
-        print("In TestXSP")
+        print("In TestXSPDocs")
 
     def testXSP(self):
         runParser(thor, string=tdoc)

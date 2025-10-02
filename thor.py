@@ -150,6 +150,7 @@ class ErrorRecord:
 ###############################################################################
 #
 XSParserOptionDefs = {
+    # Option name        type  default     description
     "utgard":           (bool, False ),  # Any Loki stuff going?
 
     ### Size limits and security (these are XML compatible),
@@ -883,8 +884,14 @@ class XSParser():  # StackReader?? TODO Check
         elif hasattr(self, SaxEvent.DEFAULT.value):
             cb = getattr(self, SaxEvent.DEFAULT.value)
         else:
-            return
-        if cb: cb(*args)
+            cb = None
+        if not cb: return
+        if args:
+            data = args[0]
+            args = args[1:]
+        else:
+            data = None
+        cb(data, *args)
 
     def issueText(self, tBuf:List) -> None:
         """Called whenever we hit markup, to issue buffered text as a SAX event.

@@ -67,7 +67,6 @@
 | replaceChild    | +    | !       | 0    | !  | -    | -       | -  | !   |
 | insertBefore    | +    | !       | 0    | !  | -    | -       | -  | !   |
 | cloneNode       | +    | !       | !    | !  | !    | !       | !  | !   |
-  ** Why is normalize on Node?
 | normalize       | +    | !       | 0    | +  | -    | -       | -  | !   |
 | prepend         | -    | +       | -    | -  | -    | -       | -  | +   |
 | append          | -    | +       | -    | -  | -    | -       | -  | +   |
@@ -103,15 +102,16 @@
 | outerHTML       | -    | +       | -    | -  | -    | -       | -  | -   |
 | innerText       | -    | +       | -    | -  | -    | -       | -  | -   |??
 | origin          | -    | -       | -    | -  | -    | -       | -  | +   |
-| style |
-| className |
+| style           |
+| className       |
 | addEventListener |
 | removeEventListener |
 | querySelector   | -    | +       | -    | -  | -    | -       | -  | +   |
 | querySelectorAll| -    | +       | -    | -  | -    | -       | -  | +   |
-| dataset |
+| dataset         |
 
-| **Serializers and parser** |
+
+**Serializers and parser** |
 | innerXML |
 | outerXML |
 | outerJSON |

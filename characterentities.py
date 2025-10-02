@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# characterentities.py
+# characterentities.py: Loadable character-name mappings for Ragnarok.
 # 2024-09-09: Written by Steven J. DeRose.
 #
 import sys
@@ -14,7 +14,7 @@ lg = logging.getLogger("addCharacterEntities.py")
 
 __metadata__ = {
     "title"        : "characterentities",
-    "description"  : "",
+    "description"  : "Loadable character-name mappings for Ragnarok.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
@@ -26,109 +26,7 @@ __metadata__ = {
 }
 __version__ = __metadata__["modified"]
 
-descr = """
-=Name=
-
-characterentities
-
-
-=Description=
-
-Maintain mappings between Unicode code point values and XML/HTML NAMEs
-for them. This is basically just like Python's html.entities, with
-codepoint2name and name2codepoint. However:
-
-* You can define multiple names for the same codepoint.
-* You can add new items, either via add(name, codepoint) or by
-specifying a file to load (see below)
-* You can delete items (this allows you to trim the list down to what
-you expect, thus making uses of unexpected references cause WF errors
-so you immediately catch them.
-* You can define multiple maps and switch between them (I can imagine wanting
-this is you're importing files from TEX or other sources).
-*
-
-==Usage==
-
-    from charentities import CharacterEntities
-    CE = CharacterEntities(HTML=True)
-    CE.addFile("myEntDefs.txt")
-    addCharacterEntities.py [options] [files]
-
-
-==File formats==
-
-Two file formats for listing special character definitions are supported:
-
-`addFromPairFile(path)` -- this loads from a simple 2-column file, like:
-
-    # My own special characters
-    bull 8226
-    nbsp 0xA0
-    logo 0xE100
-
-The rules are:
-    * Leading and trailing whitespace is removed.
-    * LInes that are empty or start with "#" are discarded as comments.
-    * The lines is parse as an XML local name; some non-name-character
-separator character(s) such as space, command, etc); and a number. The
-number can be in any format accepted by Python int(x, 0).
-
-`addFromDclFile(path)` -- this loads lines that are simple SGML/XML/HTML
-ENTITY declarations, like:
-
-    <!-- My owm special characters -->
-    <!ENTITY bull "*">
-    <!ENTITY nbsp   "&#160;" >
-    <!ENTITY   logo   "&#XE100;">
-
-The rules are:
-    * No interior comments (though entire comment lines are ok).
-    * Only ENTITY declarations, one per line.
-    * Extra whitespace (not including line-breaks) is ok.
-    * The quoted part can use decimal, hex, XML predefined, and/or
-    HTML 4 predefined references, or a literal character. But it must
-resolve down to one character in the end. No external entities.
-
-
-=See also=
-
-
-=Known bugs and Limitations=
-
-If you load from a file and then save back out, comments, blank lines,
-and extra whitespace are lost.
-
-It would be nice to allow multi-character values.
-
-It would be nice to allow the right-hand side of declarations read by
-`addFromDclFile(path)` to use references defined by a CharacterEntities
-instance.
-
-
-=To do=
-
-This absolutely has to be hooked up Sebastian's list of AMS, AFII, TEX,
-and other names! This could be done by code over his dataset, or by
-making loadable files for each system.
-
-
-=History=
-
-* 2024-09-09: Written by Steven J. DeRose.
-
-
-=Rights=
-
-Copyright 2024-09-09 by Steven J. DeRose. This work is licensed under a
-Creative Commons Attribution-Share-alike 3.0 unported license.
-See [http://creativecommons.org/licenses/by-sa/3.0/] for more information.
-
-For the most recent version, see [http://www.derose.net/steve/utilities]
-or [https://github.com/sderose].
-
-
-=Options=
+descr = """See docs/characterentities.md
 """
 
 class CharacterEntities:
@@ -216,7 +114,7 @@ class CharacterEntities:
         for recnum, rec in enumerate(ifh.readlines()):
             rec = rec.strip()
             if rec.match("<!--([^-]|-[^-])*-->") or rec=="": continue
-            mat = re.match(r"""^<!ENTITY\s+(\w+)\s+("[^"]"|'[^']+')\s*>$""", rec)
+            mat = re.match(r"""^<!ENTITY\s+(\w+)\s+(SDATA\s+)?("[^"]"|'[^']+')\s*>$""", rec)
             if mat is None:
                 raise ValueError("Cannot parse ENTITY dcl at record %d: %s" % (recnum, rec))
             cpString = mat.group(2)[1:-1].strip()
@@ -230,14 +128,16 @@ class CharacterEntities:
         ifh.close()
         return nAdded
 
-    def saveToFile(self, path:str, includeHTML:bool=False, sep:str=", ") -> None:
+    def saveToFile(self, path:str, includeHTML:bool=False,
+        sep:str=", ", base:int=16) -> None:
         from html.entities import codepoint2name as HTMLc2n
         ofh = codecs.open(path, "wb", encoding="utf-8")
         nAdded = 0
         names = sorted(list(self.name2codepoint.keys()))
+        fmt = "%s%s" + ("0x%04x\n" if base==16 else "%d")
         for name in names:
             if not includeHTML and name in HTMLc2n: continue
-            ofh.write("%s%s%04x\n" % (name, sep, self.name2codepoint[name]))
+            ofh.write(fmt % (name, sep, self.name2codepoint[name]))
             nAdded += 1
         ofh.close()
         return nAdded

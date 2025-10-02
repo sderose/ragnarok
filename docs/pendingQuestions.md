@@ -488,3 +488,5 @@ operations on virtual elements:
 a validation thing?
 
 * Finish full charset/encoding support (esp. MacRoman and CP1252)
+
+* Should insert and delete accept NodeLists?

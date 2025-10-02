@@ -106,17 +106,18 @@ class DOMImplementation(DOMImplementation_P):
 
         if not Rune.isXmlQName(qualifiedName):
             raise ICharE(f"Root element to be has bad qname '{qualifiedName}'.")
-        prefix = Rune.getPrefixPart(qualifiedName)
 
-        if not prefix:
-            doc.documentElement = doc.createElement(qualifiedName)
-        else:
-            if prefix == "xml" and  namespaceURI not in [ RWord.XML_PREFIX_URI, "", None ]:
+        prefix = Rune.getPrefixPart(qualifiedName)
+        if (prefix == "xml" and
+            namespaceURI not in [ RWord.XML_PREFIX_URI, "", None ]):
                 raise NamespaceError(
                     f"URI for xml prefix is not '{RWord.XML_PREFIX_URI}'")
+        elif prefix:
             doc.documentElement = doc.createElementNS(namespaceURI, qualifiedName)
             doc.documentElement.setAttribute(
                 RWord.NS_PREFIX+":"+prefix, namespaceURI)
+        else:
+            doc.documentElement = doc.createElement(qualifiedName)
 
         if doc.doctype:
             doc.doctype.parentNode = doctype.ownerDocument = doc
@@ -778,7 +779,8 @@ class Node(Yggdrasil):
         #    self.nodeName, self.getChildIndex(), self.isFirstChild)
         if self.parentNode is None: return None
         if self.isFirstChild: return self.parentNode
-        pr = self.previousSibling.rightmost
+        pr = self.previousSibling
+        if pr and pr.isElement: pr = pr.rightmost
         if pr is not None: return pr
         return self.previousSibling
 
@@ -1682,12 +1684,17 @@ class Branchable(list, ElementTreeAdditions):
 
     def _isOfValue(self, value:Any) -> bool:
         """Used by count, index, remove to pick node(s) to work on.
-        What *should* the test be? Going with nodeName for now.
         """
-        if value is None: return True  # TODO ???
-        if callable(value): return value(self)
-        if value == "*" and self.nodeType == Node.ELEMENT_NODE: return True
-        if value == self.nodeName: return True
+        if value is None:
+            return True  # TODO ???
+        if callable(value):
+            return value(self)
+        if isinstance(value, Node):
+            return self.isEqualNode(value)
+        if value == "*":
+            return self.nodeType == Node.ELEMENT_NODE
+        if value == self.nodeName:
+            return True
         return False
 
     ### More Python list operations, for Yggdrasil.
@@ -2481,10 +2488,10 @@ class Element(Branchable, Attributable, Node):
         prefix, _, local = name.partition(":")
         if not local:
             local = prefix; prefix = ""
-        elif Rune.isXmlName(prefix): raise ICharE(
-            f"Prefix for '{name}' is not a valid NCNAME.")
+        elif not Rune.isXmlName(prefix): raise ICharE(
+            f"Prefix '{prefix}' for '{name}' is not a valid NCNAME.")
         elif prefix == RWord.NS_PREFIX:  raise ICharE(
-            f"Can't use prefix '{RWord.NS_PREFIX}' on an element (for '{name}').")
+            f"Can't use ns def prefix '{RWord.NS_PREFIX}' on an element ( '{name}').")
 
         if not local: local = self.nodeName
         if not Rune.isXmlName(local): raise ICharE(

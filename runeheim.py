@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 #
-# xmlstrings: A bunch of (hopefully) useful additions to the DOM API.
+# runeheim: A library to manage character set issues for XML.
+#
 # 2010-01-10: DOMExtensions written by Steven J. DeRose.
-# 2024-08: Separated from rest of DOMExtensions.
+# 2024-08: Separated from rest of DOMExtensions as 'xmlstrings'.
+# 2025: Integrated to Ragarok, and renamed Runeheim.
 #
 import re
 from typing import Match, List, Final
@@ -13,234 +15,18 @@ from html.entities import name2codepoint
 from ragnaroktypes import FlexibleEnum
 
 __metadata__ = {
-    "title"        : "xmlstrings",
-    "description"  : "Escapers and isa() testers for XML constructs.",
+    "title"        : "Runeheim (nee xmlstrings)",
+    "description"  : "Character set management for XML constructs.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.11",
-    "created"      : "2010-01-10; separate module since 2024-08",
-    "modified"     : "2024-08-14",
+    "created"      : "2010-01-10; separate module since 2024-08.",
+    "modified"     : "2025-09-26",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
 __version__ = __metadata__['modified']
-
-
-descr = """
-=Description=
-
-This small package provides escapers specific to each relevant XML
-construct, and test for various kinds of XML tokens.
-
-All the methods are static, so you don't have to instantiate the XmlStrings
-class.
-
-
-==Methods==
-
-* '''escapeAttribute'''(string, quoteChar='"', addQuotes:bool=True)
-
-Escape the string as needed for it to
-fit in an attribute value, including the 'quoteChar' to
-be used around the value. Most people seem to use double quote, but single
-quote is allowed in XML. You can specify which you plan to use, and that
-one will be escaped in 'string'. 'string' should not already be quoted.
-If 'addQuotes' is set, a 'quoteChar' is added to each end.
-Does not yet support curly quotes.
-
-* '''escapeText'''(string)
-
-Escape the string as needed for it to
-fit in XML text content ("&", "<", and "]]>").
-Some software escapes all ">", but that is not required. This method only
-escape ">" when it follows "]]" (cf FormatOptions.escapeGT).
-
-* '''escapeCDATA'''(string)
-
-Escape the string as needed for it to
-fit in a CDATA marked section (only ']]>' is not allowed).
-XML does not specify a way to escape this. The result produced here is "]] >".
-
-* '''escapeComment'''(string)
-
-Escape the string as needed for it to
-fit in a comment, where '--' is not allowed.
-XML does not specify a way to escape this. The result produced here is "-&#x2d;".
-
-* '''escapePI'''(string)
-
-Escape the string as needed for it to
-fit in a processing instruction (just '?>').
-XML does not specify a way to escape this. The result produced here is "?&gt;".
-
-* '''escapeASCII'''(s, width=4, base=16, htmlNames=True))
-
-Escape the string as needed for it to fit in XML text content,
-''and'' recode any non-ASCII characters as XML
-entities and/or numeric character references.
-`width` is the minimum number of digits to be used for numeric character references.
-`base` must be 10 or 16, to choose decimal or hexadecimal references.
-If `htmlNames` is True, HTML 4 named entities are used when applicable,
-with numeric character references used otherwise.
-
-* '''unescapeXml'''(string)
-
-Change XML numeric character references, as
-well as references to the 5 pre-defined XML named entities and the usual
-HTML 4 ones, into the corresponding literal characters.
-
-* '''normalizeSpace'''(self, s, allUnicode=False)
-
-Do the usual XML white-space normalization on the string ''s''.
-If ''allUnicode'' is set, include not just the narrow set of `[ \t\r\n]`,
-but all Unicode whitespace (which, in Python regexes with re.UNICODE,
-does not include ZERO WIDTH SPACE U+200b).
-
-* '''stripSpace'''(self, s, allUnicode=False)
-
-Like `normalizeSpace`, but only remove leading and trailing whitespace.
-Internal whitespace is left unchanged.
-
-
-==Useful sets of characters==
-
-How these are represented is indicated by a suffix on the name:
-
-* '''_list''' is just a list of characters as a string.
-For example,
-    xmlSpaces_list = " \\n\\r\\t".
-
-* '''_rangelist''' is a list of (start, end) codepoint pairs.
-For example,
-    _nameStartChar_rangelist = [ (0x00, 0x1F), (0x80, 0x9F), ... ].
-
-* '''_rangespec''' is generally derived from a _rangelist, using
-''rangelist2rangespec()''. It is ready to put inside regex [], but does not
-include the brackets (to make it trivial to combine specs when needed).
-For example,
-    _nameStartChar_rangespec = "\\u005f\\u0041-\\u005A..."
-
-* '''_re''' is an entire usable regex (compiled or not). Perhaps just [...], or
-perhaps fancier. For example,
-    NMTOKEN_re = r"[%s]+" % (_nameChar_rangespec)
-
-Thus:
-
-* xmlSpace_list: A string containing only the XML space characters,
-namely SPACE, TAB, LF, and CR. No other Unicode space chars (see the
-''WsDefs'' class for fancier space-handling options).
-
-* _nameStartChar_rangelist: A list of the ranges of characters that are
-XML name start characters. This is straight from the XML REC (see the
-''NameTest'' class for fancier name definition options).
-
-* _nameCharAddl_rangelist: Like _nameStartChar_rangelist, but including only
-the *additional* ranges allowed as XML name characters.
-
-* _nameStartChar_rangespec: A single string expressing the same ranges
-as _nameStartChar_rangelist, in the form to go inside [] in a regex.
-
-In addition, `allNameStartChars()` and `allNameCharAddls()`
-return strings containing all of the characters in the given category (this is
-much less compact than the regex-style range notation).
-
-
-==Useful regexes==
-
-* xmlSpaces_re: A regex that matches one or more XML space characters.
-
-* xmlSpaceOnly_re: A regex that matches a string if it
-consists entirely of XML space characters (this can also be approximated by
-testing is str.strip() is empty/falsish).
-
-
-
-=Known bugs and limitations=
-
-QName does not allow for "##any", "#text", or other reserved names.
-
-
-=To do=
-
-==Lower priority==
-
-* Sync with XPLib.js
-
-* Integrate validation of the XSD types into their NewType definitioons.
-
-
-=Related commands=
-
-`basedom.py` -- a pure Python DOM++ implementation that uses this.
-
-`documenttype.py` -- some overlap on supported datatypes.
-
-`domextensions.py` -- prior home of this package.
-
-`domtabletools.py` -- DOM additions specifically for tables.
-
-`Dominus.py` -- a disk-resident DOM implementation that can handle absurdly
-large documents (in progress).
-
-`xmloutput.pm` -- an easy way to produce WF XML output. Provides methods
-for escaping data correctly for each relevant context; knows about character
-references, namespaces, and the open-element context; has useful methods for
-inferring open and close tags to keep things in sync.
-
-
-=History=
-
-Originally a part of DomExtensions:
-
-* Written 2010-04-01~23 by Steven J. DeRose (originally in Perl).
-* ...
-* 2012-01-10 sjd: Start port to Python.
-* 2016-01-05: Fix previous/next. Add monkey-patching.
-* 2018-02-07: Sync with new AJICSS Javascript API. Add/fix various.
-* 2018-04-11: Support unescaping HTML named special character entities.
-* 2019-12-13ff: Clean up inline doc. Emitter class. collectAllXml2. lint.
-Pull in other extensions implemented in my BaseDom.py (nee RealDOM.py).
-Generate SAX.
-* 2020-05-22: Add a few items from BS4, and a few new features.
-* 2021-01-02: Add NodeTypes class, improve XPointer support.
-* 2021-03-17: Add getContentType().
-* 2021-07-08: Add some methods omitted from patchDom(). Add checking for such.
-Type-hinting. Proof and sort patchDom list vs. reality.
-* 2021-07-20: Fix eachNode for attribute nodes. Add removeNodesByNodeType().
-* 2022-01-27: Fix various annoying bugs with NodeTypes Enum. Remember that the Document
-element is really an element. Improve handling for bool and for multi-token values
-in getAttributeAs(). Turn off default of appending id comment in getEndTag().
-* 2023-02-06: Clean up parent/sibling insert/wrap methods.
-* 2023-04-28; Move table stuff to domtabletools.py. Implement comparison operators.
-* 2023-07-21: Fix getFQGI(), getContentType(). Add getTextLen().
-
-* 2024-08: Separate package extracted
-* 2024-08-14: Clean up extracted XmlStrings package, add and pass unit tests.
-Fix bugs with name-start character list.
-* 2024-09: Tighter integration with other packages. Normalize name casing.
-Add actual types for NMTOKEN etc. via NewType.
-
-
-=Rights=
-
-Copyright 2010, 2020, Steven J. DeRose. This work is licensed under a Creative
-Commons Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see http://creativecommons.org/licenses/by-sa/3.0/.
-
-For the most recent version, see [http://www.derose.net/steve/utilities] or
-[http://github/com/sderose].
-
-
-=Options=
-"""
-
-# (thanks, Claude, for formatting the lists for me)
-#
-
-### TODO:
-# Organize into ascii << XML 1.0 << XML 1.1 << PrivateUse?
-#     (Where do the various HTMLs fit?
 
 # XML 1.0 NameStartChar
 XML_1_0_NAME_START_CHAR = [
@@ -391,7 +177,7 @@ def rangelist2rangespec(ranges:List) -> str:
 #
 class XmlStrings:
     """This class contains static methods and variables for basic XML
-    operations such as testing syntax forms, escaping strings, etc.
+    operations such as testing syntax forms, normalizing, etc.
     TODO: Perhaps it should become non-static, to allow setting the definitions
     of names, spaces, folding, etc.
     """
@@ -564,7 +350,7 @@ class XmlStrings:
         """
         return re.sub(r"[%s]+" % (XmlStrings._nonXml_rangespec), "", str(s))
 
-      # TODO Upgrade to real....
+    # TODO Upgrade to real....
     entref_re = r"&(#[xX]?)?(\w+);"
     pentref_re = r"%(\w[-_.\w]*);"
 
@@ -648,13 +434,15 @@ class NameTest(FlexibleEnum):
     """
     # TODO Finish XML 1.0 / 1. split; case for no-private-use, etc.?
     NAME_XML    = "XML"
+    NAME_XML10  = "XML10"
+    NAME_XML11  = "XML"
     NAME_PYTHON = "PYTHON"
     NAME_HTML   = r"^[^ \t\r\n]+$"
     NAME_WHATWG = r"^[^ \t\r\n\f]+$"
     NAME_ASCII  = r"^[_a-zA-Z][-_.a-zA-Z0-9]*$"
 
     def isName(self, s:str) -> bool:
-        if self.name == "NAME_XML": return XmlStrings.isXmlName(s)
+        if self.name.startswith("NAME_XML"): return XmlStrings.isXmlName(s)
         elif self.name == "NAME_PYTHON": return str.isidentifier(s)
         return re.match(self.value, s)
 

@@ -261,6 +261,9 @@ class makeTestDoc0:
     """Create a bare minimum document. Subclasses start from this and add.
         <html></html>
 
+        .n is a SimpleNamespace of stuff like the (dom)impl, doc, docEl,...
+        .dc is a subclass of DAT, which just has class variables fo
+
     Also provides construction utilities, such as methods to add a bunch
     of nodes of certain kinds, etc.
 
@@ -429,7 +432,7 @@ class makeTestDoc0:
 ###############################################################################
 #
 class makeTestDoc2(makeTestDoc0):
-    """Create a document with 3 child nodes:
+    """Create a document with 3 (or more at option) child nodes:
         <?xml version="1.0" encoding="utf-8"?>
         <!DOCTYPE html []>
         <html xmlns:html="https://example.com/namespaces/foo">
@@ -444,13 +447,14 @@ class makeTestDoc2(makeTestDoc0):
     """
     beenShown = False
 
-    def __init__(self, dc=DAT, show:bool=False):
+    def __init__(self, dc=DAT, show:bool=False, nchildren:int=3):
         super().__init__(dc)
         assert isinstance(self.n.impl, DOMImplementation)
         assert isinstance(self.n.doc, Document)
         assert isinstance(self.n.docEl, Element)
         assert len(self.n.docEl.childNodes) == 0
 
+        self.nchildren = nchildren
         self.createRestOfDocument()
         if show and not beenShown:
             lg.warning("makeTestDoc2 produced: %s", self.n.doc.outerXML)
@@ -479,6 +483,12 @@ class makeTestDoc2(makeTestDoc0):
         # Add empty node
         self.n.child2 = self.n.doc.createElement(self.dc.child2_name)
         self.n.docEl.appendChild(self.n.child2)
+
+        if self.nchildren > 3:
+            for i in range(3, self.nchildren):
+                ch = self.n.doc.createElement(self.dc.child0_name)
+                ch.setAttribute("class", "extra_%d" % (i))
+                self.n.appendChild(ch)
 
         if (not self.alreadyShowedSetup):
             self.dumpNode(self.n.docEl, "Setup produced:")

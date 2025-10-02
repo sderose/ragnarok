@@ -1,28 +1,133 @@
-=Description=
+=Information on Yggdrasil (nee basedom)=
 
-A pure Python DOM, intended to cover all of DOM Level 2 Core, but be more
-Pythonic/convenient than regular xml.dom.minidom.
-This can be used independently, and is meant to be a backward-compatible
-pluggable replacement for xml.dom.mindom.
+Yggdrasil (named after the great world tree of Norse mythology),
+is a pure Python DOM 3 implementation.
+It is intended to be plug-compatible with Python's `xml.dom.minidom`, but
+has several of what I consider advantages:
 
-It has pretty extensive unittest coverage.
+* Yggdrasil covers nearly all of DOM Level 3 Core, not just DOM 2.
 
-It is about 40% faster than minidom on my testing (which emphasizes large
-document structures), though individual methods vary.
+* My profiling finds Yggdrasil is much faster than minidom (about 40%)
+
+* Elements and Documents are true subclasses of Python list, and support
+all list operations. A few operations differ slightly; for example
+multiplying a Node returns a NodeList, because you can't have the identical
+node in multiple places (as would be just fine with, say, scalars).
+
+* Unlike minidom's `Element.childNodes`, the whole list API works. You can
+insert and delete nodes in the usual Python ways without corrupting the DOM.
+
+* All the usual DOM mutators are there, but those that take a "reference"
+child, such as `insertBefore()`, can take either that or a signed integer position.
+
+* Slicing is supported and extended, with the usual Python-style numeric arguments,
+as well as string arguments reminiscent of XPath:
+
+    myNode["p"]       -- selects all "p" direct subelements
+    myNode["#text"]   -- selects all text node children
+    myNode["@class"]  -- selects the `class` attribute
+    myNode["*"]       -- selects all element children
+
+There is also provision for registering your own "scheme prefixes", so that
+string slicing arguments beginning with that a certain prefix are passed to
+a callback of your own, returning whatever NodeList they like.
+
+* Yggdrasil has a complete DocumentType objects (via Schemera),
+making that information readily available to users.
+
+* The Schemera representation (q.v.) covers all XML DTD features, and most of XSD.
+It can be created:
+    * directly via an API
+    * loaded from a regular DTD
+    * loaded from an XSD (see `xsdload.py`, which is not yet finished),
+    * loaded from an extended DTD-like syntax that adds XSD datatypes,
+      minOccurs and maxOccurs (via {} in content models); and so on.
+
+* Yggdrasil has Pythonic shortcuts
+
+    * `contains` and `in` work
+    * Test document order with `<` and `>` (or with `<<` and `>>` to be like XPath)
+    * Test nodeType with predicates like `n.isElement`, `n.isPI`, etc.; and a few
+      special ones like `isWSN` and `isWhitespaceInElementContent`
+    * Generators and neighbor-getters for all the XPath axes
+    * A generator for the SAX events corresponding to any subtree
+    * `tostring` on most things, and `toprettyxml` with flexible control
+      of formatting via a `FormatOptions` object (similar to csv `dialects`).
+    * Constructors are streamlined. For example, `createElement` can take a dict
+      of attributes, and optional parent and text arguments.
+
+
+* Yggdrasil is loaded with methods familiar from the HTML and WhatWG DOM,
+XPath, XPointer, and even ElementTree and CSS.
+
+    * `innerXML` and `outerXML`
+    * `insertAdjacentXML`, insertBefore, insertAfter, insert
+    * `compareDocumentPosition`
+    * `.text` and `.tail` setters and getters
+    * `parentElement`, `getRootNode`, `firstChild`, `lastChild`, `children`, `descendants`
+    * string operations on text and other CharacterData nodes
+    * `hasSubElements`, `hasChildNodes`, `hasTextNodes`
+    * `getChildIndex` counting from either end, with options to filter by
+      nodeType, white-space-onliness, etc.
+    * Set operations for multi-token attributes (such as HTML `class`)
+    * preceding/following and previous/next are synonymous
+    * XPointer child-sequence creation and interpretation, including ID support
+    * `replaceChild`
+    * `removeNode` (instead of only `x.parentNode.removeChild(x)`)
+    * `writexml`; `starttag` and `endtag` properties
+    * `depth`, `isFirstChild`,`isLastChild`
+    * `leftmost`, `rightmost`
+
+Besides slicing, a variety of searchers:
+    * `getElementById`, `getElementsByClassName`, `getElementsByTagName`, `getChildrenByTagName`
+    * `querySelect`, `querySelectAll` (substantial but incomplete)
+
+Yggdrasil has pretty extensive unittest coverage, and is tested head-to-head against
+minidom (with each on top of either Thor or xml.parsers.expat).
+
 
 ==Pythonic features==
 
 * Nodes look/act a lot like a list of their children (by my count
 over half their methods and properties are easily covered by Python list ones
-(append vs. appendChild, insertBefore vs. insert, cloneNode vs. copy,
-len vs. length, etc.). So in BaseDom Node is a subclass of list, with
-nearly all the normal operations doing the normal things, including
-slice-assignment (which is much faster than iterative insertion).
-Does not have __mul__ and __rmul__, though.
+(`append` vs. `appendChild`, `insertBefore` vs. `insert`, `cloneNode` vs. `copy`,
+`len` vs. `length`, etc.).
 
-Note: A Node with no children
-is falsish, just like any empty Python list; if you want to make sure
-you haven't got a Node, use "if myNode is None", not just "if myNode".
+Given that, it sure seems that DOM Element (and Document) should be subclasses
+of Python list; but in DOM they are subclasses of Node. Commonly, this means
+all the child-related things are implement on Node itself (likely to avoid requiring
+multiple inheritance). This has a few problems:
+
+* In minidom the methods and variables related to child nodes (and attributes)
+inherit on to lots of things that can't use them. Then you either have
+to override them or let them fail.
+
+* Node gets really big, and the bloat is really all about one thing: The
+natural distinction of node types that can vs. can't have children (or attributes).
+
+So in Yggdrasil the child-related stuff is segregated into a `Branchable` class,
+and attribute-related stuff into an `Attributable` class. Thus two big pieces
+of Node become much more cohesive and smaller classes. Then those
+classes are mixed in just where needed. For example:
+
+```
+    class Branchable(list)
+    class Document(Branchable, Node)
+    class DocumentFragment(Branchable, Node)
+    class Element(Branchable, Attributable, Node)
+    class CharacterData(Node)
+```
+
+This doesn't look different to the user (except that unlike minidom,
+methods are available yet broken where inapplicable). But the code is much
+easier to deal with.
+
+Caveat: An Element with no children (an empty element)
+casts to boolean True, not False like an empty Python list; that's because it
+isn't just "empty" in quite the same way a list or dict is. For example, any two
+empty lists or dicts compare equal, while two empty Elements can differ in
+nodeName, attributes, etc. To be extra clear, you can test hasChildren instead.
+
 
 * NamedNodeMap is a subclass of Python OrderedDict.
 
@@ -30,62 +135,36 @@ you haven't got a Node, use "if myNode is None", not just "if myNode".
 as in DOM Node). Methods accept either NodeTypes instances or ints.
 
 * [] is supported so you can just walk down through trees in Python style:
+
+```
     myDoc[0][27][4]
+```
 
 The index value can instead be a string representing an
 element type name ("p"), attribute name ("@class"),
 nodeType ("#text", "#comment", "#pi"], or a special selector (namely
 "#nwsn" for all but whitespace-only text nodes, or "*" for all elements).
 
+```
     myDoc['body']['div']['p']['@class']
+```
 
 This produces a NodeList containing Attr nodes,
 like an XPath such as body/div/p/@class.
 
 String and numeric indexes can be used together:
-    node["p":3] gets the 3rd "P" child
-    node[3:"p"] also gets the 3rd "P" child
-    node["p":1:-1] gets all "P" children
-    node["*":5] gets the fifth element child
-
-* Node-generators. You can also tell them to filter by nodeType,
-and to generator attributes right after each element, or not. They're
-also pretty fast.
-
-* Constructors are streamlined. For example, createElement can take a Dict
-of attributes, and optional parent and text arguments.
-
-* There are shorthand Node properties such as isElement, isPI, etc., so you
-can just say the shorter of (maybe you don't care, but I find this really
-annoying):
-    if (x.isElement)...
-    if (x.nodeType == Node.ELEMENT_NODE)
-
-* Those properties include isNWSN, which returns true for text nodes that
-are *not* just whitespace.
+    `node["p":3]` gets the 3rd "P" child
+    `node[3:"p"]` also gets the 3rd "P" child
+    `node["p":1:-1]` gets all "P" children
+    `node["*":5]` gets the fifth element child
 
 * Attributes can have values of regular Python types.
 
-* "Symmetric" features are provided -- for example, not just appendChild()
-but also prependChild().
+* "Symmetric" features are provided -- for example, not just `appendChild`
+but also `prependChild`.
 
-* You can generate a SAX stream from any subtree, either as a generator
-of (eventType, args) tuples, or via event-type callbacks.
-
-* Methods that DOM defines on Node but that do not apply to certain
-subclasses (such as manipulating child nodes on non-Elements) are consistently
-overridden to raise an Exception. However, queries that are inapplicable
-(such as hasAttributes on a non-Element) simply return False.
 
 ===Structure operations===
-
-* A variety of handy/readable tests such as isFirstChild, isLastChild,
-hasSubElements, hasTextNodes. leftmost and rightmost go all the way down
-either subtree edge.
-
-* getChildIndex() tells you your place among siblings.
-
-* CSS selectors are largely supported, which is also much like JQuery "find".
 
 * getNodeSteps() gives you a list of the child numbers that walk you from the
 root down to a given node; getNodePath() gives you the same information
@@ -118,30 +197,31 @@ text nodes.
 
 ===Familiarity===
 
-* The whole DOM (at least through 2) is here, and is intended to work the same
+* The whole DOM 3 Core is here, and is intended to work the same
 so you don't have to learn anything new or rewrite prior code. But I've also
-added popular methods from ELementTree, BeautifulSoup, XPath, etc.
+added popular methods from ElementTree, BeautifulSoup, XPath, WhatWG, etc.
 
 * Where Python provides a conventional method with a different name from DOM's,
-both are available. For example, you can do y = x.cloneNode() or y = x.copy()
+both are available. For example, you can do `y = x.cloneNode()` or `y = x.copy()`.
+
 
 ==Separation of XML and Serialization==
 
 * innerXML or outerXML are added, and you can assign an XML string to them.
 
-* A separate XMLStrings library is used for XML syntax issues, such as testing
-for legit XML NAMEs, escaping and unescaping, etc. Those methods are of course
+* A separate Runeheim library is used for XML syntax issues, such as testing
+for legit XML NAMEs, case-folding, unescaping, etc. Those methods are of course
 available to use directly as well, and don't require instantiating DOM objects.
 
-* escapeXML() only escapes ">" when it's in "]]>", not everywhere. There
+* Escapers are parts of XML output, so in Gleipnir, not Runeheim.
+escapeXML() only escapes ">" when it's in "]]>", not everywhere. There
 are special escapers for comments, PIs, CDATA, and Attributes (the last of
 which lets you specify whether you're using single or double quotes).
 * XML restrictions on names are not automatically checked or enforced. You can
 use other names, though XML serialization will complain.
 
-* startTag and endTag properties provide the complete tags as needed.
-
-* There is serialization to and from JSON, which guarantees idempotent
+* There is serialization to and from JSON, via Bifrost.
+It does idempotent
 round-tripping. That is, you don't lose any XML information by serializing
 to JSON and then back. This is not even close to true for any other XML-to-JSON
 converters I've seen (most do not work (or work very badly, or are unreadable)
@@ -150,103 +230,24 @@ from a CSV file. Many lose child order or don't support
 mixed content, PIs, comments, etc.
 
 
-=To do=
+==Yggdrasil sibling chains==
 
-Rename? Maybe SpamNX?
-(like spam, spam, baked beans, 'n spam, it ain't got much spam in it)
+There are (at least) 3 obvious ways to keep track of siblings, and getting
+from a given node to an adjacent sibling:
 
+* Just store them in parent.childNodes (and here, just parent[] works the same).
 
-* Speed
-** compareDocumentPosition -- faster by not building all the way to
-root, but co-recursing up both sides, only until we hit a common ancestor, then
-back down?
-** Any more places to avoid getChildIndex()? Already added int position for
-insertBefore.
-** Fallback to maintaining child-number when fanout gets very high?
-*
+* Have each node know it's current child number.
 
-* Structure and organization
-** Segregate namespace into subclass?
-** Clean way to make [] extensible -- pass it a callable?
-** How to organize CSS, XPath, et, etc. into separate add-on-ish classes.
-Protocols?
-** Could NamedNodeMap just go away?
+* Keep a linked list of siblings.
 
-* Added functions?
-** Add moveNode(s) operation? Meh
-** Best way to incorporate case-ignorance.
-** findDiffs(self, other)?
+These all have performance tradeoffs, with big differences for building vs.
+re-organizing and modifying trees.
 
-* Add cnum to Nodes? Update becomes O(lg2(fanout)). And only enable it when
-insert/append takes it above some threshold.
-
-* Would this bit from minidom be useful?
-
-==Testing to beef up==
-
-(see also testingNotes.md)
-
-* Ramp up coverage
-* Namespaces, esp. defaulting
-* Doctype support
-* Test that it generates the *same* Exception types as others?
-
-==DOM compatibility==
-
-* Element
-**Add attributes (move from Node) removeAttributeNodeNS, schemaType
-** setIdAttribute, setIdAttributeNS, setIdAttributeNode
-
-* Document: ctualEncoding async_ CreateElementNS,
-  encoding, errorHandler,
-  importNode, load, loadXML, renameNode, saveXML, standalone, strictErrorChecking,
-  version
-* Keep anything for Ent, EntRef, Notation?
-* Attr: isId, name, ownerElement, schemaType, specified, value?
-* NodeList: length
-* NamedNodeMap: itemNS, keysNS, length
-
-==Node selection==
-
-* More comparison ops for Nodes?
-* Finish generalizing node-selection
-* Possibly support Callables as arg to getitem? Or namespaced selectors?
-** CSS: Selectors (see CSSSelectors.py)
-** JQuery: selectors
-** BS: find_matcher (see DOMExtensions.py)
-** XPath
-** ET: SubElement(parent, tag, attrs)
-** whatwg: NodeIterator and TreeWalker [https://dom.spec.whatwg.org/#nodeiterator]
-
-==Other==
-
-* Move DOMImplementation, Node, Document, CharacterData to sep files?
-
-* Segregate NS stuff?
-
-* Segregate extensions
-
-* Add from domextensions
-    ** innerText
-    ** getLeastCommonAncestor
-    ** get fqgi
-    ** compound attributes?
-    ** generateSaxEvents
-
-* Support 'canonical' option for tostring().
-
-
-=Known bugs and limitations=
-
-* Since Node is a subclass of List, a node with no childNodes is an empty
-list, which is Falsish. So code has to specifically check for "is None",
-not just t/f, to see if a Node doesn't exist. That why it overrides
-__bool__ to return True. Maybe that should be optional, or just not there?
-
-
-Namespace support is incomplete
-* Implement the ...NS() methods (at present they just call the non-NS versions).
-* Just make NS an optional arg to the non-NS versions (if no problem)
+In Yggdrasil all 3 methods are available. That doesn't mean all 3 are maintained
+all the time -- that would really be slow. But you can pick which one you want.
+You can set this at the start, but you can also change it later. The act of changing
+it requires a pass over the whole tree, but then it's back to fast again.
 
 
 =References=
